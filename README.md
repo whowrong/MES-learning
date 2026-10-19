@@ -1,73 +1,32 @@
-# React + TypeScript + Vite
+# MES-learning · 车间操盘手：MES 实施模拟器
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个把「MES 技术实施」岗位知识做成闯关游戏的学习网站：你扮演刚进场的实施顾问，在虚拟工厂里做调研、洗数据、建模配置，一路把项目推上线。面向 MES 技术实施实习生 / 校招生培养，兼顾 MES 运维视角。
 
-Currently, two official plugins are available:
+## 玩什么
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **章节关卡**（当前 3 章可玩）：调研认知 → 静态数据与脏数据清洗 → 建模与配置，每章 = 剧情 + 多种玩法 + 仪表结算 + S/A/B/C 总评分
+- **五种玩法**：车间黑话连连看（一句话在说哪个概念）、真假鉴定（题库自动衍生，组合上千种）、场景抉择、限时填空口诀、流程排序
+- **术语卡库 + Anki 式间隔复习**：22 张术语卡带知识点映射（K0 数据意识 ~ K6 上线陪产），错题自动进复习队列，四档自评调度（10min/4h/1d/3d/7d/16d/35d）
+- **学习打卡**：连续学习天数 streak，通关与复习完成都算打卡
+- **移动端适配**：安卓手机可完整游玩（连连看底部概念抽屉等）
 
-## React Compiler
+## 内容驱动架构
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+所有题目、剧情、判定反馈都在 `public/content/` 的 JSON 文件里，**加新章节不用改代码**。格式文档与出题红线（题干不漏答案、一题只有一个可辩护答案、唯一锚点表、三句话讲解）见 [`docs/content-format.md`](docs/content-format.md)。
 
-## Expanding the ESLint configuration
+## 技术栈
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+React 19 + TypeScript + Vite + Tailwind v3 + shadcn/ui；后端 PocketBase（存档/复习调度持久化）；vitest 295 个自动化测试（含 jsdom 渲染级三章全流程冒烟、内容红线自动扫描）。
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm build   # tsc -b && vite build
+npx vitest run
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 路线图
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- [ ] 第四章 执行与报工、第五章 质量与库存、第六章 上线陪产、自由沙盘
+- [ ] 厂型分类训练（离散 / 流水线 / 混合等，不同厂型不同题库）
+- [ ] 面试题模块（实习 / 校招 / 社招 / 1~3 年经验分级，多题型）
+- [ ] 登录注册 + 精简后台（注册审批、备份下载、外部 AI 题库导入）
