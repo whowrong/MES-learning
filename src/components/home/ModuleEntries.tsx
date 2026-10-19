@@ -1,15 +1,17 @@
-import { BookOpen, FlaskConical, Video, ArrowRight } from "lucide-react"
+import { BookOpen, Factory, FlaskConical, Video, ArrowRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface ModuleEntriesProps {
   reviewCount: number
   interviewCount: number
+  factoryCount: number
   onGlossary: () => void
   onInterview: () => void
+  onFactoryTypes: () => void
   onSandbox: () => void
 }
 
-export function ModuleEntries({ reviewCount, interviewCount, onGlossary, onInterview, onSandbox }: ModuleEntriesProps) {
+export function ModuleEntries({ reviewCount, interviewCount, factoryCount, onGlossary, onInterview, onFactoryTypes, onSandbox }: ModuleEntriesProps) {
   return (
     <section className="py-12">
       <div className="mx-auto max-w-6xl px-6">
@@ -71,8 +73,35 @@ export function ModuleEntries({ reviewCount, interviewCount, onGlossary, onInter
           </button>
           <button
             type="button"
+            onClick={onFactoryTypes}
+            className="flex items-start gap-4 rounded-2xl bg-card p-6 text-left shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-lg focus-visible:shadow-[var(--focus-ring)] animate-in fade-in slide-in-from-bottom-4 duration-500"
+          >
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <Factory className="h-6 w-6" />
+            </span>
+            <span className="flex h-full flex-col">
+              <span className="flex items-center gap-2">
+                <span className="text-lg font-bold text-foreground">厂型特训营</span>
+                {factoryCount > 0 && (
+                  <Badge variant="outline" className="rounded-full text-muted-foreground">
+                    已训 {factoryCount} 场
+                  </Badge>
+                )}
+              </span>
+              <span className="mt-1 text-sm leading-6 text-muted-foreground">
+                离散、流水线、混合三种厂型，调研重点和建模方式完全不同。
+                先翻厂型档案学脾气，再打一场该厂型专属的场景实战测验。
+              </span>
+              <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
+                进厂调研
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={onSandbox}
-            className="flex items-start gap-4 rounded-2xl border-2 border-dashed border-border bg-card p-6 text-left opacity-80 shadow-md transition-all duration-300 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] animate-in fade-in slide-in-from-bottom-4 duration-500 lg:col-span-2"
+            className="flex items-start gap-4 rounded-2xl border-2 border-dashed border-border bg-card p-6 text-left opacity-80 shadow-md transition-all duration-300 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] animate-in fade-in slide-in-from-bottom-4 duration-500"
           >
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
               <FlaskConical className="h-6 w-6" />

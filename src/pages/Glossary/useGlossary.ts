@@ -18,6 +18,7 @@ const KNOWLEDGE_DOMAINS: Record<string, string> = {
   K4: "执行与报工",
   K5: "质量与库存",
   K6: "上线陪产",
+  K7: "厂型认知",
 }
 
 export type GlossaryMode = "browse" | "review" | "done"

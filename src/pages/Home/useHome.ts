@@ -28,6 +28,7 @@ function normalizeRecord(raw: Partial<ProgressRecord> & { id?: string }): Progre
     review_state: raw.review_state ?? {},
     study_days: Array.isArray(raw.study_days) ? raw.study_days : [],
     interview_history: Array.isArray(raw.interview_history) ? raw.interview_history : [],
+    factory_history: Array.isArray(raw.factory_history) ? raw.factory_history : [],
     last_route: raw.last_route ?? "/home",
   }
   return normalized
@@ -43,6 +44,7 @@ export function useHome() {
   const [reviewCount, setReviewCount] = useState(0)
   const [studyDays, setStudyDays] = useState<string[]>([])
   const [interviewCount, setInterviewCount] = useState(0)
+  const [factoryCount, setFactoryCount] = useState(0)
   // 锁定章节提示弹窗（点未开放章节卡时）
   const [lockedChapter, setLockedChapter] = useState<ChapterDef | null>(null)
   // 施工中占位弹窗（目标页面尚未上线时，避免跳白屏）
@@ -54,6 +56,7 @@ export function useHome() {
     setReviewCount(rec.review_queue.length)
     setStudyDays(rec.study_days ?? [])
     setInterviewCount((rec.interview_history ?? []).length)
+    setFactoryCount((rec.factory_history ?? []).length)
     if (rec.id) setRecordId(rec.id)
   }, [])
 
@@ -137,6 +140,10 @@ export function useHome() {
     navigate("/interview")
   }, [navigate])
 
+  const openFactoryTypes = useCallback(() => {
+    navigate("/factory-types")
+  }, [navigate])
+
   const openDebug = useCallback(() => {
     navigate("/debug")
   }, [navigate])
@@ -172,12 +179,14 @@ export function useHome() {
     streak,
     reviewCount,
     interviewCount,
+    factoryCount,
     lockedChapter,
     constructionNote,
     openChapter,
     continueProgress,
     openGlossary,
     openInterview,
+    openFactoryTypes,
     openDebug,
     openSandbox,
     closeDialogs,

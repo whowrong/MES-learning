@@ -235,6 +235,45 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 
 计分规则（`src/game/interview.ts`）：每题等权；客观题对=1 错=0；简答按四档自评折算（没思路 0 / 答出一半 0.5 / 基本答全 0.8 / 完美 1）；总分=得分率×100，档位 S≥95/A≥85/B≥70/C，评语在 `index.json` 的 `rankTexts`。红线：题干必须是面试官口吻真实场景、reference 与 bonus_points 必填、多选题必须留干扰项——`src/content/__tests__/interview-quality.test.ts` 自动扫描全部题库文件把关。
 
+## 厂型特训营（public/content/factory-types/）
+
+厂型训练同样是内容驱动：`index.json` 登记三个厂型文件（discrete/flow/hybrid = 离散制造/流水线制造/混合型），**加厂型或加题只改 JSON，不改代码**。
+
+```jsonc
+// index.json
+{ "types": [{ "type": "discrete", "file": "discrete.json" }], "rankTexts": { "S": "…", "A": "…", "B": "…", "C": "…" } }
+
+// discrete.json —— 单个厂型全部内容
+{
+  "type": "discrete",                  // 与 index.json 一致，三档内唯一
+  "typeName": "离散制造",
+  "tagline": "一句画像（选卡页展示）",
+  "industries": ["五金机加工"],         // 典型行业 chips
+  "brief": [                           // 档案页翻页屏（≥3 屏，须含一屏踩坑案例）
+    { "id": "organize", "title": "生产怎么组织", "body": "…（可含 {{term_id}} 术语标注）" },
+    { "id": "survey",   "title": "调研必问清单", "items": ["…"] },
+    { "id": "pitfalls", "title": "典型踩坑", "cases": [
+      { "id": "p1", "scene": "…", "consequence": "…", "lesson": "…", "term_ids": ["…"] }
+    ]}
+  ],
+  "quiz": {
+    "perRound": 6,                     // 每局抽题数（≤题库量）
+    "questions": [                     // 结构与关卡 quiz 题完全一致
+      {
+        "id": "d-q1",                  // 全库唯一，前缀 d-/f-/h- 区分厂型
+        "prompt": "车间现场场景 + 问题（题干禁止出现答案术语字样）",
+        "options": [ { "id": "o1", "text": "…" } ],   // ≥2 个，建议 4 个
+        "answer": "o1",
+        "term_ids": ["takt_time"],     // 答错进复习队列
+        "feedback": { "factory": "…", "data": "…", "consultant": "…" }   // 三句话讲解，一个不能省
+      }
+    ]
+  }
+}
+```
+
+计分（`src/game/factory.ts`）：每题等权，答对得分；总分=得分率×100，档位与全站一致（S≥95/A≥85/B≥70/C），评语在 `index.json` 的 `rankTexts`。红线：三厂型题目严禁换皮——每题必须踩中该厂型的命门差异（离散=工单/工艺路线、流水线=节拍/批次、混合=衔接/口径）；term_ids 必须指向真实术语；`src/content/__tests__/factory-quality.test.ts` 自动扫描全部厂型文件把关。
+
 ## 约定与红线
 
 - **每个机制必须挂知识点**：新增内容时 `knowledge_ids` / `term_ids` 必填，映射不到知识点的机制不要加。

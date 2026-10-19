@@ -43,8 +43,10 @@ export function HomePage(p: ReturnType<typeof useHome>) {
         <ModuleEntries
           reviewCount={p.reviewCount}
           interviewCount={p.interviewCount}
+          factoryCount={p.factoryCount}
           onGlossary={p.openGlossary}
           onInterview={p.openInterview}
+          onFactoryTypes={p.openFactoryTypes}
           onSandbox={p.openSandbox}
         />
       </main>

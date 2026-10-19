@@ -166,6 +166,8 @@ export interface ProgressRecord {
   study_days?: string[]
   /** 面试训练营练习历史（每次模拟面试追加一条） */
   interview_history?: InterviewHistoryEntry[]
+  /** 厂型特训营练习历史（每次实战测验追加一条） */
+  factory_history?: FactoryHistoryEntry[]
   last_route: string
 }
 
@@ -174,6 +176,16 @@ export interface InterviewHistoryEntry {
   /** 本地日期时间串 YYYY-MM-DD HH:mm */
   at: string
   tier: string
+  score: number
+  total: number
+}
+
+/** 一次厂型实战测验的存档记录 */
+export interface FactoryHistoryEntry {
+  /** 本地日期时间串 YYYY-MM-DD HH:mm */
+  at: string
+  /** 厂型 type：discrete/flow/hybrid */
+  type: string
   score: number
   total: number
 }
@@ -203,6 +215,7 @@ export function buildDefaultProgress(): ProgressRecord {
     review_state: {},
     study_days: [],
     interview_history: [],
+    factory_history: [],
     last_route: "/home",
   }
 }
