@@ -164,7 +164,18 @@ export interface ProgressRecord {
   review_state?: Record<string, { level: number; dueAt: number; lastRatedAt: number }>
   /** 连续学习打卡：本地日期字符串列表 ["2026-10-17", ...] */
   study_days?: string[]
+  /** 面试训练营练习历史（每次模拟面试追加一条） */
+  interview_history?: InterviewHistoryEntry[]
   last_route: string
+}
+
+/** 一次模拟面试的存档记录 */
+export interface InterviewHistoryEntry {
+  /** 本地日期时间串 YYYY-MM-DD HH:mm */
+  at: string
+  tier: string
+  score: number
+  total: number
 }
 
 export function buildDefaultProgress(): ProgressRecord {
@@ -191,6 +202,7 @@ export function buildDefaultProgress(): ProgressRecord {
     term_mastery: {},
     review_state: {},
     study_days: [],
+    interview_history: [],
     last_route: "/home",
   }
 }

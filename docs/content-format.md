@@ -207,6 +207,34 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 }
 ```
 
+## 面试题库（public/content/interview/）
+
+面试训练营的题目同样是内容驱动：`index.json` 登记六个难度档题库文件（intern/campus/social/exp1/exp2/exp3 = 实习/校招/社招/1年/2年/3年），**加题只改题库 JSON，不改代码**。
+
+```jsonc
+{
+  "tier": "campus",
+  "tierName": "校招",
+  "tierHint": "这一档面试官重点看什么……",   // 组卷面板展示
+  "questions": [
+    {
+      "id": "c-biz-1",               // 全库唯一（存档/复习队列按 id 记录）
+      "type": "single",              // single 单选 | multiple 多选 | judge 判断 | short 简答自评
+      "category": "biz",             // biz 实施业务 | data 数据主数据 | sql 数据库 | ops 服务器运维 | soft 项目软素质
+      "prompt": "面试官口吻的场景题干……",
+      "options": [ { "id": "o1", "text": "……" } ],  // single ≥2 项；multiple ≥3 项且至少 1 个干扰项；judge/short 留空数组
+      "answer": "o1",                // single/judge 为字符串（judge 只能 yes/no）；multiple 为 id 数组；short 为空串
+      "reference": "参考答案全文（≥40 字）",
+      "bonus_points": ["加分点（每条 ≥6 字）"],
+      "term_ids": ["work_order"],    // 关联术语卡；答错时进复习队列（可为空数组）
+      "source_hint": "题目出处/考察点说明"
+    }
+  ]
+}
+```
+
+计分规则（`src/game/interview.ts`）：每题等权；客观题对=1 错=0；简答按四档自评折算（没思路 0 / 答出一半 0.5 / 基本答全 0.8 / 完美 1）；总分=得分率×100，档位 S≥95/A≥85/B≥70/C，评语在 `index.json` 的 `rankTexts`。红线：题干必须是面试官口吻真实场景、reference 与 bonus_points 必填、多选题必须留干扰项——`src/content/__tests__/interview-quality.test.ts` 自动扫描全部题库文件把关。
+
 ## 约定与红线
 
 - **每个机制必须挂知识点**：新增内容时 `knowledge_ids` / `term_ids` 必填，映射不到知识点的机制不要加。

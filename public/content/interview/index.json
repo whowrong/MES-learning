@@ -1,0 +1,16 @@
+{
+  "banks": [
+    { "tier": "intern", "file": "intern.json" },
+    { "tier": "campus", "file": "campus.json" },
+    { "tier": "social", "file": "social.json" },
+    { "tier": "exp1", "file": "exp1.json" },
+    { "tier": "exp2", "file": "exp2.json" },
+    { "tier": "exp3", "file": "exp3.json" }
+  ],
+  "rankTexts": {
+    "S": "面试官放下笔点了点头：「基础扎实、思路清楚，你比我们预期的校招生成熟。offer 走加急流程。」",
+    "A": "面试官在评价表上写「可培养，悟性好」：「有几个回答很亮眼，欠缺的只是项目里程数。」",
+    "B": "面试官说：「概念都懂，但一追细节就露怯——回去把错题背后的场景想透，下次面试就能过线。」",
+    "C": "面试官委婉收尾：「你今天讲的更像背课本。我们想找能在车间里把系统跑起来的人，建议先补实战认知。」"
+  }
+}

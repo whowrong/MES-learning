@@ -1,0 +1,159 @@
+{
+  "tier": "campus",
+  "tierName": "校招",
+  "tierHint": "面试官默认你没有项目经验，但要求概念成体系、SQL 和服务器基本功过关、能讲清楚「为什么选实施」。",
+  "questions": [
+    {
+      "id": "c-biz-1",
+      "type": "single",
+      "category": "biz",
+      "prompt": "面试官：「很多制造业客户既有 ERP 又要上 MES。你讲讲这两套系统各管什么，为什么要两个而不是一个？」",
+      "options": [
+        { "id": "o1", "text": "ERP 管经营计划层（订单、采购、财务、粗排产），MES 管车间执行层（派工、报工、质量、在制品）；ERP 的粒度到不了机台和工序，所以需要 MES 把计划落到现场" },
+        { "id": "o2", "text": "MES 就是新一代 ERP，上了 MES 就可以把 ERP 停掉" },
+        { "id": "o3", "text": "ERP 给车间工人用，MES 给财务科用，两个部门各用各的" },
+        { "id": "o4", "text": "两个系统互不相干，数据也不需要打通" }
+      ],
+      "answer": "o1",
+      "reference": "经典三层模型：计划层（ERP）→ 执行层（MES）→ 控制层（PLC/SCADA）。ERP 回答「这个月要生产多少、料买了没有、成本多少」，MES 回答「现在这一刻每张工单在哪道工序、谁在干、干得合不合格」。两者的接口（工单下达、报工回传、库存对账）正是实施顾问要重点打通的地方。",
+      "bonus_points": ["能画出或口述「计划层-执行层-控制层」三层架构", "主动提到 ERP 与 MES 的集成接口是实施难点：工单同步、报工回冲、物料账对齐"],
+      "term_ids": ["work_order", "reporting"],
+      "source_hint": "校招笔试面试双料高频题"
+    },
+    {
+      "id": "c-biz-2",
+      "type": "multiple",
+      "category": "biz",
+      "prompt": "面试官：「一个标准 MES 实施项目从启动到验收，下面哪些属于典型阶段工作？选出来，多选少选都算错。」",
+      "options": [
+        { "id": "o1", "text": "现场调研：摸清工艺流程、班组习惯、单据流转" },
+        { "id": "o2", "text": "蓝图设计：把调研结果写成双方签字确认的方案" },
+        { "id": "o3", "text": "主数据整理与系统配置：物料、BOM、工艺路线清洗导入" },
+        { "id": "o4", "text": "UAT 测试与用户培训：关键用户按真实场景验证系统" },
+        { "id": "o5", "text": "上线陪产与验收：驻场处理问题直到系统稳定运行" },
+        { "id": "o6", "text": "把客户的 ERP 系统下线，所有功能搬进 MES" }
+      ],
+      "answer": ["o1", "o2", "o3", "o4", "o5"],
+      "reference": "实施生命周期五段：调研 → 蓝图 → 数据与配置 → 测试培训 → 上线陪产验收。o6 是干扰项：MES 永远不替代 ERP，两者是分工协作关系，任何「下线 ERP」的说法都是对系统边界的误解。",
+      "bonus_points": ["能强调蓝图签字的重要性：后面所有变更都要对照它走变更流程", "提到数据整理往往占掉项目一半以上的时间"],
+      "term_ids": ["master_data"],
+      "source_hint": "考察实施方法论全貌"
+    },
+    {
+      "id": "c-data-1",
+      "type": "single",
+      "category": "data",
+      "prompt": "面试官：「客户的 Excel 物料表里，同一颗 M8 螺丝出现了两个不同的编码，仓库说『都用过、都是它』。这种一物两码上线后最直接的危害是什么？」",
+      "options": [
+        { "id": "o1", "text": "库存分裂成两本账：系统里两个编码各有余额，实际是同一堆货，账面永远对不上实物，MRP 算料还会重复采购" },
+        { "id": "o2", "text": "只是查询时要多搜一次，没什么实际危害" },
+        { "id": "o3", "text": "会导致车间设备停机" },
+        { "id": "o4", "text": "财务系统会直接报错拒绝月结" }
+      ],
+      "answer": "o1",
+      "reference": "一物两码的本质是「同一个实物在系统里有两个身份」：库存被劈成两份，账实不符成为常态；采购按两个编码各自的『低库存』重复下单；盘点时两个编码都对不上。治理手段是建立编码唯一性校验和物料主数据管控流程，发现重复码走合并流程。",
+      "bonus_points": ["能说出治理动作而不只是危害：查重规则、新旧编码映射表、逐步冻结旧码", "提到预防比清理重要——编码规则上线前就要评审"],
+      "term_ids": ["one_item_two_codes", "inventory"],
+      "source_hint": "主数据治理经典场景题"
+    },
+    {
+      "id": "c-data-2",
+      "type": "short",
+      "category": "data",
+      "prompt": "面试官：「假设你入职第一周，客户甩给你一份一万行的物料主数据 Excel，说『两周后要导进系统』。你打算怎么检查这份数据的质量？」",
+      "options": [],
+      "answer": "",
+      "reference": "参考框架：① 定规则再动手——和项目经理确认编码规则、必填字段、计量单位标准；② 机器查重——按编码查重（一物多码）、按名称+规格查疑似重复（多物一名的反向情况）；③ 逐列体检——单位是否统一（个/只/pcs 混写）、规格型号格式、数值列有没有文本混入、必填项空缺；④ 抽样人工核——挑用量最大的前 100 行对着实物或图纸核；⑤ 输出问题清单给客户限期确认，别替客户拍板改数。工具上 Excel 透视/条件格式能解决大半，量大用 SQL 或脚本。",
+      "bonus_points": ["先定标准再清洗的顺序感", "强调「问题清单让客户确认」而不是自己闷头改——实施顾问不替客户做业务决策", "提到把校验做成可重复的脚本，下次增量导入还能用"],
+      "term_ids": ["data_quality", "material_master", "unit_mixed"],
+      "source_hint": "校招生能答出框架就是高分"
+    },
+    {
+      "id": "c-sql-1",
+      "type": "single",
+      "category": "sql",
+      "prompt": "面试官：「客户要查『最近创建的 10 张工单』，下面哪条 SQL 是对的？」",
+      "options": [
+        { "id": "o1", "text": "SELECT * FROM work_orders ORDER BY created DESC LIMIT 10" },
+        { "id": "o2", "text": "SELECT TOP 10 * FROM work_orders ORDER BY created ASC" },
+        { "id": "o3", "text": "SELECT * FROM work_orders WHERE created = 最近10条" },
+        { "id": "o4", "text": "SELECT LAST 10 ROWS * FROM work_orders" }
+      ],
+      "answer": "o1",
+      "reference": "「最近创建」= 按创建时间倒序取前 10：MySQL 用 ORDER BY created DESC LIMIT 10；SQL Server 用 SELECT TOP 10 ... ORDER BY created DESC。o2 的 TOP 是 SQL Server 语法但排序方向反了（取到的是最老的 10 条），o3、o4 根本不是合法 SQL。",
+      "bonus_points": ["主动指出 MySQL 和 SQL Server 取前 N 行的语法差异（LIMIT vs TOP）", "提到大表上 ORDER BY 无索引字段会全表排序变慢"],
+      "term_ids": ["work_order"],
+      "source_hint": "两种数据库语法都考，贴合实施现场"
+    },
+    {
+      "id": "c-sql-2",
+      "type": "judge",
+      "category": "sql",
+      "prompt": "面试官：「判断题——UPDATE 语句如果不写 WHERE 条件，会把整张表的所有行都更新掉。」",
+      "options": [],
+      "answer": "yes",
+      "reference": "对。没有 WHERE 的 UPDATE 是全表更新，DELETE 同理是全表删除。这是生产库事故排行榜第一名。防御习惯：写 UPDATE/DELETE 前先写同条件的 SELECT 看影响行数；重要操作包在事务里，确认无误再 COMMIT。",
+      "bonus_points": ["能补充事务（BEGIN TRAN → 检查 → COMMIT/ROLLBACK）的保护用法", "提到有些客户端有安全模式（如 MySQL Workbench 默认拒绝无 WHERE 的更新）"],
+      "term_ids": [],
+      "source_hint": "送分题，答错直接质疑基本功"
+    },
+    {
+      "id": "c-ops-1",
+      "type": "single",
+      "category": "ops",
+      "prompt": "面试官：「MES 部署到客户机房，我们一般用 nginx 挡在应用前面。nginx 在这套架构里通常起什么作用？」",
+      "options": [
+        { "id": "o1", "text": "反向代理和静态资源服务器：统一入口、转发请求到后端应用、直接托管前端页面，还能做 HTTPS 和负载均衡" },
+        { "id": "o2", "text": "数据库：专门存储工单和报工数据" },
+        { "id": "o3", "text": "杀毒软件：拦截车间电脑上的病毒" },
+        { "id": "o4", "text": "采集器：直接连接 PLC 读取设备信号" }
+      ],
+      "answer": "o1",
+      "reference": "nginx 最常见的三个角色：静态资源服务器（托管前端 dist）、反向代理（把 /api 转发给后端应用端口）、HTTPS 终结（证书配在 nginx 上）。多实例部署时还做负载均衡。数据库、数采完全是另外两类软件。",
+      "bonus_points": ["能口述一段 server 块配置思路：listen 443 ssl、location / 指向前端目录、location /api proxy_pass 到后端", "提到 nginx 日志（access/error log）是排查『页面 502』的第一现场"],
+      "term_ids": [],
+      "source_hint": "你熟 nginx，这题要答出细节"
+    },
+    {
+      "id": "c-ops-2",
+      "type": "short",
+      "category": "ops",
+      "prompt": "面试官：「客户内网机房给了一台全新的 Linux 服务器，要求用 docker 部署我们的 MES 应用（前端 + 后端 + 数据库三个容器）。说说你的部署步骤和要注意的点。」",
+      "options": [],
+      "answer": "",
+      "reference": "参考框架：① 基础环境——装 docker/docker-compose，配置国内镜像源或导入离线镜像包（内网常常没外网，镜像要提前 docker save/load 带进去）；② 编排——写 docker-compose.yml 定义三个服务：数据库（挂载数据卷持久化，别让数据留在容器层）、后端（连数据库用服务名而不是 localhost）、前端 nginx；③ 网络与端口——只对外暴露 nginx 端口，数据库端口不映射到宿主机；④ 启动验证——compose up -d 后 docker logs 逐个看启动日志，curl 验证页面和接口；⑤ 固化——数据库初始化脚本、备份策略、restart: always 保证宿主机重启后自动拉起。",
+      "bonus_points": ["主动提到内网离线部署要准备镜像包", "强调数据卷持久化和数据库端口不外露的安全意识", "提到 restart 策略和健康检查"],
+      "term_ids": [],
+      "source_hint": "校招生能讲出离线镜像和数据卷就超出预期"
+    },
+    {
+      "id": "c-soft-1",
+      "type": "single",
+      "category": "soft",
+      "prompt": "面试官：「入职第一个月，带你的项目经理天天在客户现场忙，没空系统教你。你会怎么办？」",
+      "options": [
+        { "id": "o1", "text": "先自己啃项目文档和历史工单，把看不懂的问题攒成清单，找项目经理每天固定的十分钟集中问，同时主动认领力所能及的小活" },
+        { "id": "o2", "text": "等他有空了再说，这段时间刷刷手机别添乱" },
+        { "id": "o3", "text": "每遇到一个问题就立刻打断他提问，学得快最重要" },
+        { "id": "o4", "text": "直接找客户方的工程师请教，绕过项目经理" }
+      ],
+      "answer": "o1",
+      "reference": "实施行业师傅都很忙，考验的就是自驱力：自己先消化、攒问题批量问（尊重对方时间）、用干活换学习（认领小活是最快的上手方式）。o3 频繁打断会消耗信任；o4 越过项目经理直接找客户是职场大忌——对客户的口径必须一致。",
+      "bonus_points": ["点出「对客口径一致」的重要性", "举例说明自己以前怎么快速自学一个陌生领域"],
+      "term_ids": [],
+      "source_hint": "考察自驱力与职场分寸"
+    },
+    {
+      "id": "c-soft-2",
+      "type": "judge",
+      "category": "soft",
+      "prompt": "面试官：「判断题——实施过程中客户车间主任临时提出一个合同里没有的新需求，为了维护客户关系，实施顾问应该当场答应下来。」",
+      "options": [],
+      "answer": "no",
+      "reference": "错。当场答应 = 私自扩大项目范围：工期和成本没人评估，做不到时背锅的是你自己，公司也亏损。正确动作是「不当场拒绝也不当场答应」：记录下来，评估工作量和影响，交给项目经理走变更流程，由商务层面决定免费做还是加钱做。维护关系靠专业和靠谱，不靠有求必应。",
+      "bonus_points": ["能说出「先记录、再评估、走变更」三步", "点出私自承诺的后果：范围蔓延（scope creep）拖垮项目"],
+      "term_ids": [],
+      "source_hint": "变更管理意识，实施岗必考"
+    }
+  ]
+}

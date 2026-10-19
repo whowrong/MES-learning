@@ -27,6 +27,7 @@ function normalizeRecord(raw: Partial<ProgressRecord> & { id?: string }): Progre
     term_mastery: raw.term_mastery ?? {},
     review_state: raw.review_state ?? {},
     study_days: Array.isArray(raw.study_days) ? raw.study_days : [],
+    interview_history: Array.isArray(raw.interview_history) ? raw.interview_history : [],
     last_route: raw.last_route ?? "/home",
   }
   return normalized
@@ -41,6 +42,7 @@ export function useHome() {
   const [gauges, setGauges] = useState<Record<string, GaugeValue>>({})
   const [reviewCount, setReviewCount] = useState(0)
   const [studyDays, setStudyDays] = useState<string[]>([])
+  const [interviewCount, setInterviewCount] = useState(0)
   // 锁定章节提示弹窗（点未开放章节卡时）
   const [lockedChapter, setLockedChapter] = useState<ChapterDef | null>(null)
   // 施工中占位弹窗（目标页面尚未上线时，避免跳白屏）
@@ -51,6 +53,7 @@ export function useHome() {
     setGauges(rec.gauges)
     setReviewCount(rec.review_queue.length)
     setStudyDays(rec.study_days ?? [])
+    setInterviewCount((rec.interview_history ?? []).length)
     if (rec.id) setRecordId(rec.id)
   }, [])
 
@@ -130,6 +133,10 @@ export function useHome() {
     navigate("/glossary")
   }, [navigate])
 
+  const openInterview = useCallback(() => {
+    navigate("/interview")
+  }, [navigate])
+
   const openDebug = useCallback(() => {
     navigate("/debug")
   }, [navigate])
@@ -164,11 +171,13 @@ export function useHome() {
     gaugeViews,
     streak,
     reviewCount,
+    interviewCount,
     lockedChapter,
     constructionNote,
     openChapter,
     continueProgress,
     openGlossary,
+    openInterview,
     openDebug,
     openSandbox,
     closeDialogs,
