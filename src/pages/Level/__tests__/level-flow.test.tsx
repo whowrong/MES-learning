@@ -11,12 +11,14 @@ import { buildDefaultProgress } from "@/content/chapters"
 import ch1Json from "../../../../public/content/levels/ch1.json"
 import ch2Json from "../../../../public/content/levels/ch2.json"
 import ch3Json from "../../../../public/content/levels/ch3.json"
+import ch4Json from "../../../../public/content/levels/ch4.json"
 import termsJson from "../../../../public/content/terms.json"
 import type { ReactNode } from "react"
 
 const ch1: unknown = ch1Json
 const ch2: unknown = ch2Json
 const ch3: unknown = ch3Json
+const ch4: unknown = ch4Json
 const termsData: unknown = termsJson
 
 function jsonRes(data: unknown): Response {
@@ -129,9 +131,11 @@ beforeEach(() => {
           { chapter: 1, file: "ch1.json" },
           { chapter: 2, file: "ch2.json" },
           { chapter: 3, file: "ch3.json" },
+          { chapter: 4, file: "ch4.json" },
         ],
       })
     }
+    if (url.includes("levels/ch4.json")) return jsonRes(ch4)
     if (url.includes("levels/ch3.json")) return jsonRes(ch3)
     if (url.includes("levels/ch2.json")) return jsonRes(ch2)
     if (url.includes("levels/ch1.json")) return jsonRes(ch1)
@@ -436,6 +440,53 @@ describe("第三章全流程（建模与配置）", () => {
     // 通关打卡 + 解锁第四章
     expect(latest.chapterState["3"]).toBe("cleared")
     expect(latest.chapterState["4"]).toBe("open")
+    const patched = fetchMockCalls().filter((c) => c.method === "PATCH")
+    expect(patched.length).toBeGreaterThan(0)
+  })
+})
+
+describe("第四章全流程（执行与报工）", () => {
+  it("story → 现场连连看 → 现场鉴定 → 抉择 → 填空 → 排序 → 结算含库存准确率扣分并解锁第五章", async () => {
+    await bootstrap(4)
+    expect(latest.level?.chapter).toBe(4)
+    await playStory()
+
+    expect(latest.matchStage!.quotes.length).toBe(18)
+    expect(latest.roundMatch!.length).toBe(12)
+    expect(latest.matchStage!.concepts.length).toBe(8)
+    playMatchAllCorrect()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "进入下一关：真假鉴定" }))
+    })
+    expect(latest.judgeTotal).toBe(12) // 6 句 × 2
+    await playJudgeAllCorrect()
+
+    expect(latest.phase).toBe("quiz")
+    expect(latest.roundQuiz!.length).toBe(3)
+    await playQuizAllCorrect()
+
+    expect(latest.phase).toBe("fill")
+    expect(latest.roundFill!.length).toBe(2)
+    await playFillAllCorrect()
+    expect(latest.phase).toBe("sort")
+
+    act(() => latest.submitSort())
+    act(() => latest.submitSort())
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /完成本章 · 查看结算/ }))
+    })
+    await waitFor(() => expect(latest.phase).toBe("result"))
+
+    // 第四章结算：进度 +15；数据准确率每错 -3、库存准确率每错 -2（排序错步按实际数）
+    expect(latest.resultDeltas.find((d) => d.key === "projectProgress")?.delta).toBe(15)
+    const acc = latest.resultDeltas.find((d) => d.key === "dataAccuracy")!
+    const inv = latest.resultDeltas.find((d) => d.key === "inventoryAccuracy")!
+    expect(acc.delta).toBe(latest.sortWrongCount > 0 ? -3 * latest.sortWrongCount : 0)
+    expect(inv.delta).toBe(latest.sortWrongCount > 0 ? -2 * latest.sortWrongCount : 0)
+    // 通关打卡 + 解锁第五章
+    expect(latest.chapterState["4"]).toBe("cleared")
+    expect(latest.chapterState["5"]).toBe("open")
     const patched = fetchMockCalls().filter((c) => c.method === "PATCH")
     expect(patched.length).toBeGreaterThan(0)
   })

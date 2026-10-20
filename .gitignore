@@ -12,12 +12,6 @@ dist
 dist-ssr
 *.local
 
-# 平台内部信息（不进公开仓库）
-.rh/
-project/
-.env
-.env.*
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

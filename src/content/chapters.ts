@@ -54,7 +54,7 @@ export const CHAPTERS: ChapterDef[] = [
       "给班组派工、审核每个班次的报工：有人多报数量、有人漏报工序、有人把报废报成合格。老板报表上的产量，可能全是假的。",
     tags: ["派工", "报工", "在制品 WIP", "倒冲扣料"],
     lockedTip: "这一章模拟真实的一天生产：派工、报工、合格与报废、倒冲扣料，看数据不准怎么让老板看到假产量。",
-    playable: false,
+    playable: true,
   },
   {
     id: 5,
