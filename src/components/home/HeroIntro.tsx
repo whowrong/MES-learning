@@ -33,7 +33,7 @@ export function HeroIntro({ loading, streak, onContinue, onDebug }: HeroIntroPro
             v{BUILD_VERSION}
           </button>
         </p>
-        <h1 className="mt-4 text-3xl font-bold leading-tight text-foreground sm:text-4xl lg:text-5xl">
+        <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-foreground [text-wrap:balance] sm:text-4xl lg:text-5xl">
           把一家 20 人小五金厂的
           <span className="text-primary"> MES 上线</span>，
           <br />
@@ -56,11 +56,11 @@ export function HeroIntro({ loading, streak, onContinue, onDebug }: HeroIntroPro
           </Button>
           {streak > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-4 py-1.5 text-sm font-bold text-destructive">
-              <Flame className="h-4 w-4" />
+              <Flame className="h-4 w-4 animate-pulse" />
               连续学习 {streak} 天
             </span>
           )}
-          <p className="text-sm text-muted-foreground">三章可玩：调研认知 · 脏数据清洗 · 建模配置</p>
+          <p className="text-sm text-muted-foreground">剧情章节持续更新：调研 · 洗数据 · 建模 · 执行报工，四章可玩</p>
         </div>
       </div>
     </section>

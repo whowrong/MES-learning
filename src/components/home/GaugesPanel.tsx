@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Minus } from "lucide-react"
 import type { GaugeDef } from "@/content/chapters"
+import { CountUp } from "@/components/bits/CountUp"
 
 export interface GaugeView {
   def: GaugeDef
@@ -26,7 +27,7 @@ export function GaugesPanel({ gaugeViews }: GaugesPanelProps) {
           你的每个决策只会动其中两三项——变动多少、为什么变，都会当场拆给你看。
         </p>
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-          {gaugeViews.map(({ def, value, delta }) => {
+          {gaugeViews.map(({ def, value, delta }, idx) => {
             const tone = deltaTone(def, delta)
             const fillRatio = def.higherIsBetter
               ? Math.min(Math.max(value / def.max, 0), 1)
@@ -41,11 +42,12 @@ export function GaugesPanel({ gaugeViews }: GaugesPanelProps) {
             return (
               <div
                 key={def.key}
-                className="flex h-full flex-col rounded-2xl bg-card p-4 shadow-md animate-in fade-in slide-in-from-bottom-4 duration-500"
+                style={{ animationDelay: `${idx * 60}ms` }}
+                className="flex h-full flex-col rounded-2xl bg-card p-4 shadow-md transition-shadow duration-300 hover:shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards"
               >
                 <p className="text-xs font-medium text-muted-foreground">{def.label}</p>
                 <p className="mt-1 flex items-baseline gap-1">
-                  <span className="font-mono text-2xl font-bold text-foreground">{value}</span>
+                  <CountUp to={value} duration={1.4} className="font-mono text-2xl font-bold tabular-nums text-foreground" />
                   <span className="text-xs text-muted-foreground">{def.unit}</span>
                   {tone === "good" && (
                     <ArrowUp className="ml-auto h-4 w-4 text-primary" aria-label="好转" />

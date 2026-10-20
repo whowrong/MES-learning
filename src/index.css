@@ -187,6 +187,24 @@ body {
 
   body { font-family: var(--font-body); }
 
+  /* 锚点/回顶平滑滚动；系统开了「减少动态效果」时全局收敛为直切 */
+  html { scroll-behavior: smooth; }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.25);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
   /* 中英混排: 把英文/数字那一截用 <span class="cjk-latin"> 包起来, 字号 + 基线对齐中文 (font-size-adjust 0.56 实测最贴中文字高) */
   .cjk-latin { font-size-adjust: 0.56; vertical-align: var(--cjk-latin-shift, -0.15em); }
 }

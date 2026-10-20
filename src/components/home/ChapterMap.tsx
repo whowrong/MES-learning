@@ -35,11 +35,12 @@ export function ChapterMap({ chapters, chapterState, onOpen }: ChapterMapProps) 
                 <button
                   type="button"
                   onClick={() => onOpen(ch)}
+                  style={{ animationDelay: `${idx * 70}ms` }}
                   className={`flex h-full w-full flex-col rounded-2xl bg-card p-5 text-left shadow-md transition-all duration-300 focus-visible:shadow-[var(--focus-ring)] ${
                     isOpen
                       ? "border-2 border-primary hover:-translate-y-1 hover:shadow-lg"
                       : "border-2 border-dashed border-border opacity-70 hover:opacity-90"
-                  } animate-in fade-in slide-in-from-bottom-4 duration-500`}
+                  } animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards`}
                 >
                   <div className="flex items-center justify-between">
                     <span
