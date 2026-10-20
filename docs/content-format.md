@@ -28,7 +28,7 @@ public/content/
 }
 ```
 
-**讲解图（illustration）**：给难懂概念配一张可视化图，术语卡弹窗里自动渲染在大白话和定义之间。当前注册表：`bom_tree`（BOM 树）/ `route_flow`（工艺路线流动图）/ `backflush_flow`（倒冲扣料算式流）/ `work_order_states`（工单状态机）/ `yield_funnel`（产出漏斗）/ `wip_level`（在制品水位图）。加新图：在 `src/components/illustrations/` 写组件（只用 token 色）→ `index.ts` 注册 → 术语卡加 `illustration` 字段，不改弹窗代码。
+**讲解图（illustration）**：给难懂概念配一张可视化图，术语卡弹窗里自动渲染在大白话和定义之间。当前注册表（16 张）：`bom_tree`（BOM 树）/ `route_flow`（工艺路线流动图）/ `backflush_flow`（倒冲扣料算式流）/ `work_order_states`（工单状态机）/ `yield_funnel`（产出漏斗）/ `wip_level`（在制品水位图）/ `inventory_count`（账实对照）/ `loss_rate_bar`（损耗备料条）/ `dispatch_board`（派工板）/ `unit_mismatch`（单位断链）/ `duplicate_codes`（一物两码合并）/ `calendar_strip`（工厂日历周条）/ `takt_line`（节拍时间轴）/ `batch_trace`（批次追溯链）/ `rework_loop`（返工回环）/ `shift_rotation`（班次轮转）。另有 `FactoryShape`（三厂型形态小图，用于厂型选卡页）。加新图：在 `src/components/illustrations/` 写组件（只用 token 色）→ `index.ts` 注册 → 术语卡加 `illustration` 字段，不改弹窗代码；`__tests__/registry.test.ts` 自动把关「术语引用的图必须已注册」。
 
 ## levels/index.json
 

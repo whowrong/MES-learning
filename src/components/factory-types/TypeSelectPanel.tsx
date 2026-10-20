@@ -1,5 +1,6 @@
 import { Cog, GitMerge, Workflow, ArrowRight, Layers } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { FactoryShape } from "@/components/illustrations"
 import type { FactoryTypeId } from "@/content/factoryTypes"
 
 export interface TypeCardView {
@@ -56,6 +57,9 @@ export function TypeSelectPanel({ view, onChoose }: TypeSelectPanelProps) {
                 )}
               </span>
               <span className="mt-3 text-sm leading-6 text-muted-foreground">{t.tagline}</span>
+              <span className="mt-3 rounded-xl border border-border bg-background/60 px-3 py-1">
+                <FactoryShape variant={t.type} />
+              </span>
               <span className="mt-4 flex flex-wrap gap-2">
                 {t.industries.map((ind) => (
                   <span key={ind} className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">

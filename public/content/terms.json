@@ -50,7 +50,8 @@
       "dialect": "仓库的账和实物",
       "definition": "仓库里物料与成品的账面数量和实物数量。库存准确率低于 95%，后面所有运算都不可信。",
       "example": "钢管账上有 300 根，实盘只有 290 根，就是账实不符。",
-      "knowledge_id": "K1-6"
+      "knowledge_id": "K1-6",
+      "illustration": "inventory_count"
     },
     {
       "id": "backflush",
@@ -75,7 +76,8 @@
       "dialect": "切割总有废料，领料要多算一点",
       "definition": "正常加工损耗在单耗之上附加的百分比。不配损耗率，倒冲扣的料永远比实际消耗的少，库存虚高。",
       "example": "每 100m 钢管切完剩 3m 废料，损耗率就是 3%。",
-      "knowledge_id": "K1-9"
+      "knowledge_id": "K1-9",
+      "illustration": "loss_rate_bar"
     },
     {
       "id": "dispatch",
@@ -83,7 +85,8 @@
       "dialect": "师傅手里的小票",
       "definition": "把工单拆到具体工序、具体人或机台的执行单据，报工按它核销。",
       "example": "把 42 号工单的焊接工序派给焊接位的王师傅，限 3 天完成。",
-      "knowledge_id": "K1-10"
+      "knowledge_id": "K1-10",
+      "illustration": "dispatch_board"
     },
     {
       "id": "shortage",
@@ -107,7 +110,8 @@
       "dialect": "同一个东西有好几个身份证号",
       "definition": "同一种物料在台账里出现多个编码或名称，系统会把它们当成不同的料：各记各的账，重复采购和呆滞库存同时发生。",
       "example": "「六角螺栓 M8」同时有 M8-LS 和 LS-M8-02 两个编码，库存分散记在两本账上。",
-      "knowledge_id": "K2-1"
+      "knowledge_id": "K2-1",
+      "illustration": "duplicate_codes"
     },
     {
       "id": "unit_mixed",
@@ -115,7 +119,8 @@
       "dialect": "论米还是论根，得先说死",
       "definition": "同一种物料的记账单位不统一（米/根/箱/公斤）又没配换算率，加减汇总全错，账实永远对不上。",
       "example": "钢管账面 300——是 300 米还是 300 根（1 根 = 6 米），连仓管员自己都说不清。",
-      "knowledge_id": "K2-2"
+      "knowledge_id": "K2-2",
+      "illustration": "unit_mismatch"
     },
     {
       "id": "two_in_one_row",
@@ -171,7 +176,8 @@
       "dialect": "系统知道你哪天上班",
       "definition": "定义上班班次和休息日的日历，是排产和交期计算的基础。日历配错，产能不是虚高就是虚低，排出来的计划全是空话。",
       "example": "宏发五金厂：单班 8 小时、周日休、春节停 7 天——都要标进日历。",
-      "knowledge_id": "K3-3"
+      "knowledge_id": "K3-3",
+      "illustration": "calendar_strip"
     },
     {
       "id": "semi_product",
@@ -187,7 +193,8 @@
       "dialect": "流水线的心跳",
       "definition": "流水线上相邻两件产品下线的间隔时间，也常说成「一小时该出多少件」。所有工位都按节拍对齐干活：谁慢了，整条线就堆积或停机。节拍是产能计算和排产的依据，设计节拍和实际产出的差距就是改善空间。",
       "example": "灌装线节拍 3 秒一瓶，一小时理论产出 1200 瓶；实际平均只有 1050 瓶，差的 150 瓶就是停机、卡瓶吃掉的。",
-      "knowledge_id": "K7-1"
+      "knowledge_id": "K7-1",
+      "illustration": "takt_line"
     },
     {
       "id": "production_line",
@@ -219,7 +226,8 @@
       "dialect": "一锅出来的算一批",
       "definition": "同一批原料、同一段时间、同一条件下生产出来的一群产品，共用一个批次号。批次是追溯的单位：原料出问题，顺着批次链能正向查到受影响的成品和发货去向；成品被投诉，能反向查到用的哪批料、谁操作的。",
       "example": "批次 20261019-A3：10 月 19 日 A 线第 3 罐灌装的 5000 瓶果汁，用的原料批次都能反查出来。",
-      "knowledge_id": "K7-5"
+      "knowledge_id": "K7-5",
+      "illustration": "batch_trace"
     },
     {
       "id": "mixed_model",
@@ -253,7 +261,8 @@
       "dialect": "白班夜班那一拨人",
       "definition": "工作时段与对应班组的划分（白班/夜班、两班倒/三班倒）。产量、报废、异常、交接都按班次登记，班次是执行数据对账的最小单位——出了差异先锁定到班，再锁定到人。",
       "example": "宏发厂平时单班 8 小时，赶货改两班倒：白班做了 180 件、夜班做了 150 件，日报按班次分列，差 30 件的原因也按班次去查。",
-      "knowledge_id": "K4-3"
+      "knowledge_id": "K4-3",
+      "illustration": "shift_rotation"
     },
     {
       "id": "rework",
@@ -261,7 +270,8 @@
       "dialect": "拆了重做一遍",
       "definition": "不合格品经修复或重新加工后仍能达到合格标准的处理动作。返工吃工时、吃物料，却不产生新产出——它是产能的隐形黑洞，返工工时不单独统计，工作中心的负荷就永远算不准。",
       "example": "10 把椅子漆面流挂，退回喷漆房重喷：多花 2 个工时、多耗 0.5 公斤塑粉，这 10 把在产量报表上却还是原来那 10 把。",
-      "knowledge_id": "K4-4"
+      "knowledge_id": "K4-4",
+      "illustration": "rework_loop"
     },
     {
       "id": "daily_report",
