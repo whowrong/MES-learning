@@ -10,6 +10,8 @@ export interface TermDef {
   definition: string
   example: string
   knowledge_id: string
+  /** 讲解图 id（src/components/illustrations 的 ILLUSTRATIONS 注册表），缺省不显示图 */
+  illustration?: string
 }
 
 export interface MatchFeedback {

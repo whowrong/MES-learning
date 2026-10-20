@@ -6,7 +6,8 @@
       "dialect": "派活儿的任务单",
       "definition": "计划下达给车间的生产指令：做什么产品、做多少、什么时候完工。报工、领料、入库都挂在它下面。",
       "example": "「本周完成 200 把折叠椅」就是一张工单。",
-      "knowledge_id": "K1-1"
+      "knowledge_id": "K1-1",
+      "illustration": "work_order_states"
     },
     {
       "id": "bom",
@@ -14,7 +15,8 @@
       "dialect": "配方表",
       "definition": "一件产品需要哪些物料、各用多少的清单，是倒冲扣料和缺料计算的唯一依据。",
       "example": "一把折叠椅 = 2.5m 钢管 + 1 块座板 + 4 个脚垫 + 12 颗螺丝。",
-      "knowledge_id": "K1-2"
+      "knowledge_id": "K1-2",
+      "illustration": "bom_tree"
     },
     {
       "id": "process_route",
@@ -22,7 +24,8 @@
       "dialect": "要按顺序走的路",
       "definition": "产品从原材料到成品要经过的工序顺序，决定报工顺序和在制品统计口径。",
       "example": "切管 → 焊接 → 喷涂 → 组装。",
-      "knowledge_id": "K1-3"
+      "knowledge_id": "K1-3",
+      "illustration": "route_flow"
     },
     {
       "id": "reporting",
@@ -38,7 +41,8 @@
       "dialect": "悬着的东西",
       "definition": "已开工但还未完工的物料。在制品数量 = 已投料 − 已完工报工，对不上说明工艺路线或报工口径配置错了。",
       "example": "焊好但还没喷涂的椅子架就是在制品。",
-      "knowledge_id": "K1-5"
+      "knowledge_id": "K1-5",
+      "illustration": "wip_level"
     },
     {
       "id": "inventory",
@@ -54,7 +58,8 @@
       "dialect": "报工时一起扣",
       "definition": "不逐笔开领料单，而是在报工时按 BOM 单耗一次性扣料：扣料 = 报工数 × 单耗 ×（1 + 损耗率）。报工或 BOM 任一失真，库存立刻错。",
       "example": "报工 500 把椅子，自动扣 500 × 2.5 = 1250m 钢管。",
-      "knowledge_id": "K1-7"
+      "knowledge_id": "K1-7",
+      "illustration": "backflush_flow"
     },
     {
       "id": "work_center",
@@ -230,7 +235,8 @@
       "dialect": "做坏了救不回来的件",
       "definition": "生产产出里无法修复、无法降级使用，只能作为损失处理的部分。报废数量必须和合格数量分开登记、附上原因码（料不良/操作失误/设备故障），否则倒冲扣料、成本核算和合格率全部失真。",
       "example": "切割 200 根钢管，5 根崩口修不了只能回炉当废铁：报废 5 根、报废率 2.5%，原因码「设备-锯片磨损」。",
-      "knowledge_id": "K4-1"
+      "knowledge_id": "K4-1",
+      "illustration": "yield_funnel"
     },
     {
       "id": "yield_rate",
@@ -238,7 +244,8 @@
       "dialect": "一百件里几件能用",
       "definition": "合格数量 ÷ 投入数量（或完工数量）。直通率是更严格的口径：从第一道工序到最后一道全程一次通过、不含任何返工的比例。某道工序合格率突然下跌，就是去现场找问题的信号。",
       "example": "喷涂投入 200 件、合格 190 件，合格率 95%；上周还是 98%——掉 3 个点意味着多废了 6 件，得查塑粉批次还是新手操作。",
-      "knowledge_id": "K4-2"
+      "knowledge_id": "K4-2",
+      "illustration": "yield_funnel"
     },
     {
       "id": "shift",

@@ -205,6 +205,22 @@ body {
     }
   }
 
+  /* 讲解图动画：工件沿工艺路线流动、在制品水位呼吸（reduced-motion 时被上面的全局规则收敛） */
+  .illustration-workpiece {
+    animation: workpiece-slide 3.2s linear infinite;
+  }
+  @keyframes workpiece-slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(4000%); }
+  }
+  .illustration-water {
+    animation: water-breathe 2.8s ease-in-out infinite;
+  }
+  @keyframes water-breathe {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; }
+  }
+
   /* 中英混排: 把英文/数字那一截用 <span class="cjk-latin"> 包起来, 字号 + 基线对齐中文 (font-size-adjust 0.56 实测最贴中文字高) */
   .cjk-latin { font-size-adjust: 0.56; vertical-align: var(--cjk-latin-shift, -0.15em); }
 }

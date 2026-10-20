@@ -162,9 +162,9 @@ describe("第一章全流程（黑屏回归）", () => {
     await playStory()
     expect(latest.phase).toBe("match")
 
-    // 抽题制：题库 29 条，本局只上场 12 条，且都来自题库
+    // 抽题制：题库 41 条，本局只上场 12 条，且都来自题库
     const bank = latest.matchStage!.quotes
-    expect(bank.length).toBe(29)
+    expect(bank.length).toBe(41)
     const round = latest.roundMatch!
     expect(round.length).toBe(12)
     for (const q of round) expect(bank.some((b) => b.id === q.id)).toBe(true)
@@ -361,7 +361,7 @@ describe("第二章全流程（脏数据清洗）", () => {
     expect(latest.level?.chapter).toBe(2)
     await playStory()
 
-    expect(latest.matchStage!.quotes.length).toBe(24)
+    expect(latest.matchStage!.quotes.length).toBe(34)
     expect(latest.roundMatch!.length).toBe(11)
     expect(latest.matchStage!.concepts.length).toBe(5)
     playMatchAllCorrect()
@@ -404,7 +404,7 @@ describe("第三章全流程（建模与配置）", () => {
     expect(latest.level?.chapter).toBe(3)
     await playStory()
 
-    expect(latest.matchStage!.quotes.length).toBe(26)
+    expect(latest.matchStage!.quotes.length).toBe(36)
     expect(latest.roundMatch!.length).toBe(12)
     expect(latest.matchStage!.concepts.length).toBe(8)
     playMatchAllCorrect()
@@ -451,7 +451,7 @@ describe("第四章全流程（执行与报工）", () => {
     expect(latest.level?.chapter).toBe(4)
     await playStory()
 
-    expect(latest.matchStage!.quotes.length).toBe(18)
+    expect(latest.matchStage!.quotes.length).toBe(25)
     expect(latest.roundMatch!.length).toBe(12)
     expect(latest.matchStage!.concepts.length).toBe(8)
     playMatchAllCorrect()

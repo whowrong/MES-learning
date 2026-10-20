@@ -21,11 +21,14 @@ public/content/
       "dialect": "派活儿的任务单", // 车间大白话（给零基础玩家的第一解释）
       "definition": "……",        // 完整定义：它是什么、管什么
       "example": "……",           // 一个具体例子（最好带数字）
-      "knowledge_id": "K1-1"     // 对应知识点映射表编号，用于验收对账
+      "knowledge_id": "K1-1",    // 对应知识点映射表编号，用于验收对账
+      "illustration": "work_order_states"  // 可选：讲解图 id，注册表在 src/components/illustrations/index.ts
     }
   ]
 }
 ```
+
+**讲解图（illustration）**：给难懂概念配一张可视化图，术语卡弹窗里自动渲染在大白话和定义之间。当前注册表：`bom_tree`（BOM 树）/ `route_flow`（工艺路线流动图）/ `backflush_flow`（倒冲扣料算式流）/ `work_order_states`（工单状态机）/ `yield_funnel`（产出漏斗）/ `wip_level`（在制品水位图）。加新图：在 `src/components/illustrations/` 写组件（只用 token 色）→ `index.ts` 注册 → 术语卡加 `illustration` 字段，不改弹窗代码。
 
 ## levels/index.json
 
@@ -74,7 +77,7 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 }
 ```
 
-出题建议：**每局题量按「全量时代的三分之二」定基准**（连连看 12 条、抉择 3 题、填空 2 题），题库多出来的题用于每局轮换保鲜——题库越大，重玩撞题越少；match 各概念对应条数保持不均（防排除法数数）；sort 是完整流程**不抽题**（步骤缺一不可）。当前配置：ch1 match 18/12、quiz 8/3；ch2 match 16/11、quiz 8/3、fill 5/2；ch3 match 18/12、quiz 8/3、fill 5/2；ch4 match 18/12、quiz 8/3、fill 5/2（格式：题库/每局）。
+出题建议：**每局题量按「全量时代的三分之二」定基准**（连连看 12 条、抉择 3 题、填空 2 题），题库多出来的题用于每局轮换保鲜——题库越大，重玩撞题越少；match 各概念对应条数保持不均（防排除法数数）；sort 是完整流程**不抽题**（步骤缺一不可）。当前配置：ch1 match 41/12、quiz 12/3；ch2 match 34/11、quiz 11/3、fill 7/2；ch3 match 36/12、quiz 11/3、fill 7/2；ch4 match 25/12、quiz 11/3、fill 7/2（格式：题库/每局）。
 
 ### result.settlement：内容驱动的仪表结算（可选，第二章起推荐）
 

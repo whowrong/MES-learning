@@ -6,6 +6,7 @@ import { GaugesPanel } from "@/components/home/GaugesPanel"
 import { ChapterMap } from "@/components/home/ChapterMap"
 import { ModuleEntries } from "@/components/home/ModuleEntries"
 import { HomeDialogs } from "@/components/home/HomeDialogs"
+import { ProjectLifecycle } from "@/components/illustrations"
 import type { useHome } from "./useHome"
 
 export function HomePage(p: ReturnType<typeof useHome>) {
@@ -35,6 +36,7 @@ export function HomePage(p: ReturnType<typeof useHome>) {
         )}
 
         <GaugesPanel gaugeViews={p.gaugeViews} />
+        <ProjectLifecycle />
         <ChapterMap
           chapters={p.chapters}
           chapterState={p.chapterState}
@@ -52,7 +54,7 @@ export function HomePage(p: ReturnType<typeof useHome>) {
       </main>
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-muted-foreground">
-          当前版本包含第一章可玩内容 · 关卡、术语与决策后果均由内容文件驱动，照着示例就能加新关卡
+          四章剧情关卡可玩 · 关卡、术语、讲解图与决策后果均由内容文件驱动，照着示例就能加新关卡
         </div>
       </footer>
       <HomeDialogs
