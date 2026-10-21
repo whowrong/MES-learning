@@ -277,6 +277,57 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 
 计分（`src/game/factory.ts`）：每题等权，答对得分；总分=得分率×100，档位与全站一致（S≥95/A≥85/B≥70/C），评语在 `index.json` 的 `rankTexts`。红线：三厂型题目严禁换皮——每题必须踩中该厂型的命门差异（离散=工单/工艺路线、流水线=节拍/批次、混合=衔接/口径）；term_ids 必须指向真实术语；`src/content/__tests__/factory-quality.test.ts` 自动扫描全部厂型文件把关。
 
+## 运维训练营（public/content/ops-training/）
+
+严肃向运维实操模块（非游戏化）：以 MES 为中心、ERP/WMS 为辅。`index.json` 登记四个训练域（linux/windows/cloud/integration），**加域或加训练项目只改 JSON，不改代码**。每个域文件的 `items` 里混排三种形式：
+
+```jsonc
+// index.json
+{ "domains": [{ "domain": "linux", "file": "linux.json" }], "rankTexts": { "S": "…", "A": "…", "B": "…", "C": "…" } }
+
+// linux.json —— 单个训练域全部内容
+{
+  "domain": "linux",
+  "domainName": "Linux 服务器实操",
+  "brief": "一段域简介（选域页展示）",
+  "items": [
+    {   // 形式一：terminal 终端演练（核心玩法，模拟终端逐步敲命令）
+      "id": "lx-d1",                       // 全域唯一，前缀 lx-/win-/cloud-/int- 区分
+      "kind": "terminal",
+      "title": "磁盘打满：MES 采集服务停止写库",
+      "difficulty": "入门", "minutes": 10,
+      "ticket": { "background": "…", "symptom": "…", "objective": "…" },   // 事故工单三要素
+      "prompt": "ops@mes-app-01:~$",       // 终端提示符（Windows 域用 PS C:\\Users\\ops>）
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "本步目标（顶栏展示）",
+          "accept": ["^df\\b"],            // 命中即推进的正则源串（JS RegExp，i 标志；禁用 (?i) 内联标志）
+          "output": "命令命中后返回的模拟输出（逼真多行文本）",
+          "hint": "提示按钮文案（计次扣分）",
+          "explain": "推进后的「为什么这一步」讲解"
+        }
+      ],
+      "ambient": [{ "pattern": "^pwd$", "output": "/home/ops" }],   // 可选：中性查询命令，真实感输出不计错
+      "danger": [{ "pattern": "^rm\\b.*mes-collector\\.log", "output": "⛔ 拦截+后果讲解（≥20字）" }],  // 可选：域级危险命令教学，叠加全局表（rm -rf /、mkfs、shutdown、reboot、DROP TABLE、无 WHERE DELETE 等）
+      "sop": ["df -h", "…"]                // 标准操作序列（演练报告回放，背下来照做）
+    },
+    {   // 形式二：choice 场景决策组（一次一题提交即判定，结构同关卡 quiz）
+      "id": "lx-c1", "kind": "choice", "title": "…", "difficulty": "入门", "minutes": 12,
+      "intro": "…",
+      "questions": [{ "id": "lx-c1-q1", "prompt": "…", "options": [{ "id": "o1", "text": "…" }], "answer": "o1", "term_ids": [], "feedback": { "factory": "现场会怎样", "data": "系统与数据会怎样", "consultant": "运维该怎么做" } }]
+    },
+    {   // 形式三：order 处置流程排序（steps 按正确顺序书写，页面加载自动打乱）
+      "id": "lx-o1", "kind": "order", "title": "…", "difficulty": "入门", "minutes": 6,
+      "intro": "…", "maxAttempts": 2,
+      "steps": [{ "id": "s1", "text": "步骤描述", "note": "错位时展示：为什么它在这个位置" }]
+    }
+  ]
+}
+```
+
+计分（引擎在 `src/game/opsTerminal.ts`，纯函数）：terminal 满分 100，每次提示 -10、每次错误尝试/危险拦截 -5；choice 按答对率；order 第一次排对 100 / 第二次 80 / 看正解 60。档位与全站一致（S≥95/A≥85/B≥70/C）。红线：accept/ambient/danger 正则必须可编译（**JS 正则不支持 `(?i)` 内联标志**，引擎已统一加 i 标志）、工单三要素齐全、步骤 ≥2、决策题三句话讲解完整、排序步骤 ≥3 且每步带 note、term_ids 指向真实术语——`src/content/__tests__/ops-quality.test.ts` 自动扫描全部域文件把关，`src/pages/OpsTraining/__tests__/ops-flow.test.tsx` 是渲染级全流程冒烟（真敲命令走完 lx-d1）。
+
 ## 约定与红线
 
 - **每个机制必须挂知识点**：新增内容时 `knowledge_ids` / `term_ids` 必填，映射不到知识点的机制不要加。

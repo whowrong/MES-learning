@@ -168,6 +168,8 @@ export interface ProgressRecord {
   interview_history?: InterviewHistoryEntry[]
   /** 厂型特训营练习历史（每次实战测验追加一条） */
   factory_history?: FactoryHistoryEntry[]
+  /** 运维训练营练习历史（每次演练/测验追加一条） */
+  ops_history?: OpsHistoryEntry[]
   last_route: string
 }
 
@@ -186,6 +188,20 @@ export interface FactoryHistoryEntry {
   at: string
   /** 厂型 type：discrete/flow/hybrid */
   type: string
+  score: number
+  total: number
+}
+
+/** 一次运维训练营演练/测验的存档记录 */
+export interface OpsHistoryEntry {
+  /** 本地日期时间串 YYYY-MM-DD HH:mm */
+  at: string
+  /** 训练域：linux/windows/cloud/integration */
+  domain: string
+  /** 训练项目 id */
+  itemId: string
+  /** 形式：terminal/choice/order */
+  kind: string
   score: number
   total: number
 }
@@ -216,6 +232,7 @@ export function buildDefaultProgress(): ProgressRecord {
     study_days: [],
     interview_history: [],
     factory_history: [],
+    ops_history: [],
     last_route: "/home",
   }
 }

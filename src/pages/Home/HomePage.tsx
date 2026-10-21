@@ -46,9 +46,11 @@ export function HomePage(p: ReturnType<typeof useHome>) {
           reviewCount={p.reviewCount}
           interviewCount={p.interviewCount}
           factoryCount={p.factoryCount}
+          opsCount={p.opsCount}
           onGlossary={p.openGlossary}
           onInterview={p.openInterview}
           onFactoryTypes={p.openFactoryTypes}
+          onOpsTraining={p.openOpsTraining}
           onSandbox={p.openSandbox}
         />
       </main>

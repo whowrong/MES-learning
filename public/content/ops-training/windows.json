@@ -1,0 +1,382 @@
+{
+  "domain": "windows",
+  "domainName": "Windows 服务器运维",
+  "brief": "小厂 MES/ERP 最常见的部署环境：Windows Server + IIS + SQL Server。PowerShell 模拟终端实操 + 高频场景决策，覆盖服务、事件日志、防火墙、远程桌面、备份恢复。",
+  "items": [
+    {
+      "id": "win-d1",
+      "kind": "terminal",
+      "title": "IIS 站点 503：MES 应用程序池崩溃取证",
+      "difficulty": "进阶",
+      "minutes": 12,
+      "ticket": {
+        "background": "MES Web 站点（.NET）跑在 Windows Server 2016 的 IIS 上，应用程序池 MESPool，同机还挂着 OA 和报表两个站点。",
+        "symptom": "车间浏览器访问 MES 全部返回 503 Service Unavailable，OA 正常。",
+        "objective": "取证定位应用程序池崩溃原因，恢复 MES 站点，并做防复发处置。全程不影响同机其它站点。"
+      },
+      "prompt": "PS C:\\Users\\ops>",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "查看 IIS 站点与应用程序池状态，确认故障层级",
+          "accept": ["^Get-Website\\b", "^Get-WebAppPoolState\\b", "^Get-ChildItem\\s+IIS:", "^appcmd\\s+list"],
+          "output": "PS C:\\Users\\ops> Get-Website\nName   State    Bindings                    PhysicalPath\nMES    Started  http *:80                   D:\\wwwroot\\mes\nOA     Started  http *:8080                 D:\\wwwroot\\oa\nReport Started http *:8081                  D:\\wwwroot\\report\n\nPS C:\\Users\\ops> Get-WebAppPoolState -Name MESPool\nValue\n-----\nStopped\n\n（OA 与 Report 的应用程序池均为 Started）",
+          "hint": "PowerShell 里 Get-Website 看站点，Get-WebAppPoolState -Name MESPool 看应用程序池。",
+          "explain": "站点 Started 但应用程序池 Stopped——503 的直接原因找到了：w3wp 工作进程没了。且只有 MESPool 挂，说明是 MES 自身问题，不是 IIS 全局故障。"
+        },
+        {
+          "id": "s2",
+          "objective": "翻应用程序事件日志，找 MESPool 被停掉的原因",
+          "accept": ["^Get-EventLog\\b.*Application", "^Get-WinEvent\\b.*Application"],
+          "output": "PS C:\\Users\\ops> Get-EventLog -LogName Application -Newest 30 | Where-Object {$_.Source -match 'WAS|W3SVC|.NET'} | Format-Table TimeGenerated, Source, Message -Wrap\n\nTimeGenerated        Source  Message\n07:02:11  WAS  5011: 为应用程序池 MESPool 提供服务的进程在最近的 5 分钟内连续遇到 5 次失败，应用程序池已被自动禁用（快速故障保护）。\n07:01:58  W3SVC 应用程序池 MESPool 的工作进程遭遇 OutOfMemoryException，进程已终止。\n06:58:40  W3SVC 应用程序池 MESPool 的工作进程遭遇 OutOfMemoryException，进程已终止。",
+          "hint": "Get-EventLog -LogName Application -Newest 30 过滤 WAS / W3SVC 来源，Windows 的服务级故障都记在这里。",
+          "explain": "两层信息：直接原因是 w3wp 反复 OutOfMemoryException；IIS 的「快速故障保护」在 5 分钟 5 次失败后自动禁用了池子，防止无限崩溃循环。这是保护机制，不是故障本身。"
+        },
+        {
+          "id": "s3",
+          "objective": "确认系统层没有连带异常（磁盘/硬件/其它服务）",
+          "accept": ["^Get-EventLog\\b.*System", "^Get-WinEvent\\b.*System"],
+          "output": "PS C:\\Users\\ops> Get-EventLog -LogName System -Newest 20 | Format-Table TimeGenerated, Source, EntryType -AutoSize\n\nTimeGenerated        Source        EntryType\n07:02:11  Microsoft-Windows-WAS  Warning\n06:12:03  Schannel               Information\n23:00:05  Service Control Manager Information\n\n（无 Error 级别条目，磁盘与硬件无告警）",
+          "hint": "Get-EventLog -LogName System -Newest 20，确认 System 日志里没有 Error 级硬件或磁盘事件。",
+          "explain": "排障要区分「局部病」和「全身病」：System 日志干净，确认问题局限在 MES 应用自身的内存，不用怀疑宿主机。"
+        },
+        {
+          "id": "s4",
+          "objective": "看整机内存压力与占用大户，评估 OOM 的外部因素",
+          "accept": ["^Get-Process\\b", "^Get-CimInstance\\b.*OperatingSystem", "^systeminfo\\b"],
+          "output": "PS C:\\Users\\ops> Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 Name, Id, @{n='Mem(GB)';e={[math]::Round($_.WorkingSet64/1GB,2)}}\n\nName   Id    Mem(GB)\nw3wp   3120  3.90     ← OA 站点的池子，正常\nsqlservr 2200 1.80\nmsdtc  1880  0.10\n\n总内存 8GB，可用 1.2GB。MESPool 崩溃前其 w3wp 曾达 4.1GB（性能计数器历史）。",
+          "hint": "Get-Process | Sort-Object WorkingSet64 -Descending | Select -First 5 按内存倒序看大户。",
+          "explain": "8G 机器上 OA 池 3.9G + SQL Server 1.8G，MES 的 w3wp 崩溃前吃到 4.1G——三个大胃王挤一台机器，MES 先被挤死。根因是应用内存泄漏或报表未分页，宿主机容量也偏紧。"
+        },
+        {
+          "id": "s5",
+          "objective": "只启动 MES 的应用程序池，恢复站点",
+          "accept": ["^Start-WebAppPool\\b", "^Restart-WebAppPool\\b"],
+          "output": "PS C:\\Users\\ops> Start-WebAppPool -Name MESPool\nPS C:\\Users\\ops> Get-WebAppPoolState -Name MESPool\nValue\n-----\nStarted",
+          "hint": "Start-WebAppPool -Name MESPool。注意：不要用 iisreset，那会连累同机的 OA 和报表站点。",
+          "explain": "快速故障保护禁用后必须手动 Start-WebAppPool 重新启用。只动目标池，OA 和报表全程无感——生产服务器上「影响面最小化」优先于「操作省事」。"
+        },
+        {
+          "id": "s6",
+          "objective": "本机验证 MES 页面真正可访问",
+          "accept": ["^Invoke-WebRequest\\b", "^Invoke-RestMethod\\b", "^curl\\b"],
+          "output": "PS C:\\Users\\ops> Invoke-WebRequest -Uri http://localhost/login.aspx -UseBasicParsing | Select-Object StatusCode\n\nStatusCode\n----------\n       200",
+          "hint": "Invoke-WebRequest -Uri http://localhost/login.aspx -UseBasicParsing 本机探活。",
+          "explain": "池子 Started 不等于页面能用，200 才算数。再让车间刷一下报工页确认端到端，故障才算恢复。"
+        },
+        {
+          "id": "s7",
+          "objective": "防复发：给 MESPool 配定时回收，避开高峰自动换新进程",
+          "accept": ["^Set-ItemProperty\\b", "^Set-WebConfigurationProperty\\b", "^appcmd\\s+set\\b"],
+          "output": "PS C:\\Users\\ops> Set-ItemProperty \"IIS:\\AppPools\\MESPool\" -Name recycling.periodicRestart.time -Value ([TimeSpan]\"12:00:00\")\nPS C:\\Users\\ops> Set-ItemProperty \"IIS:\\AppPools\\MESPool\" -Name recycling.periodicRestart.requests -Value 0\n\n已配置：MESPool 每 12 小时定时回收（默认凌晨 3 点固定回收改为周期滚动），回收事件写入事件日志。",
+          "hint": "Set-ItemProperty 修改 IIS: 提供程序下 MESPool 的回收配置（recycling.periodicRestart）。",
+          "explain": "定时回收是 .NET 应用内存泄漏的止血带：赶在 OOM 前换新进程。这只是缓兵之计——根治要开发查泄漏（崩溃前 4.1G 的 dump 留给开发分析），同时给事件 5011 配告警，别等车间打电话才知道。"
+        }
+      ],
+      "ambient": [
+        { "pattern": "^hostname\\b", "output": "MES-SRV-01" },
+        { "pattern": "^whoami\\b", "output": "mes-srv-01\\ops" },
+        { "pattern": "^Get-Date\\b", "output": "2026年10月21日 7:24:11" },
+        { "pattern": "^Get-Service\\s+W3SVC", "output": "Status   Name    DisplayName\nRunning  W3SVC   World Wide Web Publishing Service" },
+        { "pattern": "^Get-ChildItem(\\s|$)", "output": "    目录: C:\\Users\\ops\nDesktop  Documents  Downloads  mes-ops-notes.txt" },
+        { "pattern": "^iisreset\\s+/status", "output": "MESPool   Stopped\nOAPool    Started\nReportPool Started\nW3SVC     Running" }
+      ],
+      "danger": [
+        {
+          "pattern": "^iisreset(\\s|$|\\s+/restart|\\s+/stop|\\s+/start)",
+          "output": "⛔ 先停手：iisreset 会重启整台机器的 IIS——同机的 OA、报表站点全部跟着断线，全站冷启动耗时更久，还会把 MESPool 的故障现场冲掉。生产上默认只操作目标应用程序池（Start-WebAppPool -Name MESPool），影响面最小化。"
+        },
+        {
+          "pattern": "^Restart-Computer|^shutdown\\b",
+          "output": "⛔ 先停手：重启整机会连累同机的 SQL Server、OA、报表全部服务，而且故障现场（事件日志之外的内存状态）全部丢失。本故障层级只在 IIS 应用程序池，远用不着重启服务器。"
+        }
+      ],
+      "sop": [
+        "Get-Website; Get-WebAppPoolState -Name MESPool",
+        "Get-EventLog -LogName Application -Newest 30（过滤 WAS/W3SVC）",
+        "Get-EventLog -LogName System -Newest 20（排除宿主机问题）",
+        "Get-Process | Sort WorkingSet64 -Descending | Select -First 5",
+        "Start-WebAppPool -Name MESPool（禁止 iisreset 连累同机站点）",
+        "Invoke-WebRequest http://localhost/login.aspx -UseBasicParsing",
+        "Set-ItemProperty IIS:\\AppPools\\MESPool recycling.periodicRestart.time 12h + 配 5011 事件告警"
+      ]
+    },
+    {
+      "id": "win-d2",
+      "kind": "terminal",
+      "title": "SQL Server 起不来：MES/ERP 共库早班告急",
+      "difficulty": "进阶",
+      "minutes": 15,
+      "ticket": {
+        "background": "小厂典型架构：MES 与 ERP 共用一台 Windows Server 上的 SQL Server 2016，数据文件与备份都在 D 盘。",
+        "symptom": "早班 07:30，MES 与 ERP 客户端同时报「无法连接数据库」，服务列表里 SQL Server 处于停止状态。",
+        "objective": "找到 SQL Server 无法启动的根因并恢复，验证业务连接，全程保住数据安全。"
+      },
+      "prompt": "PS C:\\Users\\ops>",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "确认 SQL Server 服务当前状态",
+          "accept": ["^Get-Service\\s+MSSQL", "^sc\\s+query\\s+MSSQL", "^net\\s+start(\\s|$)"],
+          "output": "PS C:\\Users\\ops> Get-Service MSSQLSERVER\n\nStatus   Name        DisplayName\nStopped  MSSQLSERVER SQL Server (MSSQLSERVER)\n\n（SQL Server Agent 同为 Stopped；尝试 Start-Service 报错：服务启动后立即停止，错误 1053）",
+          "hint": "Get-Service MSSQLSERVER。如果直接 Start-Service 起不来，别反复硬试，先去看它的错误日志。",
+          "explain": "服务「启动后立即停止」说明不是没配自启，而是启动过程中遇到致命错误。反复点启动只会反复失败，下一步是取证。"
+        },
+        {
+          "id": "s2",
+          "objective": "读 SQL Server 自己的 ERRORLOG，找启动失败的确切原因",
+          "accept": ["^Get-Content\\b.*ERRORLOG", "^Get-EventLog\\b.*Application", "^Get-WinEvent\\b"],
+          "output": "PS C:\\Users\\ops> Get-Content \"D:\\MSSQL13.MSSQLSERVER\\MSSQL\\Log\\ERRORLOG\" -Tail 40\n\n2026-10-21 03:14:22 spid9s   Error: 17053, Severity: 16, State: 1.\n2026-10-21 03:14:22 spid9s   D:\\MSSQL13.MSSQLSERVER\\MSSQL\\DATA\\tempdb.mdf: Operating system error 112 (磁盘空间不足) encountered.\n2026-10-21 03:14:22 spid9s   Error: 5105, Severity: 16, State: 13.\n2026-10-21 03:14:22 spid9s   文件激活错误。无法创建 tempdb 数据文件。\n2026-10-21 03:14:23 spid9s   SQL Server 正在关闭，原因是启动期间无法初始化 tempdb。",
+          "hint": "SQL Server 的启动日志在它自己的安装目录 MSSQL\\Log\\ERRORLOG，Get-Content -Tail 40 看最后几十行；Windows 事件查看器里也有对应条目。",
+          "explain": "根因一目了然：D 盘满了，tempdb 无法扩展，SQL Server 启动即自杀。凌晨 3 点发生——大概率是凌晨备份任务把盘写满的。"
+        },
+        {
+          "id": "s3",
+          "objective": "确认 D 盘空间现状",
+          "accept": ["^Get-PSDrive\\b", "^Get-WmiObject\\b.*LogicalDisk", "^Get-CimInstance\\b.*LogicalDisk", "^wmic\\s+logicaldisk"],
+          "output": "PS C:\\Users\\ops> Get-PSDrive -PSProvider FileSystem\n\nName  Used(GB)  Free(GB)\nC     58.2      21.4\nD     399.9     0.02     ← 数据+备份盘，实质已满\nE     480.1     112.6    ← 归档盘",
+          "hint": "Get-PSDrive -PSProvider FileSystem 列出各盘用量。",
+          "explain": "D 盘 400G 只剩 20M。注意 E 归档盘还有 112G——处置思路有了：把该挪的挪走，而不是硬删。"
+        },
+        {
+          "id": "s4",
+          "objective": "找出 D 盘上的大文件，确认哪些是可迁移的历史备份",
+          "accept": ["^Get-ChildItem\\b.*(D:|backup)", "^dir\\b.*(D:|backup)"],
+          "output": "PS C:\\Users\\ops> Get-ChildItem D:\\backup | Sort-Object Length -Descending | Select-Object -First 8 Name, @{n='GB';e={[math]::Round($_.Length/1GB,1)}}, LastWriteTime\n\nName                        GB     LastWriteTime\nMES_full_20261014.bak      72.3   2026-10-14\nMES_full_20261007.bak      71.8   2026-10-07\nMES_full_20260930.bak      71.5   2026-09-30\nERP_full_20261014.bak      58.1   2026-10-14\nMES_log_*.trn（共 214 个）  86.4   最新 2026-10-21 03:10\n（合计约 360G；备份保留策略文档规定：全备留 2 周，日志备份完成链式归档后本地留 3 天）",
+          "hint": "Get-ChildItem D:\\backup | Sort Length -Descending 看最大的几个文件，注意文件名里的日期。",
+          "explain": "三份 9 月底到 10 月初的全备早已超出「留 2 周」策略（今天是 10-21），214 个日志备份也远超 3 天。可迁移空间约 200G，不用删任何东西就能救活 D 盘。"
+        },
+        {
+          "id": "s5",
+          "objective": "把超期备份迁移到 E 归档盘（不是删除）",
+          "accept": ["^Move-Item\\b"],
+          "output": "PS C:\\Users\\ops> Move-Item D:\\backup\\MES_full_202609*.bak E:\\archive\\2026Q3\\ -Force\nPS C:\\Users\\ops> Move-Item D:\\backup\\MES_full_20261007.bak E:\\archive\\2026Q4\\ -Force\nPS C:\\Users\\ops> Move-Item D:\\backup\\MES_log_2026101[0-8]*.trn E:\\archive\\2026Q4\\logs\\ -Force\n\n迁移完成，D:\\backup 剩余约 118G（近两周全备 + 近三天日志备份）。",
+          "hint": "Move-Item 源 目标——注意是「移动」不是 Remove-Item「删除」。超期备份先归档，确认归档完整后才轮到删除，那是另一天的事。",
+          "explain": "备份是 RPO 的最后一道防线。空间告急时的正确动作是迁移归档，不是就地删除——删除的唯一前提是确认另一份副本已在异地/归档盘完好存在。"
+        },
+        {
+          "id": "s6",
+          "objective": "空间就位，启动 SQL Server 服务",
+          "accept": ["^Start-Service\\s+MSSQL", "^net\\s+start\\s+MSSQL"],
+          "output": "PS C:\\Users\\ops> Start-Service MSSQLSERVER\n（等待 47 秒……启动期间执行数据库恢复）\n\nPS C:\\Users\\ops> Get-Service MSSQLSERVER, SQLSERVERAGENT\n\nStatus   Name           DisplayName\nRunning  MSSQLSERVER    SQL Server (MSSQLSERVER)\nRunning  SQLSERVERAGENT SQL Server Agent (MSSQLSERVER)",
+          "hint": "Start-Service MSSQLSERVER。启动大型实例要经历崩溃恢复，等它几十秒是正常的，不要中途再 kill。",
+          "explain": "非正常关闭后 SQL Server 启动时要跑恢复流程（重做已提交、回滚未提交事务），实例越大越久。Agent 也要确认 Running——备份作业、告警作业全靠它调度。"
+        },
+        {
+          "id": "s7",
+          "objective": "验证数据库真正可用：查询 MES 核心业务表",
+          "accept": ["^sqlcmd\\b", "^Invoke-Sqlcmd\\b", "^Test-NetConnection\\b"],
+          "output": "PS C:\\Users\\ops> sqlcmd -S localhost -Q \"SELECT COUNT(*) AS 今日报工 FROM mes.dbo.reporting WHERE report_time >= CAST(GETDATE() AS DATE)\"\n\n今日报工\n-----------\n         0\n\nPS C:\\Users\\ops> sqlcmd -S localhost -Q \"SELECT TOP 1 work_order_no, status FROM mes.dbo.work_orders ORDER BY created DESC\"\n\nwork_order_no   status\nWO-20261021-03  进行中\n\n（凌晨 3 点故障至现在无新报工——07:30 恢复后需通知车间补报停机期间产量）",
+          "hint": "sqlcmd -S localhost -Q \"SELECT ...\" 直接跑业务查询，连通性和数据一起验证。",
+          "explain": "连接成功且业务表可查才算恢复完成。注意查询暴露的业务问题：故障期间报工断档，要立刻通知车间纸质记录补录，并检查 MES→ERP 接口有没有积压——数据库恢复只是第一步。"
+        }
+      ],
+      "ambient": [
+        { "pattern": "^hostname\\b", "output": "MES-DB-01" },
+        { "pattern": "^Get-Date\\b", "output": "2026年10月21日 7:41:52" },
+        { "pattern": "^Get-Service(\\s+\\||\\s*$)", "output": "MSSQLSERVER  Stopped\nSQLSERVERAGENT  Stopped\nW3SVC  Running\nMSSQLFDLauncher  Stopped" },
+        { "pattern": "^Get-Content\\b.*ERRORLOG\\.1", "output": "（上一轮日志）2026-10-20 22:00:01 Backup  Database mes 完整备份开始\n2026-10-21 02:58:44 Backup  Backup 写入 D:\\backup\\MES_log_20261021_0310.trn 时报告磁盘空间不足，作业中止" }
+      ],
+      "danger": [
+        {
+          "pattern": "^Remove-Item\\b.*(bak|trn|backup)",
+          "output": "⛔ 先停手：这些是数据库备份文件——RPO 的最后一道防线。就地删除前必须确认 E 归档盘或异地已有完好副本，否则一旦数据库损坏将永久丢失。空间告急的正确动作是 Move-Item 迁移归档，删除是确认副本之后的另一道工序。"
+        },
+        {
+          "pattern": "RESTORE\\s+DATABASE.*WITH\\s+RECOVERY",
+          "output": "⛔ 先停手：现在不需要还原——SQL Server 只是起不来，数据文件完好。盲目 RESTORE 会用备份覆盖当前数据，把「服务故障」升级成「数据回退事故」。先走启动排查，还原只在数据文件损坏时才进入流程。"
+        }
+      ],
+      "sop": [
+        "Get-Service MSSQLSERVER",
+        "Get-Content D:\\MSSQL13.MSSQLSERVER\\MSSQL\\Log\\ERRORLOG -Tail 40",
+        "Get-PSDrive -PSProvider FileSystem",
+        "Get-ChildItem D:\\backup | Sort Length -Descending（对照保留策略）",
+        "Move-Item 超期备份 → E:\\archive（迁移，不是删除）",
+        "Start-Service MSSQLSERVER（等待恢复完成，勿中途打断）",
+        "sqlcmd -S localhost -Q \"SELECT ...\" 业务表验证 + 通知车间补录断档报工"
+      ]
+    },
+    {
+      "id": "win-c1",
+      "kind": "choice",
+      "title": "Windows 运维高频场景八题",
+      "difficulty": "入门",
+      "minutes": 12,
+      "intro": "小厂 Windows 服务器上 MES/ERP 运维的八个高频真实场景：共享访问、计划任务、服务报错、远程桌面、防火墙、补丁管理、备份路径、远程失联。",
+      "questions": [
+        {
+          "id": "win-c1-q1",
+          "prompt": "车间一台 Win10 终端突然打不开 MES 服务器的共享目录（\\\\192.168.1.10\\mesfiles），报「找不到网络路径」，其它终端正常。第一步排查方向是？",
+          "options": [
+            { "id": "o1", "text": "在这台终端上分层排查：ping 服务器 → Test-NetConnection 192.168.1.10 -Port 445 → 检查本机保存的凭据是否过期" },
+            { "id": "o2", "text": "重启服务器，共享服务可能挂了" },
+            { "id": "o3", "text": "重装这台终端的网卡驱动" },
+            { "id": "o4", "text": "把共享目录权限改成 Everyone 完全控制" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "只有一台终端异常，说明服务器和共享本身是好的——问题锁在这台终端到服务器的链路或凭据上。",
+            "data": "SMB 走 445 端口，「找不到网络路径」最常见三板斧：网络不通、445 被拦、凭据失效；Everyone 全开是用安全换省事，绝对禁止。",
+            "consultant": "先 ping（链路）再 Test-NetConnection 445（端口）再凭据管理器（身份），三步夹逼；重启服务器会影响所有终端，属于扩大故障面。"
+          }
+        },
+        {
+          "id": "win-c1-q2",
+          "prompt": "MES 服务器上每天凌晨 1 点的自动备份计划任务连续三天没跑，任务计划程序里显示「上次运行结果 0x1」。最可能的原因是？",
+          "options": [
+            { "id": "o1", "text": "任务的运行账户密码已过期或变更（域环境密码策略 42/90 天强制更换），任务用旧凭据启动失败" },
+            { "id": "o2", "text": "服务器凌晨 1 点在忙，任务自动放弃了" },
+            { "id": "o3", "text": "计划任务功能坏了，需要重装系统组件" },
+            { "id": "o4", "text": "备份脚本写错了，一直如此" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "备份静默失败三天，这三天就是数据保护的裸奔期——出了事最多只能恢复到四天前。",
+            "data": "计划任务以指定账户身份运行，账户密码一改/一过期，任务就带旧凭据启动失败；0x1 也常见于脚本路径错误或权限不足，要一并核对。",
+            "consultant": "处置：任务属性→重新输入账户密码；预防：备份任务改用不过期的服务账户（gMSA 或专用本地账户），并给「任务失败」配邮件/群告警，不靠人肉发现。"
+          }
+        },
+        {
+          "id": "win-c1-q3",
+          "prompt": "MES 的 Windows 服务启动失败，服务弹窗只给一个错误码 1067「进程意外终止」。去哪里能看到它到底为什么死？",
+          "options": [
+            { "id": "o1", "text": "事件查看器 → Windows 日志 → 系统/应用程序，按时间点找 Service Control Manager（7024/7031）和应用自身的 Error 条目" },
+            { "id": "o2", "text": "反复点启动，总有一次能成功" },
+            { "id": "o3", "text": "服务属性 → 恢复选项卡，把失败动作改成重启服务" },
+            { "id": "o4", "text": "C:\\Windows\\Temp 目录下的临时文件" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "1067 只说明进程死了，不说明为什么死——不取证就处理，等于蒙眼修车。",
+            "data": "Windows 的服务级故障全部落在事件查看器：SCM 记 7024（服务带错误码终止）/7031（意外终止已重启），应用自身的崩溃细节在应用程序日志或它自己的 log 文件。",
+            "consultant": "标准路径：事件查看器按时间对齐 → SCM 条目定位服务 → 应用 Error 条目找根因；恢复选项卡的自动重启是兜底不是排查，先取证再配兜底。"
+          }
+        },
+        {
+          "id": "win-c1-q4",
+          "prompt": "实施同事把 MES 数据采集程序直接双击跑在服务器的桌面上，用他的远程桌面窗口挂着。他下班断开远程后，采集就停了。规范的做法是？",
+          "options": [
+            { "id": "o1", "text": "把采集程序封装成 Windows 服务运行（自带服务化能力或用 NSSM 包装），设置自动启动与失败自动重启" },
+            { "id": "o2", "text": "让他远程桌面设置成「断开时保持会话」，别注销" },
+            { "id": "o3", "text": "把程序加进启动文件夹，服务器重启后自动运行" },
+            { "id": "o4", "text": "找一台不关机的办公电脑跑这个程序" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "交互式会话里跑的生产程序，命运绑在「谁登着远程桌面」上——注销即停，采集断档，产量数据缺失。",
+            "data": "RDP 注销会终止该会话的全部进程；「保持会话」只是拖延，服务器补丁重启照样死；启动文件夹方案无人看管、崩了不拉起。",
+            "consultant": "生产常驻程序的唯一正解是服务化：开机自启、无人值守、失败自动重启、日志进事件查看器；这也是实施验收清单里必须核对的一项。"
+          }
+        },
+        {
+          "id": "win-c1-q5",
+          "prompt": "MES 新上了一个 9200 端口的接口服务，服务器本机能 curl 通，车间终端全部超时。需要放行端口，规范做法是？",
+          "options": [
+            { "id": "o1", "text": "Windows Defender 防火墙 → 高级设置 → 入站规则 → 新建规则：仅放行 TCP 9200，作用域限定车间网段" },
+            { "id": "o2", "text": "直接关闭 Windows 防火墙，一了百了" },
+            { "id": "o3", "text": "新建入站规则放行 TCP 9200，来源设任何 IP 地址" },
+            { "id": "o4", "text": "把服务改到 80 端口，80 一般是通的" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "本机能通、外部超时，几乎就是主机防火墙没放行——MES 部署后「端口放行清单」是交付必检项。",
+            "data": "关防火墙等于把服务器裸奔在网内，勒索病毒横行的车间网络里这是重大隐患；放行「任何 IP」则把内部接口暴露给全网络。",
+            "consultant": "最小放行原则：只开需要的端口（TCP 9200）、只给需要的来源（车间网段/办公网段），规则写清备注（MES 接口服务-20261021），方便日后审计。"
+          }
+        },
+        {
+          "id": "win-c1-q6",
+          "prompt": "周三下午 Windows 自动更新触发重启，正在运行的 MES 服务被硬停，车间报工中断 20 分钟。长效机制是？",
+          "options": [
+            { "id": "o1", "text": "设置「使用时段」覆盖生产时间，并用组策略/WSUS 把补丁安装与重启统一收敛到每月维护窗口，窗口内先演练再上生产" },
+            { "id": "o2", "text": "彻底关闭 Windows Update，永不更新" },
+            { "id": "o3", "text": "告诉车间：重启后等 20 分钟就好，习惯就行" },
+            { "id": "o4", "text": "把 MES 服务的启动类型改成手动，避免更新影响" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "生产服务器被自动更新随机重启，是中小厂最常见的「无妄之灾」，报工、接口、打印全断。",
+            "data": "永不更新等于把服务器暴露给已公开漏洞（永恒之蓝当年就是这么进来的）；改手动启动治标不治本，重启照样发生。",
+            "consultant": "正确姿势是「可控更新」：使用时段挡白天、WSUS/组策略定窗口、窗口内按 测试→备份→安装→验证 流程走，把随机事故变成计划内变更。"
+          }
+        },
+        {
+          "id": "win-c1-q7",
+          "prompt": "SQL Server 备份作业直接写到网络路径 \\\\nas01\\sqlbak，最近频繁报「找不到网络路径」，但 NAS 本身正常。最稳妥的整改是？",
+          "options": [
+            { "id": "o1", "text": "备份先落本地盘，再用带校验的复制任务（robocopy /MIR + 日志）同步到 NAS；同时把 SQL Server 服务的运行账户对 NAS 共享显式授权" },
+            { "id": "o2", "text": "把备份频率从每天改成每周，减少出错机会" },
+            { "id": "o3", "text": "在作业步骤前加 ping NAS 的重试逻辑" },
+            { "id": "o4", "text": "给 NAS 换个新交换机" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "备份直写网络路径，SMB 会话超时、凭据失效、网络抖动任何一样都能让备份静默失败。",
+            "data": "SQL Server 服务账户默认没有网络共享凭据，「找不到网络路径」多半是身份问题而非链路问题；降低备份频率是拿 RPO 换安稳，方向反了。",
+            "consultant": "本地先落地（快且稳）+ 异步复制归档（带校验和日志）是备份 3-2-1 原则的落地形态；给服务账户配 NAS 显式授权并纳入月度恢复演练验证。"
+          }
+        },
+        {
+          "id": "win-c1-q8",
+          "prompt": "一台 Windows Server（MES 数据库服务器）突然远程桌面连不上，ping 也不通，但机房指示灯正常。第一步应该？",
+          "options": [
+            { "id": "o1", "text": "接显示器键盘（或用带外管理/iDRAC/云控制台 VNC）看本机屏幕：大概率蓝屏、卡在更新、或 IP 冲突/网卡被改" },
+            { "id": "o2", "text": "直接长按电源键强制重启" },
+            { "id": "o3", "text": "从备份恢复系统" },
+            { "id": "o4", "text": "拔插网线再 ping 一次" }
+          ],
+          "answer": "o1",
+          "term_ids": [],
+          "feedback": {
+            "factory": "数据库服务器失联，MES 全线停摆，每分钟的处置质量都直接影响恢复时间和数据安全。",
+            "data": "远程失联时本机屏幕是唯一现场：蓝屏代码、更新进度、IP 配置都在那里；强制重启会销毁现场，若正处于更新/写盘状态还可能损坏数据库文件。",
+            "consultant": "带外通道优先（物理接屏 / iDRAC / iLO / 云控制台 VNC），先看清再动手；确认无写盘风险后才考虑重启，且重启前拍照留证。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "win-o1",
+      "kind": "order",
+      "title": "MES Windows 服务意外停止处置流程",
+      "difficulty": "入门",
+      "minutes": 6,
+      "intro": "车间反馈报工页面打不开，你远程上服务器发现 MES 应用服务已停止。把处置步骤排成规范顺序——先取证后动手，先依赖后本体。",
+      "maxAttempts": 2,
+      "steps": [
+        { "id": "s1", "text": "确认现象与影响面：服务状态、车间哪些功能不可用、从什么时候开始", "note": "先框定故障边界。不知道影响面就动手，容易把局部故障处理成全局事故。" },
+        { "id": "s2", "text": "打开事件查看器与服务日志，拿到错误码和崩溃原因（SCM 7024/1067、应用 Error 条目）", "note": "取证在手才有处置方向。跳过取证直接重启，等于把病历撕了再看病。" },
+        { "id": "s3", "text": "检查依赖项：数据库能不能连、磁盘空间够不够、端口有没有被占、证书有没有过期", "note": "服务起不来的原因常在服务之外。依赖没排除就反复重启本体，只会反复失败。" },
+        { "id": "s4", "text": "先解决依赖问题，再按顺序启动服务，观察是否稳定运行不再自停", "note": "恢复顺序：先地基后楼房。启动后必须观察一段时间，「起来了」不等于「稳住了」。" },
+        { "id": "s5", "text": "业务验证：车间试报一笔工、打印一张流转单、看接口有没有积压补传", "note": "技术指标正常不代表业务恢复。用真实业务动作收口，才算处置完成。" },
+        { "id": "s6", "text": "记录时间线与根因，给该服务补上「意外停止」监控告警", "note": "这次是车间打电话你才知道，下次应该告警先响。复盘的产出是机制，不是感想。" }
+      ]
+    },
+    {
+      "id": "win-o2",
+      "kind": "order",
+      "title": "SQL Server 数据库恢复演练流程",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "intro": "领导要求：验证 MES 数据库备份「真的能恢复」，在隔离演练机上做一次全流程恢复演练。排出规范顺序——演练机操作，生产库全程不动。",
+      "maxAttempts": 2,
+      "steps": [
+        { "id": "s1", "text": "明确演练目标：RPO（允许丢多少数据）与 RTO（多久必须恢复），写进演练方案", "note": "没有目标的演练是走秀。RPO/RTO 决定后面用哪种备份组合、恢复要卡多少时间。" },
+        { "id": "s2", "text": "盘点备份链：最近一次全备 + 差异 + 日志备份的时间点，确认文件完整可读", "note": "恢复的原材料是备份链。链断了（缺日志备份）RPO 就达不到，这正是要在演练里暴露的问题。" },
+        { "id": "s3", "text": "准备隔离演练环境：独立机器或实例，与生产网络隔离，确认磁盘空间足够", "note": "演练误连生产是真实发生过的事故。隔离环境是演练安全的前提，不是可选项。" },
+        { "id": "s4", "text": "按序恢复：先还原全备（NORECOVERY），再依次还原差异与日志备份，最后 RECOVERY 上线", "note": "顺序与恢复模式错了，轻则日志链断裂只能恢复到全备点，重则数据库无法上线。" },
+        { "id": "s5", "text": "完整性校验：DBCC CHECKDB 查物理一致性，抽核心业务表对行数与关键单据", "note": "「还原成功」只是文件层面成功。业务数据对不对，要靠一致性检查加抽样比对背书。" },
+        { "id": "s6", "text": "全程计时，与 RTO 目标对比，记录每个环节的耗时瓶颈", "note": "真实故障时没人给你从容时间。演练的价值一半在验证备份，一半在验证「恢复速度够不够」。" },
+        { "id": "s7", "text": "输出演练报告：结论、问题清单、整改项、下次演练日期，向负责人汇报", "note": "演练不产出报告和整改项，就等于没练。下次演练日期写进报告，形成机制闭环。" }
+      ]
+    }
+  ]
+}

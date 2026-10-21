@@ -6,6 +6,7 @@ import GlossaryRoute from "./pages/Glossary/index.tsx"
 import DebugRoute from "./pages/Debug/index.tsx"
 import InterviewRoute from "./pages/Interview/index.tsx"
 import FactoryTypesRoute from "./pages/FactoryTypes/index.tsx"
+import OpsTrainingRoute from "./pages/OpsTraining/index.tsx"
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/debug" element={<DebugRoute />} />
         <Route path="/interview" element={<InterviewRoute />} />
         <Route path="/factory-types" element={<FactoryTypesRoute />} />
+        <Route path="/ops-training" element={<OpsTrainingRoute />} />
         <Route path="*" element={<HomeRoute />} />
       </Routes>
     </ErrorBoundary>

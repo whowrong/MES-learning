@@ -1,0 +1,195 @@
+import { useEffect, useRef, useState } from "react"
+import { ClipboardList, Lightbulb, Send, FileCheck2, RotateCcw, CircleAlert } from "lucide-react"
+import type { OpsTerminalDrill } from "@/content/opsTraining"
+import type { TerminalRun } from "@/game/opsTerminal"
+
+export interface TerminalView {
+  drill: OpsTerminalDrill
+  run: TerminalRun
+  stepIndex: number
+  stepTotal: number
+  currentObjective: string
+  canFinish: boolean
+}
+
+const LINE_CLASS: Record<string, string> = {
+  cmd: "font-semibold text-foreground",
+  out: "whitespace-pre-wrap text-muted-foreground",
+  info: "whitespace-pre-wrap text-primary/90",
+  warn: "whitespace-pre-wrap text-destructive",
+  ok: "whitespace-pre-wrap text-primary",
+}
+
+/** 交互式模拟终端：事故工单 + 逐步目标 + 命令输入 + 模拟输出 */
+export function TerminalDrill({
+  view,
+  onCommand,
+  onHint,
+  onFinish,
+  onRetry,
+  onExit,
+}: {
+  view: TerminalView
+  onCommand: (cmd: string) => void
+  onHint: () => void
+  onFinish: () => void
+  onRetry: () => void
+  onExit: () => void
+}) {
+  const [input, setInput] = useState("")
+  const [ticketOpen, setTicketOpen] = useState(true)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [view.run.lines.length])
+
+  const submit = () => {
+    const cmd = input.trim()
+    if (!cmd) return
+    onCommand(cmd)
+    setInput("")
+    inputRef.current?.focus()
+  }
+
+  const doneCount = view.run.finished ? view.stepTotal : view.stepIndex
+
+  return (
+    <section className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
+      {/* 事故工单 */}
+      <div className="mb-3 rounded-xl border border-border bg-card shadow-sm">
+        <button
+          type="button"
+          onClick={() => setTicketOpen((v) => !v)}
+          className="flex w-full items-center gap-2 px-4 py-2.5 text-left focus-visible:shadow-[var(--focus-ring)]"
+        >
+          <ClipboardList className="h-4 w-4 shrink-0 text-primary" />
+          <span className="text-xs font-bold text-foreground">事故工单 · {view.drill.title}</span>
+          <span className="ml-auto text-[10px] text-muted-foreground">{ticketOpen ? "收起" : "展开"}</span>
+        </button>
+        {ticketOpen && (
+          <dl className="grid gap-2 border-t border-border px-4 py-3 text-xs leading-relaxed sm:grid-cols-3">
+            <div>
+              <dt className="font-semibold text-muted-foreground">背景</dt>
+              <dd className="mt-0.5 text-foreground">{view.drill.ticket.background}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-muted-foreground">现象</dt>
+              <dd className="mt-0.5 text-foreground">{view.drill.ticket.symptom}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-muted-foreground">处置目标</dt>
+              <dd className="mt-0.5 text-foreground">{view.drill.ticket.objective}</dd>
+            </div>
+          </dl>
+        )}
+      </div>
+
+      {/* 步骤进度 + 当前目标 */}
+      <div className="mb-2 flex items-center gap-3">
+        <div className="flex items-center gap-1.5" aria-label={`处置进度 ${doneCount}/${view.stepTotal}`}>
+          {Array.from({ length: view.stepTotal }, (_, i) => (
+            <span
+              key={i}
+              className={
+                "h-1.5 w-6 rounded-full " +
+                (i < doneCount ? "bg-primary" : i === doneCount && !view.run.finished ? "bg-primary/40" : "bg-border")
+              }
+            />
+          ))}
+        </div>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {doneCount}/{view.stepTotal}
+        </span>
+        <button
+          type="button"
+          onClick={onHint}
+          disabled={view.run.finished}
+          className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 focus-visible:shadow-[var(--focus-ring)]"
+        >
+          <Lightbulb className="h-3.5 w-3.5" />
+          提示（计次扣分）
+        </button>
+      </div>
+      <p className="mb-2 flex items-start gap-1.5 text-xs font-semibold text-foreground">
+        <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        当前目标：{view.currentObjective}
+      </p>
+
+      {/* 终端窗口 */}
+      <div className="overflow-hidden rounded-xl border border-border bg-muted/60 shadow-sm">
+        <div
+          ref={scrollRef}
+          className="h-[46vh] min-h-[280px] overflow-y-auto px-3 py-2.5 font-mono text-xs leading-relaxed sm:h-[52vh]"
+          onClick={() => inputRef.current?.focus()}
+          role="log"
+          aria-live="polite"
+        >
+          {view.run.lines.map((line, i) => (
+            <p key={i} className={"mb-1 " + (LINE_CLASS[line.kind] ?? "")}>
+              {line.kind === "cmd" ? `${view.drill.prompt} ${line.text}` : line.text}
+            </p>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 border-t border-border bg-muted/80 px-3 py-2">
+          <span className="shrink-0 font-mono text-xs text-primary">{view.drill.prompt}</span>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit()
+            }}
+            disabled={view.run.finished}
+            placeholder={view.run.finished ? "演练已完成" : "输入命令后回车…"}
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            aria-label="终端命令输入"
+            className="min-w-0 flex-1 bg-transparent font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={view.run.finished || !input.trim()}
+            aria-label="执行命令"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40 focus-visible:shadow-[var(--focus-ring)]"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* 底部动作 */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {view.run.finished && (
+          <button
+            type="button"
+            onClick={onFinish}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground focus-visible:shadow-[var(--focus-ring)]"
+          >
+            <FileCheck2 className="h-4 w-4" />
+            查看演练报告
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground hover:text-foreground focus-visible:shadow-[var(--focus-ring)]"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          重新演练
+        </button>
+        <button
+          type="button"
+          onClick={onExit}
+          className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:shadow-[var(--focus-ring)]"
+        >
+          退出，返回训练清单
+        </button>
+      </div>
+    </section>
+  )
+}

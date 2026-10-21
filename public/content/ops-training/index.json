@@ -1,0 +1,14 @@
+{
+  "domains": [
+    { "domain": "linux", "file": "linux.json" },
+    { "domain": "windows", "file": "windows.json" },
+    { "domain": "cloud", "file": "cloud.json" },
+    { "domain": "integration", "file": "integration.json" }
+  ],
+  "rankTexts": {
+    "S": "教科书级处置：零提示、零误操作，命令选择精准。这就是 MES 运维岗要的操作素养，面试时把这套排查思路讲出来就是加分项。",
+    "A": "处置规范扎实，方向全程正确，个别命令选择再熟练一点就是教科书级。",
+    "B": "能解决问题，但过程有绕路。对照演练报告里的标准操作序列（SOP）复盘一遍，把规范动作练成肌肉记忆。",
+    "C": "这次绕路较多。真实生产环境里，每一次误操作都会放大故障。逐条读步骤讲解，然后重新演练一遍。"
+  }
+}
