@@ -128,4 +128,15 @@ describe("SQL 安全检测", () => {
     const d = detectDangerousSql("SELECT 1; DELETE FROM t; UPDATE x SET a=1 WHERE b=2", false)
     expect(d.length).toBe(1)
   })
+
+  it("注释开头不误判：起始提示注释行后仍是只读 SELECT（v1.14.1 回归）", () => {
+    expect(isReadOnlySql("-- 提示：多种取值归类用 IN\nSELECT COUNT(*) FROM t")).toBe(true)
+    expect(isReadOnlySql("/* 块注释 */\n-- 行注释\nWITH x AS (SELECT 1) SELECT * FROM x")).toBe(true)
+    expect(isReadOnlySql("-- 注释\nUPDATE t SET a=1")).toBe(false)
+  })
+
+  it("注释不能绕过危险语句确认弹窗", () => {
+    expect(detectDangerousSql("-- 清库\nDROP TABLE items", false)[0].label).toContain("DROP")
+    expect(detectDangerousSql("/* x */ DELETE FROM work_orders", false)[0].label).toContain("DELETE")
+  })
 })

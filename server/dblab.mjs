@@ -58,8 +58,13 @@ function splitStatements(sql) {
     .filter((s) => s.length > 0)
 }
 
+// 剥掉注释再判定语句类型——编辑器里常带 "-- 提示：…" 起始注释行，
+// 不剥会把 SELECT 误判成非查询走 run() 分支（v1.14.1 修复：月会拷问任务返回"影响 0 行"）
+function stripSqlComments(sql) {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ")
+}
 function isQueryLike(stmt) {
-  return /^\s*(select|with|show|describe|desc|explain|pragma)\b/i.test(stmt)
+  return /^\s*(select|with|show|describe|desc|explain|pragma)\b/i.test(stripSqlComments(stmt))
 }
 
 function truncateRows(rows) {

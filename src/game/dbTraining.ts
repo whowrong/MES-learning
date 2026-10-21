@@ -68,10 +68,15 @@ export { rankForScore as rankForDbScore }
 
 // ---------- SQL 安全检测（前端确认框 + 真连只读保护用） ----------
 
-/** 只读语句判定：SELECT / WITH / SHOW / DESCRIBE / EXPLAIN / PRAGMA 开头视为只读 */
+/** 剥掉 SQL 注释（块注释 + 行注释），只用于语句类型/危险关键字判定，展示仍用原文 */
+export function stripSqlComments(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ")
+}
+
+/** 只读语句判定：剥掉注释后以 SELECT / WITH / SHOW / DESCRIBE / EXPLAIN / PRAGMA 开头视为只读 */
 export function isReadOnlySql(sql: string): boolean {
-  const s = sql.trim().replace(/^\/\*[\s\S]*?\*\/\s*/, "").replace(/^--.*\n/, "")
-  return /^\s*(select|with|show|describe|desc|explain|pragma)\b/i.test(s)
+  // 编辑器里常带 "-- 提示：…" 起始注释行，不剥会把 SELECT 误判成非只读（与服务端 dblab.mjs 同规则）
+  return /^\s*(select|with|show|describe|desc|explain|pragma)\b/i.test(stripSqlComments(sql))
 }
 
 export interface SqlDanger {
@@ -94,15 +99,17 @@ export function detectDangerousSql(sql: string, readOnlyGuard: boolean): SqlDang
   }
   const statements = sql.split(";").map((s) => s.trim()).filter(Boolean)
   for (const stmt of statements) {
-    if (/^\s*drop\s+(table|database|schema|index)\b/i.test(stmt)) {
+    // 判定用剥注释后的文本，防止 "-- 注释\nDROP TABLE" 绕过确认弹窗；展示仍用原文
+    const probe = stripSqlComments(stmt).trim()
+    if (/^\s*drop\s+(table|database|schema|index)\b/i.test(probe)) {
       out.push({ level: "warn", label: "DROP 删表/删库", detail: "这条语句会永久删除数据库对象，生产环境执行前必须确认备份。语句：" + stmt.slice(0, 120) })
-    } else if (/^\s*truncate\s+table\b/i.test(stmt)) {
+    } else if (/^\s*truncate\s+table\b/i.test(probe)) {
       out.push({ level: "warn", label: "TRUNCATE 清空表", detail: "整表数据将被清空且无法回滚（多数库不写逐行日志）。语句：" + stmt.slice(0, 120) })
-    } else if (/^\s*delete\s+from\b/i.test(stmt) && !/\bwhere\b/i.test(stmt)) {
+    } else if (/^\s*delete\s+from\b/i.test(probe) && !/\bwhere\b/i.test(probe)) {
       out.push({ level: "warn", label: "无 WHERE 的 DELETE", detail: "将删除整表所有行。确定要全表删除吗？语句：" + stmt.slice(0, 120) })
-    } else if (/^\s*update\b/i.test(stmt) && !/\bwhere\b/i.test(stmt)) {
+    } else if (/^\s*update\b/i.test(probe) && !/\bwhere\b/i.test(probe)) {
       out.push({ level: "warn", label: "无 WHERE 的 UPDATE", detail: "将更新整表所有行。确定要全表更新吗？语句：" + stmt.slice(0, 120) })
-    } else if (/^\s*alter\s+table\b.*\bdrop\s+column\b/i.test(stmt)) {
+    } else if (/^\s*alter\s+table\b.*\bdrop\s+column\b/i.test(probe)) {
       out.push({ level: "warn", label: "删除字段", detail: "字段及其全部数据将被删除，且依赖该字段的报表/接口可能立刻报错。语句：" + stmt.slice(0, 120) })
     }
   }
