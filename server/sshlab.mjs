@@ -6,6 +6,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { Client } from "ssh2"
+import { asciiSafeJson } from "./asciiJson.mjs"
 
 const LAB_DATA = "/workspace/pocketbase-bin/lab-data"
 const CONN_FILE = path.join(LAB_DATA, "server-connections.json")
@@ -13,7 +14,7 @@ const CONNECT_TIMEOUT = 15000
 const EXEC_TIMEOUT = 60000
 
 function out(obj) {
-  process.stdout.write(JSON.stringify(obj))
+  process.stdout.write(asciiSafeJson(obj))
   process.exit(0)
 }
 function fail(error, native) {

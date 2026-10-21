@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
 import { seedPracticeDb } from "./seed-practice-db.mjs"
+import { asciiSafeJson } from "./asciiJson.mjs"
 
 const LAB_DATA = "/workspace/pocketbase-bin/lab-data"
 const CONN_FILE = path.join(LAB_DATA, "db-connections.json")
@@ -15,7 +16,7 @@ const MAX_ROWS = 500 // 结果集截断上限（防打爆前端）
 const TIMEOUT_MS = 20000
 
 function out(obj) {
-  process.stdout.write(JSON.stringify(obj))
+  process.stdout.write(asciiSafeJson(obj))
   process.exit(0)
 }
 
