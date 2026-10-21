@@ -1,0 +1,142 @@
+{
+  "group": "query",
+  "groupName": "单表查询与业务口径",
+  "brief": "实施顾问的日常：从业务库里把数查准。难点从来不是语法，而是「业务口径」——状态字段有几种写法、脏数据藏在哪、统计到底按什么算。本组全部在内置练习库上真实执行。",
+  "tasks": [
+    {
+      "id": "db-q1",
+      "title": "月会拷问：这个月到底完工了多少张工单",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "项目月会上客户老板问：「10 月你们系统里到底完工了多少张工单？」你打开 work_orders 表发现 status 字段里同时存在 Completed、已完成、完成 三种写法——上线初期录入没管住，这是实施现场最常见的口径陷阱。",
+      "goal": "统计所有「已完工」的工单数量（Completed、已完成、完成 三种写法都算完工），输出一列 n。",
+      "starterSql": "-- 提示：多种取值归类用 IN\nSELECT COUNT(*) AS n FROM work_orders WHERE ...",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT COUNT(*) AS n FROM work_orders WHERE status IN ('Completed','已完成','完成')",
+        "expect": [
+          [
+            16
+          ]
+        ]
+      },
+      "answerSql": "SELECT COUNT(*) AS n FROM work_orders WHERE status IN ('Completed','已完成','完成')",
+      "hint": "status 的取值不止一种写法，IN (...) 把三种都列进去",
+      "explanation": "COUNT(*) + WHERE status IN (...) 是口径归类的标准写法。实施现场的教训：上线前必须把状态字典管住（枚举值 + 录入约束），否则每个报表都要写这种「翻译」条件，漏一种写法数就错。汇报口径时记得注明「含历史多种写法」，让客户知道数据治理欠账在哪。",
+      "term_ids": [
+        "work_order"
+      ]
+    },
+    {
+      "id": "db-q2",
+      "title": "接口对不上：找出编码带尾部空格的物料",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "MES 与 ERP 的物料接口频繁报「物料不存在」，但两边明明都有这个编码。老实施一眼就怀疑：编码字段混进了不可见字符。items 表里确实有物料编码尾部带空格（录入时从 Excel 粘贴带进来的）。",
+      "goal": "查出 item_code 尾部带空格的物料，输出 item_code 和 item_name 两列。",
+      "starterSql": "-- LIKE 配合 % 通配符，尾部空格怎么写？\nSELECT item_code, item_name FROM items WHERE ...",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT item_code, item_name FROM items WHERE item_code LIKE '% '",
+        "expect": [
+          [
+            "STL-Q235-10 ",
+            "Q235钢板 "
+          ]
+        ]
+      },
+      "answerSql": "SELECT item_code, item_name FROM items WHERE item_code LIKE '% '",
+      "hint": "LIKE '% ' 表示以空格结尾；编码是主键的一部分，一个空格就是两条不同记录",
+      "explanation": "LIKE '% '（百分号后跟一个空格）匹配所有以空格结尾的编码。这类脏数据的杀伤力在于「肉眼不可见」：两条记录看起来一模一样，JOIN 时对不上、接口传输时匹配失败。清洗时先 TRIM 再合并重复，导入环节加 TRIM 约束才能断根。",
+      "term_ids": [
+        "data_quality",
+        "one_item_two_codes"
+      ]
+    },
+    {
+      "id": "db-q3",
+      "title": "质量例会：报废率最高的五张工单",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "scene": "质量例会要盯「哪几张工单报废最凶」。报工记录在 work_reports 表，一张工单有多条报工（不同工序、不同班次），合格数 qty_ok、报废数 qty_scrap。报废率 = 报废合计 ÷（合格合计 + 报废合计）× 100。",
+      "goal": "按工单汇总，输出 wo_no、合格合计 ok、报废合计 scrap、报废率 rate（百分数，保留 1 位小数），按 rate 降序取前 5。",
+      "starterSql": "-- 分组聚合 + ROUND 保留位数\nSELECT wo_no, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap, ROUND(...) AS rate FROM work_reports GROUP BY wo_no ORDER BY rate DESC LIMIT 5",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT wo_no, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap, ROUND(SUM(qty_scrap) * 100.0 / (SUM(qty_ok) + SUM(qty_scrap)), 1) AS rate FROM work_reports GROUP BY wo_no ORDER BY rate DESC LIMIT 5",
+        "expect": [
+          [
+            "WO20261011",
+            31,
+            11,
+            26.2
+          ],
+          [
+            "WO20261006",
+            50,
+            15,
+            23.1
+          ],
+          [
+            "WO20261015",
+            17,
+            5,
+            22.7
+          ],
+          [
+            "WO20261001",
+            31,
+            7,
+            18.4
+          ],
+          [
+            "WO20261003",
+            56,
+            11,
+            16.4
+          ]
+        ]
+      },
+      "answerSql": "SELECT wo_no, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap, ROUND(SUM(qty_scrap) * 100.0 / (SUM(qty_ok) + SUM(qty_scrap)), 1) AS rate FROM work_reports GROUP BY wo_no ORDER BY rate DESC LIMIT 5",
+      "hint": "乘 100.0（不是 100）强制浮点除法，否则整数相除会截断成 0；ROUND(x, 1) 保留一位小数",
+      "explanation": "GROUP BY + SUM 是报表的基本功，两个坑最害人：① 整数除法截断——SUM(qty_scrap)*100/SUM(...) 在多数库里结果是整数 0，必须 *100.0 或 CAST 成浮点；② 分母口径——报废率的分母是「合格+报废」即总投入，不是合格数。例会上被追问「率怎么算的」，答不出口径比算错还尴尬。",
+      "term_ids": [
+        "scrap",
+        "yield_rate",
+        "reporting"
+      ]
+    },
+    {
+      "id": "db-q4",
+      "title": "班次对比：白班夜班各干了多少",
+      "difficulty": "入门",
+      "minutes": 5,
+      "scene": "车间主任想知道白班和夜班的产出差距，好排下个班的排产。work_reports 里 shift 字段只有「白班」「夜班」两种值，合格数与报废数分列。",
+      "goal": "按班次汇总合格总数与报废总数，输出 shift、ok、scrap 三列，按 shift 升序。",
+      "starterSql": "SELECT shift, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap FROM work_reports GROUP BY ...",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT shift, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap FROM work_reports GROUP BY shift ORDER BY shift",
+        "expect": [
+          [
+            "夜班",
+            257,
+            32
+          ],
+          [
+            "白班",
+            676,
+            56
+          ]
+        ]
+      },
+      "answerSql": "SELECT shift, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap FROM work_reports GROUP BY shift ORDER BY shift",
+      "hint": "GROUP BY shift 之后 SUM 聚合，ORDER BY shift 保证输出顺序稳定",
+      "explanation": "最简单的分组聚合，但注意「输出顺序」这个细节：不加 ORDER BY 时数据库不保证行序，两次查询结果顺序可能不同——对报表和自动校验都是隐患。养成 GROUP BY 必带 ORDER BY 的习惯，这是职业化 SQL 和随手 SQL 的区别。",
+      "term_ids": [
+        "reporting",
+        "shift"
+      ]
+    }
+  ]
+}

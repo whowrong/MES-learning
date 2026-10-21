@@ -30,6 +30,7 @@ function normalizeRecord(raw: Partial<ProgressRecord> & { id?: string }): Progre
     interview_history: Array.isArray(raw.interview_history) ? raw.interview_history : [],
     factory_history: Array.isArray(raw.factory_history) ? raw.factory_history : [],
     ops_history: Array.isArray(raw.ops_history) ? raw.ops_history : [],
+    db_history: Array.isArray(raw.db_history) ? raw.db_history : [],
     last_route: raw.last_route ?? "/home",
   }
   return normalized
@@ -47,6 +48,7 @@ export function useHome() {
   const [interviewCount, setInterviewCount] = useState(0)
   const [factoryCount, setFactoryCount] = useState(0)
   const [opsCount, setOpsCount] = useState(0)
+  const [dbCount, setDbCount] = useState(0)
   // 锁定章节提示弹窗（点未开放章节卡时）
   const [lockedChapter, setLockedChapter] = useState<ChapterDef | null>(null)
   // 施工中占位弹窗（目标页面尚未上线时，避免跳白屏）
@@ -60,6 +62,7 @@ export function useHome() {
     setInterviewCount((rec.interview_history ?? []).length)
     setFactoryCount((rec.factory_history ?? []).length)
     setOpsCount((rec.ops_history ?? []).length)
+    setDbCount((rec.db_history ?? []).length)
     if (rec.id) setRecordId(rec.id)
   }, [])
 
@@ -151,6 +154,10 @@ export function useHome() {
     navigate("/ops-training")
   }, [navigate])
 
+  const openDbTraining = useCallback(() => {
+    navigate("/db-training")
+  }, [navigate])
+
   const openDebug = useCallback(() => {
     navigate("/debug")
   }, [navigate])
@@ -188,6 +195,7 @@ export function useHome() {
     interviewCount,
     factoryCount,
     opsCount,
+    dbCount,
     lockedChapter,
     constructionNote,
     openChapter,
@@ -196,6 +204,7 @@ export function useHome() {
     openInterview,
     openFactoryTypes,
     openOpsTraining,
+    openDbTraining,
     openDebug,
     openSandbox,
     closeDialogs,

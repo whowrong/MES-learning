@@ -26,6 +26,7 @@ import {
 } from "@/game/opsTerminal"
 import { addStudyDay } from "@/game/streak"
 import type { OpsHistoryEntry, ProgressRecord } from "@/content/chapters"
+import { useRealServer } from "./useRealServer"
 
 function progressApi(): string {
   return `${getPocketBaseUrl()}/api/player_progress`
@@ -38,7 +39,7 @@ function localStamp(now: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export type OpsPhase = "domains" | "list" | "terminal" | "choice" | "order" | "report"
+export type OpsPhase = "domains" | "list" | "terminal" | "choice" | "order" | "report" | "server"
 
 /** 决策题作答记录 */
 interface OpsAnswerRecord {
@@ -61,6 +62,7 @@ export interface OpsReport {
 
 export function useOpsTraining() {
   const navigate = useNavigate()
+  const realServer = useRealServer()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [saveError, setSaveError] = useState("")
@@ -470,6 +472,16 @@ export function useOpsTraining() {
     if (currentItem) startItem(currentItem.id)
   }, [currentItem, startItem])
 
+  // 真实服务器模式进出
+  const openServerMode = useCallback(() => {
+    setPhase("server")
+    setSaveError("")
+  }, [])
+
+  const backFromServer = useCallback(() => {
+    setPhase("domains")
+  }, [])
+
   const goHome = useCallback(() => navigate("/"), [navigate])
 
   return {
@@ -500,6 +512,9 @@ export function useOpsTraining() {
     report,
     newReviewTerms,
     retryCurrent,
+    openServerMode,
+    backFromServer,
     goHome,
+    ...realServer,
   }
 }

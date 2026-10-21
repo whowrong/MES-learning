@@ -1,4 +1,4 @@
-import { AlertCircle, Home, Server } from "lucide-react"
+import { AlertCircle, Home, Server, Cable } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DomainSelectPanel } from "@/components/ops-training/DomainSelectPanel"
 import { DrillListPanel } from "@/components/ops-training/DrillListPanel"
@@ -6,6 +6,7 @@ import { TerminalDrill } from "@/components/ops-training/TerminalDrill"
 import { OpsChoiceStage } from "@/components/ops-training/OpsChoiceStage"
 import { OpsOrderStage } from "@/components/ops-training/OpsOrderStage"
 import { OpsReportPanel } from "@/components/ops-training/OpsReportPanel"
+import { ServerModePanel } from "./ServerModePanel"
 import type { OpsDomainId } from "@/content/opsTraining"
 import type { useOpsTraining } from "./useOpsTraining"
 
@@ -42,10 +43,20 @@ export function OpsTrainingPage(p: ReturnType<typeof useOpsTraining>) {
           </span>
           <span className="text-sm font-bold text-foreground">运维训练营</span>
           <span className="hidden text-[11px] text-muted-foreground sm:block">MES 为中心 · ERP / WMS 集成运维</span>
+          {p.phase !== "server" && (
+            <button
+              type="button"
+              onClick={p.openServerMode}
+              className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-primary focus-visible:shadow-[var(--focus-ring)]"
+            >
+              <Cable className="h-3.5 w-3.5" />
+              真实服务器
+            </button>
+          )}
           <button
             type="button"
             onClick={p.goHome}
-            className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:shadow-[var(--focus-ring)]"
+            className={p.phase === "server" ? "ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:shadow-[var(--focus-ring)]" : "text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:shadow-[var(--focus-ring)]"}
           >
             回首页
           </button>
@@ -60,6 +71,8 @@ export function OpsTrainingPage(p: ReturnType<typeof useOpsTraining>) {
           </div>
         </div>
       )}
+
+      {p.phase === "server" && <ServerModePanel p={p} onExit={p.backFromServer} />}
 
       {p.phase === "domains" && p.domainsView && (
         <DomainSelectPanel view={p.domainsView} onChoose={(d) => p.chooseDomain(d as OpsDomainId)} />

@@ -170,6 +170,8 @@ export interface ProgressRecord {
   factory_history?: FactoryHistoryEntry[]
   /** 运维训练营练习历史（每次演练/测验追加一条） */
   ops_history?: OpsHistoryEntry[]
+  /** 数据库实操营练习历史（每次任务组练习追加一条） */
+  db_history?: DbHistoryEntry[]
   last_route: string
 }
 
@@ -206,6 +208,16 @@ export interface OpsHistoryEntry {
   total: number
 }
 
+/** 一次数据库实操营任务组练习的存档记录 */
+export interface DbHistoryEntry {
+  /** 本地日期时间串 YYYY-MM-DD HH:mm */
+  at: string
+  /** 任务组：query/join/clean/report */
+  group: string
+  score: number
+  total: number
+}
+
 export function buildDefaultProgress(): ProgressRecord {
   const chapterStatus: Record<string, ChapterState> = {}
   // 新档只解锁第一个可玩章节；后面的可玩章节要靠通关解锁（finishLevel 里推进），
@@ -233,6 +245,7 @@ export function buildDefaultProgress(): ProgressRecord {
     interview_history: [],
     factory_history: [],
     ops_history: [],
+    db_history: [],
     last_route: "/home",
   }
 }

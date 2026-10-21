@@ -1,4 +1,4 @@
-import { BookOpen, Factory, FlaskConical, Video, Server, ArrowRight } from "lucide-react"
+import { BookOpen, Factory, FlaskConical, Video, Server, Database, ArrowRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { SpotlightCard } from "@/components/bits/SpotlightCard"
 
@@ -7,17 +7,19 @@ interface ModuleEntriesProps {
   interviewCount: number
   factoryCount: number
   opsCount: number
+  dbCount: number
   onGlossary: () => void
   onInterview: () => void
   onFactoryTypes: () => void
   onOpsTraining: () => void
+  onDbTraining: () => void
   onSandbox: () => void
 }
 
 const CARD_ENTER =
   "animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
 
-export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onSandbox }: ModuleEntriesProps) {
+export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onSandbox }: ModuleEntriesProps) {
   return (
     <section className="py-12">
       <div className="mx-auto max-w-6xl px-6">
@@ -151,10 +153,44 @@ export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCo
               </span>
             </button>
           </SpotlightCard>
+          <SpotlightCard
+            className={`group h-full rounded-2xl bg-card shadow-md [animation-delay:320ms] ${CARD_ENTER}`}
+          >
+            <button
+              type="button"
+              onClick={onDbTraining}
+              className="relative flex h-full w-full items-start gap-4 p-6 text-left focus-visible:shadow-[var(--focus-ring)]"
+            >
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary transition-transform duration-300 group-hover:scale-110">
+                <Database className="h-6 w-6" />
+              </span>
+              <span className="flex h-full flex-col">
+                <span className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-foreground">数据库实操营</span>
+                  <Badge variant="outline" className="rounded-full bg-primary/10 text-primary">
+                    真实 SQL
+                  </Badge>
+                  {dbCount > 0 && (
+                    <Badge variant="outline" className="rounded-full text-muted-foreground">
+                      已练 {dbCount} 组
+                    </Badge>
+                  )}
+                </span>
+                <span className="mt-1 text-sm leading-6 text-muted-foreground">
+                  MES 业务库上真刀真枪写 SQL：查数口径、多表关联、洗脏数据、出报表，
+                  每条语句真实执行、按结果校验判分。还能连接你自己的 MySQL / SQL Server / PostgreSQL 练真实环境。
+                </span>
+                <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
+                  开始实操
+                  <ArrowRight className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                </span>
+              </span>
+            </button>
+          </SpotlightCard>
           <button
             type="button"
             onClick={onSandbox}
-            style={{ animationDelay: "320ms" }}
+            style={{ animationDelay: "400ms" }}
             className="flex h-full items-start gap-4 rounded-2xl border-2 border-dashed border-border bg-card p-6 text-left opacity-80 shadow-md transition-all duration-300 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards"
           >
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">

@@ -1,0 +1,52 @@
+{
+  "docs": [
+    {
+      "id": "tpl-linux-init",
+      "title": "Linux 演练环境初始化手册",
+      "doc_type": "环境初始化",
+      "summary": "一台新 Linux 服务器变成 MES 演练机的标准动作：基础工具、时间同步、目录规范、防火墙基线、运维账号。",
+      "content": "# Linux 演练环境初始化手册\n\n适用：CentOS 7+/Ubuntu 20.04+ 全新演练服务器。目标：把一台裸机变成可以跑 MES 演练的标准环境。\n\n## 1. 基础检查（先取证再动手）\n- `cat /etc/os-release` 确认发行版\n- `df -h` 确认磁盘规划（系统盘/数据盘分开最好）\n- `free -h` 确认内存（MES 演练建议 ≥4G）\n- `ip addr` 记录 IP，登记进你的环境清单\n\n## 2. 时间同步（MES 排产和报工全靠时间戳，必做）\n- `timedatectl set-timezone Asia/Shanghai`\n- chrony 或 ntpd 装一个并 enable\n- 验证：`chronyc sources` 或 `ntpq -p`\n\n## 3. 基础工具\n- 排障三件套：`vim curl wget net-tools lsof htop tree unzip`\n- 数据库客户端：`mysql`（连 MySQL）或 sqlcmd\n- 采集脚本依赖：按演练需要装 python3 / java\n\n## 4. 目录规范（演练也要像生产）\n```\n/opt/mes/          # MES 应用目录\n/opt/mes/collector # 采集服务\n/data/backup/      # 备份目录（独立分区最好）\n/var/log/mes/      # 应用日志目录（配 logrotate）\n```\n\n## 5. 防火墙基线\n- 只放行需要的端口：SSH(22)、MES 采集(8080)、数据库(3306 仅限内网/指定 IP)\n- `firewall-cmd --add-port=8080/tcp --permanent && firewall-cmd --reload`\n- 云主机记得安全组同步放行（双层防火墙）\n\n## 6. 运维账号（最小权限）\n- 建 ops 账号：`useradd -m ops && passwd ops`\n- 需要 root 权限的命令走 sudo 白名单，不直接发 root\n- 禁用 root 远程密码登录（演练机也养成习惯）\n\n## 7. 日志轮转（防磁盘打满，演练必配）\n- /etc/logrotate.d/mes：daily、rotate 14、compress、copytruncate\n\n## 验收清单\n- [ ] 时间同步正常（date 与手机时间一致）\n- [ ] 目录规范建立\n- [ ] 防火墙只开放必要端口\n- [ ] ops 账号可登录、sudo 可用\n- [ ] logrotate 配置生效（logrotate -d 预演无报错）",
+      "commands": [
+        { "label": "确认发行版与磁盘", "cmd": "cat /etc/os-release && df -h && free -h" },
+        { "label": "设置上海时区", "cmd": "timedatectl set-timezone Asia/Shanghai && date" },
+        { "label": "建立 MES 目录规范", "cmd": "mkdir -p /opt/mes/collector /data/backup /var/log/mes && ls -ld /opt/mes /data/backup /var/log/mes" },
+        { "label": "检查时间同步状态", "cmd": "timedatectl | grep -i ntp || echo '未启用 NTP，需要手动安装 chrony'" }
+      ]
+    },
+    {
+      "id": "tpl-mysql-setup",
+      "title": "MySQL 演练库部署与恢复手册",
+      "doc_type": "数据库部署",
+      "summary": "演练用 MySQL 的安装、加固、练习库导入与备份恢复演练全流程。",
+      "content": "# MySQL 演练库部署与恢复手册\n\n适用：Linux 演练服务器上的 MySQL 5.7/8.0。目标：部署一个可以随便折腾的 MES 业务演练库，并跑通备份恢复。\n\n## 1. 安装与启动\n- Ubuntu：`apt install mysql-server`；CentOS：yum/dnf 装 mysql-server 或官方 repo\n- `systemctl enable --now mysqld`（Ubuntu 是 mysql）\n- 首装看临时密码：`grep 'temporary password' /var/log/mysqld.log`\n\n## 2. 安全基线（演练也要做，面试会问）\n- `mysql_secure_installation`：设 root 密码、删匿名账号、禁 root 远程\n- 建演练专用账号：\n```sql\nCREATE USER 'mes_lab'@'%' IDENTIFIED BY '<强密码>';\nGRANT ALL ON mes_practice.* TO 'mes_lab'@'%';\n```\n- 只监听需要的地址；云上安全组不要对 0.0.0.0/0 开 3306\n\n## 3. 导入 MES 练习库\n- 建库：`CREATE DATABASE mes_practice DEFAULT CHARSET utf8mb4;`\n- 导入你准备的建表与种子数据 SQL（本站数据库实操营的任务表结构可直接借用：items/bom/work_orders/work_reports/inventory/sales_orders/employees/equipment）\n- 验证：`mysql -umes_lab -p mes_practice -e 'SHOW TABLES; SELECT COUNT(*) FROM work_orders;'`\n\n## 4. 备份策略（3-2-1 原则的演练版）\n- 逻辑备份：`mysqldump --single-transaction -umes_lab -p mes_practice > /data/backup/mes_practice_$(date +%F).sql`\n- 写进 crontab 每天凌晨跑，保留 14 天\n- 每月做一次恢复演练：备份恢复到临时库 + `CHECK TABLE` 验证\n\n## 5. 常见故障演练剧本\n- 磁盘打满导致 MySQL 起不来：看 error log → 清理/扩容 → 启动 → 验证\n- 误删数据：用最近备份 + binlog 恢复到误操作前一刻\n- 连接数打满：`SHOW PROCESSLIST` 找元凶 → 评估后 KILL → 调 max_connections 与连接池\n\n## 验收清单\n- [ ] mes_lab 账号可从演练网段登录\n- [ ] 8 张业务表导入成功且行数正常\n- [ ] 每日备份 crontab 生效、备份文件可读\n- [ ] 完成过一次全库恢复演练并记录耗时（RTO）",
+      "commands": [
+        { "label": "检查 MySQL 服务状态", "cmd": "systemctl status mysqld --no-pager 2>/dev/null || systemctl status mysql --no-pager || echo '未检测到 MySQL 服务'" },
+        { "label": "检查监听端口", "cmd": "ss -lntp | grep 3306 || echo '3306 未监听'" },
+        { "label": "建立备份目录", "cmd": "mkdir -p /data/backup && ls -ld /data/backup" }
+      ]
+    },
+    {
+      "id": "tpl-collector-deploy",
+      "title": "MES 采集服务部署手册",
+      "doc_type": "应用部署",
+      "summary": "把一个模拟采集服务按生产规范部署成 systemd 服务：目录、配置、日志、开机自启、健康检查。",
+      "content": "# MES 采集服务部署手册\n\n适用：任何需要常驻后台的采集/接口程序（python、java、node 均可）。目标：像生产一样部署，而不是 nohup 一挂了之。\n\n## 1. 为什么要服务化\n- RDP/SSH 会话断开后 nohup 进程可能被带走（Windows 上尤其常见）\n- 服务化 = 开机自启 + 崩溃自动拉起 + 统一日志 + systemctl 标准管理\n\n## 2. 部署步骤\n1. 程序放 `/opt/mes/collector/`，配置文件与程序分离（conf/ 目录）\n2. 建 systemd unit：\n```\n# /etc/systemd/system/mes-collector.service\n[Unit]\nDescription=MES Data Collector\nAfter=network.target mysql.service\n\n[Service]\nUser=ops\nWorkingDirectory=/opt/mes/collector\nExecStart=/opt/mes/collector/start.sh\nRestart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n```\n3. `systemctl daemon-reload && systemctl enable --now mes-collector`\n4. 验证：`systemctl status mes-collector` + `journalctl -u mes-collector -f`\n\n## 3. 日志规范\n- 应用日志写 /var/log/mes/collector.log\n- 配 logrotate（daily/rotate 14/compress/copytruncate）\n- 关键动作（启动、连库成功、每批采集条数、异常）都要有日志\n\n## 4. 健康检查\n- 提供一个 /health 接口或心跳文件\n- 演练监控：crontab 每分钟 curl 健康接口，失败写告警文件/发邮件\n\n## 5. 升级与回滚\n- 升级前：备份程序目录 + 记录当前版本号\n- 灰度思路：先停采集 → 替换 → 启动 → 验证数据入库 → 观察 30 分钟\n- 回滚预案：备份目录直接换回，5 分钟内可回退\n\n## 验收清单\n- [ ] 服务器重启后服务自动拉起\n- [ ] kill 主进程后 10 秒内自动重启（Restart=on-failure 生效）\n- [ ] 日志轮转配置生效\n- [ ] 健康检查能发现服务假死",
+      "commands": [
+        { "label": "检查部署目录", "cmd": "ls -la /opt/mes/collector 2>/dev/null || echo '目录不存在，按手册第 2 节先创建'" },
+        { "label": "检查服务状态", "cmd": "systemctl status mes-collector --no-pager 2>/dev/null || echo '服务未安装'" },
+        { "label": "查看服务日志尾部", "cmd": "journalctl -u mes-collector -n 20 --no-pager 2>/dev/null || echo '暂无日志'" }
+      ]
+    },
+    {
+      "id": "tpl-monitor-setup",
+      "title": "监控告警快速搭建手册（Prometheus + Grafana）",
+      "doc_type": "监控告警",
+      "summary": "演练服务器上 30 分钟搭起一套最小可用监控：node_exporter 采集、Prometheus 存储告警、Grafana 看板。",
+      "content": "# 监控告警快速搭建手册\n\n适用：单台演练服务器自监控（小厂上云前的标配技能）。目标：CPU/内存/磁盘/服务存活有看板、有告警。\n\n## 1. 架构\n```\n[node_exporter :9100] → [prometheus :9090] → [grafana :3000]\n                              ↓\n                        alertmanager（可选）\n```\n\n## 2. node_exporter（被监控机）\n- 下载解压到 /opt/monitor/node_exporter，做成 systemd 服务\n- 放行 9100 端口（仅限监控机 IP）\n\n## 3. Prometheus（监控机）\n- prometheus.yml 加 job：\n```yaml\nscrape_configs:\n  - job_name: mes-lab\n    static_configs:\n      - targets: ['<被监控机IP>:9100']\n```\n- 告警规则示例（磁盘 >85%、内存 >90%、node_exporter 掉线 2 分钟）\n\n## 4. Grafana\n- 添加 Prometheus 数据源\n- 导入社区看板 1860（Node Exporter Full），立刻有专业级面板\n\n## 5. 告警通道\n- 演练环境最简单：alertmanager 接 webhook（钉钉/企微机器人）\n- 告警分级：磁盘/内存是 warning，服务掉线是 critical\n\n## 6. 与 MES 运维的结合点\n- 采集服务心跳做成 exporter 或 pushgateway 推送\n- 数据库连接数、慢查询数用 mysqld_exporter\n- 面试聊监控：说得出「指标采集→存储→看板→告警→分级→值班响应」这条链就是加分\n\n## 验收清单\n- [ ] Grafana 能看到 CPU/内存/磁盘曲线\n- [ ] dd 造一个磁盘占用，告警能触发\n- [ ] 停掉 node_exporter，2 分钟内收到掉线告警",
+      "commands": [
+        { "label": "检查监控组件端口", "cmd": "ss -lntp | grep -E ':(9100|9090|3000)' || echo '监控组件端口均未监听'" },
+        { "label": "检查监控目录", "cmd": "ls -la /opt/monitor 2>/dev/null || echo '/opt/monitor 不存在'" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "group": "clean",
+  "groupName": "数据清洗实操",
+  "brief": "实施项目一半的工时在洗数据。这一组不是「查出脏数据」，而是真的动手改：在内置练习库上执行 UPDATE，把脏数据洗干净，然后提交校验。练习库随时可以重置重来——真实项目里可没有重置按钮，所以每一条 UPDATE 都要先想清楚 WHERE。",
+  "tasks": [
+    {
+      "id": "db-c1",
+      "title": "单位大一统：PCS、pcs 全部归一成「个」",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "同一个轴承，A 记录单位写「个」，B 记录写「PCS」，C 记录写「pcs」。库存汇总时按单位分组，一个物料拆成三行——报表全乱。数据治理第一条：计量单位字典化。",
+      "goal": "把 items 表里 unit 为 PCS 或 pcs 的记录统一改成「个」。执行成功后提交校验。",
+      "starterSql": "-- 先 SELECT 看清要改哪些行，再 UPDATE（这个习惯值一块钱工资）\nSELECT item_code, unit FROM items WHERE unit IN ('PCS','pcs');\nUPDATE ...",
+      "check": {
+        "mode": "state",
+        "sql": "SELECT COUNT(*) AS n FROM items WHERE unit IN ('PCS','pcs')",
+        "expect": [
+          [
+            0
+          ]
+        ]
+      },
+      "answerSql": "UPDATE items SET unit = '个' WHERE unit IN ('PCS','pcs')",
+      "hint": "UPDATE items SET unit='个' WHERE unit IN ('PCS','pcs')；改之前先跑同条件的 SELECT 确认行数",
+      "explanation": "UPDATE 的职业习惯：先用同条件 SELECT 预览影响行数，确认无误再改。WHERE 里 IN ('PCS','pcs') 大小写都要列——多数库字符串比较默认区分大小写（MySQL 视校对规则而定，SQL Server 默认不区分，PostgreSQL 严格区分），跨库写清洗脚本时宁可多列不可漏列。洗完记得在数据字典里把「个」定为标准单位，堵住录入源头。",
+      "term_ids": [
+        "unit_mixed",
+        "master_data",
+        "data_quality"
+      ]
+    },
+    {
+      "id": "db-c2",
+      "title": "看不见的敌人：清掉物料名称的尾部空格",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "Excel 导入的物料主数据，名称尾部带着粘贴进来的空格。肉眼完全看不出来，但模糊查询、接口匹配、去重判断全部失灵。",
+      "goal": "把 items 表所有 item_name 的尾部空格去掉（RTRIM）。执行成功后提交校验。",
+      "starterSql": "-- 先看看有几条中招\nSELECT item_code, '[' || item_name || ']' FROM items WHERE item_name LIKE '% ';\nUPDATE ...",
+      "check": {
+        "mode": "state",
+        "sql": "SELECT COUNT(*) AS n FROM items WHERE item_name LIKE '% '",
+        "expect": [
+          [
+            0
+          ]
+        ]
+      },
+      "answerSql": "UPDATE items SET item_name = RTRIM(item_name)",
+      "hint": "RTRIM(x) 去掉右侧空格；这条 UPDATE 不带 WHERE 是安全的——RTRIM 对干净数据无副作用",
+      "explanation": "用 '[' || item_name || ']' 把字段包起来看，是让不可见字符现形的调试技巧（|| 是 SQLite/PG 的字符串拼接，MySQL 用 CONCAT）。RTRIM/LTRIM/TRIM 对干净数据是无操作，所以这条 UPDATE 可以不带 WHERE 全表跑。真实项目里导入环节就该做 TRIM，别把清洗债留到上线后。",
+      "term_ids": [
+        "data_quality"
+      ]
+    },
+    {
+      "id": "db-c3",
+      "title": "状态口径归一：已完成、完成，统统写成 Completed",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "work_orders 的 status 里混着中文「已完成」「完成」和英文「Completed」——三个值一个意思。每次出报表都要 IN 三个值，早晚有人漏写。治理动作：统一成标准值 Completed。",
+      "goal": "把 work_orders 里 status 为「已完成」或「完成」的记录统一改成 Completed。执行成功后提交校验。",
+      "starterSql": "-- 老规矩：先 SELECT 预览\nSELECT status, COUNT(*) FROM work_orders GROUP BY status;\nUPDATE ...",
+      "check": {
+        "mode": "state",
+        "sql": "SELECT COUNT(*) AS n FROM work_orders WHERE status IN ('已完成','完成')",
+        "expect": [
+          [
+            0
+          ]
+        ]
+      },
+      "answerSql": "UPDATE work_orders SET status = 'Completed' WHERE status IN ('已完成','完成')",
+      "hint": "先 GROUP BY status 看清现状有几种写法，再 UPDATE 归一",
+      "explanation": "清洗前先跑 GROUP BY 摸清字段的全部取值分布，是数据体检的标准动作——你以为只有三种写法，实际可能还有 completed（小写）和「已 完成」（带空格）。归一之后要做的更重要：在系统里把 status 改成枚举/字典约束，让脏数据再也进不来。清洗解决存量，约束解决增量。",
+      "term_ids": [
+        "work_order",
+        "data_quality"
+      ]
+    },
+    {
+      "id": "db-c4",
+      "title": "盘点前哨：列出所有账实不符的库存",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "scene": "月底盘点前，实施顾问要先给仓库一张「重点核对清单」：账面数 qty_book 和实盘数 qty_actual 对不上的库位，按差异绝对值大的排前面——仓管员的时间只够先盘最可疑的。",
+      "goal": "查出账实不符的库存记录，输出 item_code、warehouse、qty_book、qty_actual、diff（账面减实盘，可为负）五列，按 diff 的绝对值降序排列。",
+      "starterSql": "-- SQLite 里绝对值函数是 ABS()\nSELECT item_code, warehouse, qty_book, qty_actual, qty_book - qty_actual AS diff\nFROM inventory\nWHERE ...\nORDER BY ABS(diff) DESC",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT item_code, warehouse, qty_book, qty_actual, qty_book - qty_actual AS diff FROM inventory WHERE qty_book <> qty_actual ORDER BY ABS(qty_book - qty_actual) DESC, item_code",
+        "expect": [
+          [
+            "BRG-6201",
+            "成品仓",
+            194,
+            196,
+            -2
+          ],
+          [
+            "PMP-AO-25",
+            "成品仓",
+            183,
+            182,
+            1
+          ]
+        ]
+      },
+      "answerSql": "SELECT item_code, warehouse, qty_book, qty_actual, qty_book - qty_actual AS diff FROM inventory WHERE qty_book <> qty_actual ORDER BY ABS(qty_book - qty_actual) DESC, item_code",
+      "hint": "WHERE qty_book <> qty_actual 筛出不符记录；ORDER BY ABS(...) DESC 按差异大小排；再按 item_code 补一个次序保证结果稳定",
+      "explanation": "两个细节：① diff 保留符号（正=账面多实物少，可能漏报工或多入库；负=实物多账面少，可能漏记出库），排查方向完全不同，所以不要直接输出 ABS；② 排序加第二关键字 item_code，否则差异相同的行顺序不稳定，两次查询结果不一致会让仓库怀疑清单的权威性。盘点差异的根因八成在单据流：查这张料最近的出入库和报工记录，就能定位是谁没按流程操作。",
+      "term_ids": [
+        "inventory",
+        "inventory_accuracy",
+        "data_quality"
+      ]
+    }
+  ]
+}

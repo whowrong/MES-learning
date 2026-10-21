@@ -7,6 +7,7 @@ import DebugRoute from "./pages/Debug/index.tsx"
 import InterviewRoute from "./pages/Interview/index.tsx"
 import FactoryTypesRoute from "./pages/FactoryTypes/index.tsx"
 import OpsTrainingRoute from "./pages/OpsTraining/index.tsx"
+import DbTrainingRoute from "./pages/DbTraining/index.tsx"
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/interview" element={<InterviewRoute />} />
         <Route path="/factory-types" element={<FactoryTypesRoute />} />
         <Route path="/ops-training" element={<OpsTrainingRoute />} />
+        <Route path="/db-training" element={<DbTrainingRoute />} />
         <Route path="*" element={<HomeRoute />} />
       </Routes>
     </ErrorBoundary>

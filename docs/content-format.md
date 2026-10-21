@@ -328,6 +328,49 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 
 计分（引擎在 `src/game/opsTerminal.ts`，纯函数）：terminal 满分 100，每次提示 -10、每次错误尝试/危险拦截 -5；choice 按答对率；order 第一次排对 100 / 第二次 80 / 看正解 60。档位与全站一致（S≥95/A≥85/B≥70/C）。红线：accept/ambient/danger 正则必须可编译（**JS 正则不支持 `(?i)` 内联标志**，引擎已统一加 i 标志）、工单三要素齐全、步骤 ≥2、决策题三句话讲解完整、排序步骤 ≥3 且每步带 note、term_ids 指向真实术语——`src/content/__tests__/ops-quality.test.ts` 自动扫描全部域文件把关，`src/pages/OpsTraining/__tests__/ops-flow.test.tsx` 是渲染级全流程冒烟（真敲命令走完 lx-d1）。
 
+## 数据库实操营（public/content/db-training/）
+
+严肃向 SQL 实操模块：所有任务在**真实执行环境**（内置 SQLite 练习库）里判分。`index.json` 登记四个任务组（query/join/clean/report），**加组或加任务只改 JSON，不改代码**：
+
+```jsonc
+// index.json
+{ "groups": [{ "group": "query", "file": "query.json" }], "rankTexts": { "S": "…", "A": "…", "B": "…", "C": "…" } }
+
+// query.json —— 单个任务组
+{
+  "group": "query",
+  "groupName": "单表查询与业务口径",
+  "brief": "组简介（总览页展示，≥10 字）",
+  "tasks": [
+    {
+      "id": "db-q1",                    // 全库唯一，前缀 db-q/db-j/db-c/db-r 区分组
+      "title": "月会拷问：这个月到底完工了多少张工单",
+      "difficulty": "入门", "minutes": 6,
+      "scene": "业务场景描述（实施顾问视角，≥10 字）",
+      "goal": "明确目标：输出哪些列、怎么排序、取前几（判分依据，写清楚口径）",
+      "starterSql": "-- 可选：起始 SQL 骨架提示",
+      "check": {
+        "mode": "result",               // result=比对用户 SQL 执行结果 | state=用户改库后跑校验 SQL 验证库状态
+        "sql": "SELECT COUNT(*) AS n FROM work_orders WHERE status IN ('Completed','已完成','完成')",
+        "expect": [[16]]                // 期望结果：二维数组（行×列），顺序敏感
+      },
+      "answerSql": "…",                 // 参考答案（result 模式必须与 check.sql 结果一致）
+      "hint": "提示按钮文案（计次扣分）",
+      "explanation": "讲解：为什么这么写 + 实施现场的坑（≥20 字）",
+      "term_ids": ["work_order"]        // 关联术语卡；未满分时进复习队列
+    }
+  ]
+}
+```
+
+计分（`src/game/dbTraining.ts`）：任务分 = 第 1 次提交校验通过 100 / 第 2 次 80 / 第 3 次起或看答案 60，用过提示再 -10；组总分 = 任务平均，档位与全站一致。执行 SQL 不限次数不扣分（真实结果就是最好的反馈），只有「提交校验」计次。红线：check.expect 必须由 `node server/backfill-db-expect.mjs` 对着真实练习库算出回填（禁止手编数字）；result 模式 answerSql 执行结果必须与 check.sql 一致（脚本自动验证）；清洗组（clean）任务用 state 模式（db-c4 盘点查询除外）；term_ids 指向真实术语——`src/content/__tests__/db-quality.test.ts` 自动扫描把关。
+
+**内置练习库种子**：`server/seed-practice-db.mjs`（确定性数据：固定种子伪随机，重置后断言稳定可复现；八张表 items/bom/work_orders/work_reports/inventory/sales_orders/employees/equipment，故意埋一物两码、单位混乱、状态口径不一、账实不符、编码尾部空格等典型脏数据）。改动种子数据后**必须重跑 backfill 脚本**刷新全部 expect。生成的 .db 文件在仓库外（/workspace/pocketbase-bin/lab-data/），不进 GitHub。
+
+## 部署文档模板（public/content/ops-training/deploy-docs.json）
+
+运维训练营·真实服务器模式的预置部署手册（Linux 环境初始化 / MySQL 演练库 / 采集服务 systemd 部署 / Prometheus+Grafana 监控）。每份文档 = markdown 正文 + 可选「一键部署命令序列」（每条 `{label, cmd}`，发送后逐条预览确认执行）。⚠️ 该文件与训练域文件同目录，`ops-quality.test.ts` 的 glob 扫描已显式跳过它；再加同目录非域文件同样要跳过。
+
 ## 约定与红线
 
 - **每个机制必须挂知识点**：新增内容时 `knowledge_ids` / `term_ids` 必填，映射不到知识点的机制不要加。

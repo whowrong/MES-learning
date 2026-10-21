@@ -1,0 +1,199 @@
+{
+  "group": "report",
+  "groupName": "报表与决策支持",
+  "brief": "实施顾问交付的不只是系统，还有一张张让老板看得懂的报表。日产出、班组对比、仓库健康度、交期预警——这一组练的是「业务问题翻译成 SQL」的能力，每一题都对应一张真实报表。",
+  "tasks": [
+    {
+      "id": "db-r1",
+      "title": "生产日报：按天汇总产出与报废",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "每天早上 8 点，生产经理要在群里看到昨天的日报：每天合格多少、报废多少。report_time 是「2026-10-05 14:30:00」格式的时间戳，按天汇总要先把它截成日期。",
+      "goal": "按日期汇总合格总数与报废总数，输出 d（日期，格式 2026-10-05）、ok、scrap 三列，按 d 升序取前 10 天。",
+      "starterSql": "-- SQLite 截取日期前 10 位用 SUBSTR；MySQL 用 DATE(report_time)\nSELECT SUBSTR(report_time, 1, 10) AS d, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap\nFROM work_reports\nGROUP BY d ORDER BY d LIMIT 10",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT SUBSTR(report_time, 1, 10) AS d, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap FROM work_reports GROUP BY d ORDER BY d LIMIT 10",
+        "expect": [
+          [
+            "2026-10-01",
+            17,
+            7
+          ],
+          [
+            "2026-10-02",
+            20,
+            0
+          ],
+          [
+            "2026-10-03",
+            48,
+            3
+          ],
+          [
+            "2026-10-04",
+            48,
+            2
+          ],
+          [
+            "2026-10-05",
+            25,
+            4
+          ],
+          [
+            "2026-10-06",
+            63,
+            14
+          ],
+          [
+            "2026-10-07",
+            44,
+            2
+          ],
+          [
+            "2026-10-08",
+            34,
+            0
+          ],
+          [
+            "2026-10-09",
+            29,
+            3
+          ],
+          [
+            "2026-10-10",
+            52,
+            0
+          ]
+        ]
+      },
+      "answerSql": "SELECT SUBSTR(report_time, 1, 10) AS d, SUM(qty_ok) AS ok, SUM(qty_scrap) AS scrap FROM work_reports GROUP BY d ORDER BY d LIMIT 10",
+      "hint": "SUBSTR(report_time, 1, 10) 从时间戳里截出日期部分，再按它 GROUP BY",
+      "explanation": "按时间维度汇总是报表第一大类。日期截取函数各库不同：SQLite 用 SUBSTR、MySQL 用 DATE()、SQL Server 用 CAST(x AS date)、PostgreSQL 用 x::date 或 DATE_TRUNC——给不同客户写日报时要会切换。进阶一步：跨零点的夜班报工该算哪天的产量？按报工时间还是按班次归属日？这种口径问题先跟生产经理对齐再写 SQL，不然报表发出去就吵。",
+      "term_ids": [
+        "reporting",
+        "daily_report"
+      ]
+    },
+    {
+      "id": "db-r2",
+      "title": "班组产出对比：哪个班组最能打",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "scene": "车间搞班组劳动竞赛，要一张班组产出对比表。报工记录只有工号，班组信息在 employees 表——又是一次跨表聚合，但这次分组维度是班组不是个人。",
+      "goal": "按班组汇总合格总数，输出 team、ok 两列，按 ok 降序。",
+      "starterSql": "SELECT e.team, SUM(r.qty_ok) AS ok\nFROM work_reports r\nJOIN employees e ON r.employee_no = e.emp_no\nGROUP BY e.team\nORDER BY ok DESC",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT e.team, SUM(r.qty_ok) AS ok FROM work_reports r JOIN employees e ON r.employee_no = e.emp_no GROUP BY e.team ORDER BY ok DESC",
+        "expect": [
+          [
+            "装配班",
+            679
+          ],
+          [
+            "金工二班",
+            119
+          ],
+          [
+            "金工一班",
+            83
+          ],
+          [
+            "电气班",
+            52
+          ]
+        ]
+      },
+      "answerSql": "SELECT e.team, SUM(r.qty_ok) AS ok FROM work_reports r JOIN employees e ON r.employee_no = e.emp_no GROUP BY e.team ORDER BY ok DESC",
+      "hint": "先 JOIN 把工号翻译成班组，再 GROUP BY e.team 汇总",
+      "explanation": "「明细表关联维度表再聚合」是报表 SQL 的万能句式：事实表（报工）出数字，维度表（员工→班组）出分组口径。竞赛榜单发布前记得跟车间确认口径——用合格数还是合格+报废的总投入？借调人员算谁的？排行榜动的是班组长的面子，口径含糊会引爆扯皮，实施顾问要在发榜前把规则钉死。",
+      "term_ids": [
+        "reporting"
+      ]
+    },
+    {
+      "id": "db-r3",
+      "title": "仓库健康度：每个仓的账实相符率",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "scene": "库存准确率是 MES 项目的验收指标之一。给仓库经理的月度健康度报告：每个仓库有多少条库存记录、多少条账实不符、不符占比多少。",
+      "goal": "按仓库汇总，输出 warehouse、记录数 n、不符数 bad 三列，按 warehouse 升序。（不符 = qty_book 与 qty_actual 不相等）",
+      "starterSql": "-- CASE WHEN 塞进 SUM 就是「条件计数」\nSELECT warehouse, COUNT(*) AS n,\n       SUM(CASE WHEN qty_book <> qty_actual THEN 1 ELSE 0 END) AS bad\nFROM inventory GROUP BY warehouse ORDER BY warehouse",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT warehouse, COUNT(*) AS n, SUM(CASE WHEN qty_book <> qty_actual THEN 1 ELSE 0 END) AS bad FROM inventory GROUP BY warehouse ORDER BY warehouse",
+        "expect": [
+          [
+            "半成品仓",
+            6,
+            0
+          ],
+          [
+            "原料仓",
+            10,
+            0
+          ],
+          [
+            "成品仓",
+            7,
+            2
+          ]
+        ]
+      },
+      "answerSql": "SELECT warehouse, COUNT(*) AS n, SUM(CASE WHEN qty_book <> qty_actual THEN 1 ELSE 0 END) AS bad FROM inventory GROUP BY warehouse ORDER BY warehouse",
+      "hint": "SUM(CASE WHEN 条件 THEN 1 ELSE 0 END) 是条件计数的标准写法，比跑两次查询再相减优雅得多",
+      "explanation": "CASE WHEN 聚合是 SQL 报表的分水岭技能：一次扫表同时算出总数、异常数、分档数。库存准确率 = (n - bad) / n，验收时客户拿的就是这个口径。延伸一步可以按差异金额加权（差异大的库位更严重），但前提是主数据里有单价字段——又一次说明：报表能做多深，取决于主数据有多全。",
+      "term_ids": [
+        "inventory",
+        "inventory_accuracy"
+      ]
+    },
+    {
+      "id": "db-r4",
+      "title": "交期预警：订单要延期了吗",
+      "difficulty": "挑战",
+      "minutes": 12,
+      "scene": "销售内勤每周一要一张交期预警表：11 月之前到期的订单，对应的生产工单做到什么程度了。订单在 sales_orders，生产进度在 work_orders，两边靠物料编码关联——一个成品可能有多张工单，进度要加总。",
+      "goal": "查出 due_date 早于 2026-11-01 的订单，输出 order_no、due_date、qty（订单量）、done（对应工单完工数合计，没有工单记 0）四列，按 due_date 升序取前 10。",
+      "starterSql": "-- LEFT JOIN 保证没排产的订单也在预警表里（这类最危险）\nSELECT s.order_no, s.due_date, s.qty, COALESCE(SUM(w.done_qty), 0) AS done\nFROM sales_orders s\nLEFT JOIN work_orders w ON w.item_code = s.item_code\nWHERE s.due_date < '2026-11-01'\nGROUP BY s.order_no\nORDER BY s.due_date LIMIT 10",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT s.order_no, s.due_date, s.qty, COALESCE(SUM(w.done_qty), 0) AS done FROM sales_orders s LEFT JOIN work_orders w ON w.item_code = s.item_code WHERE s.due_date < '2026-11-01' GROUP BY s.order_no ORDER BY s.due_date, s.order_no LIMIT 10",
+        "expect": [
+          [
+            "SO2026215",
+            "2026-10-04",
+            7,
+            359
+          ],
+          [
+            "SO2026214",
+            "2026-10-18",
+            8,
+            359
+          ],
+          [
+            "SO2026201",
+            "2026-10-22",
+            37,
+            121
+          ],
+          [
+            "SO2026208",
+            "2026-10-24",
+            26,
+            121
+          ]
+        ]
+      },
+      "answerSql": "SELECT s.order_no, s.due_date, s.qty, COALESCE(SUM(w.done_qty), 0) AS done FROM sales_orders s LEFT JOIN work_orders w ON w.item_code = s.item_code WHERE s.due_date < '2026-11-01' GROUP BY s.order_no ORDER BY s.due_date, s.order_no LIMIT 10",
+      "hint": "LEFT JOIN + COALESCE(SUM(...), 0)：没排产的订单 done 显示 0 而不是消失；日期字符串 '2026-11-01' 可以直接比较大小",
+      "explanation": "这题综合了预警报表的全部要点：LEFT JOIN 保住「还没排产」的最危险订单（内连接会让它们凭空消失）、COALESCE 把 NULL 归零、字符串日期直接比较（ISO 格式的日期字符串字典序=时间序，这是日期存成 YYYY-MM-DD 的最大红利）。真实项目里订单和工单之间还隔着计划层（一单多批、拼单生产），关联键要用订单行号而不是物料编码——用物料编码关联在「同物料多订单」时会互相污染，这是新手顾问最常踩的报表坑。",
+      "term_ids": [
+        "sales_order",
+        "work_order"
+      ]
+    }
+  ]
+}

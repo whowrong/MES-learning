@@ -1,0 +1,206 @@
+{
+  "group": "join",
+  "groupName": "多表关联与数据断链",
+  "brief": "MES 业务库的真相分散在多张表里：工单在 work_orders、物料在 items、报工在 work_reports、订单在 sales_orders。实施顾问查数九成要跨表——JOIN 写错方向、关联键对不上，查出来的数就是错的。",
+  "tasks": [
+    {
+      "id": "db-j1",
+      "title": "在制工单明细：只有编码没人看得懂",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "生产科长要一张「当前在制工单清单」贴在办公室。work_orders 里只有物料编码，科长不认编码只认名称——这就是为什么报表永远要关联物料主数据。",
+      "goal": "查出状态为 InProgress 的工单，输出 wo_no、item_name（来自 items 表）、plan_qty、done_qty 四列，按 wo_no 升序。",
+      "starterSql": "SELECT w.wo_no, i.item_name, w.plan_qty, w.done_qty\nFROM work_orders w\nJOIN items i ON ...\nWHERE w.status = 'InProgress'\nORDER BY w.wo_no",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT w.wo_no, i.item_name, w.plan_qty, w.done_qty FROM work_orders w JOIN items i ON w.item_code = i.item_code WHERE w.status = 'InProgress' ORDER BY w.wo_no",
+        "expect": [
+          [
+            "WO20261001",
+            "电气控制柜",
+            31,
+            0
+          ],
+          [
+            "WO20261007",
+            "气动隔膜泵",
+            13,
+            3
+          ],
+          [
+            "WO20261013",
+            "行星搅拌机",
+            99,
+            2
+          ],
+          [
+            "WO20261019",
+            "电气控制柜",
+            16,
+            10
+          ],
+          [
+            "WO20261025",
+            "行星搅拌机",
+            94,
+            28
+          ],
+          [
+            "WO20261028",
+            "气动隔膜泵",
+            88,
+            0
+          ]
+        ]
+      },
+      "answerSql": "SELECT w.wo_no, i.item_name, w.plan_qty, w.done_qty FROM work_orders w JOIN items i ON w.item_code = i.item_code WHERE w.status = 'InProgress' ORDER BY w.wo_no",
+      "hint": "JOIN items 的关联条件是 w.item_code = i.item_code；表起别名 w / i 让 SQL 更短",
+      "explanation": "内连接（JOIN...ON）是报表的基本形态。实施现场的坑：如果工单的 item_code 在 items 里找不到（脏编码），内连接会把这张工单「悄悄吞掉」——清单少一行没人发现。所以正式报表做完要跑一次孤儿检查（LEFT JOIN 找关联不上的行），这也是主数据治理要断根的原因。",
+      "term_ids": [
+        "work_order",
+        "master_data"
+      ]
+    },
+    {
+      "id": "db-j2",
+      "title": "报工明星榜：谁干得最多",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "scene": "月底车间评产出标兵，要按人统计报工次数与合格数。报工记录 work_reports 里只有工号 employee_no，姓名和班组在 employees 表——计件工资和评优都靠这张关联查询。",
+      "goal": "输出 emp_name、team、报工次数 n、合格总数 ok 四列，按 n 降序取前 5。",
+      "starterSql": "SELECT e.emp_name, e.team, COUNT(r.report_id) AS n, SUM(r.qty_ok) AS ok\nFROM work_reports r\nJOIN employees e ON r.employee_no = e.emp_no\nGROUP BY ...\nORDER BY n DESC LIMIT 5",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT e.emp_name, e.team, COUNT(r.report_id) AS n, SUM(r.qty_ok) AS ok FROM work_reports r JOIN employees e ON r.employee_no = e.emp_no GROUP BY r.employee_no ORDER BY n DESC LIMIT 5",
+        "expect": [
+          [
+            "杨建军",
+            "装配班",
+            12,
+            130
+          ],
+          [
+            "钱秀英",
+            "装配班",
+            10,
+            91
+          ],
+          [
+            "吴秀英",
+            "装配班",
+            10,
+            100
+          ],
+          [
+            "韩秀英",
+            "电气班",
+            8,
+            52
+          ],
+          [
+            "赵志强",
+            "装配班",
+            6,
+            69
+          ]
+        ]
+      },
+      "answerSql": "SELECT e.emp_name, e.team, COUNT(r.report_id) AS n, SUM(r.qty_ok) AS ok FROM work_reports r JOIN employees e ON r.employee_no = e.emp_no GROUP BY r.employee_no ORDER BY n DESC LIMIT 5",
+      "hint": "GROUP BY 按工号分组（工号唯一），SELECT 里带出姓名班组；COUNT 数报工条数，SUM 加合格数",
+      "explanation": "关联 + 分组聚合的组合拳。一个方言坑值得记住：GROUP BY r.employee_no 却 SELECT e.emp_name，SQLite 宽容放行，MySQL 开了 ONLY_FULL_GROUP_BY（5.7+ 默认）会直接报错，SQL Server 也要求 SELECT 的非聚合列都进 GROUP BY。写客户环境的 SQL 前先确认数据库方言，「在我机器上能跑」是实施现场最经典的翻车。",
+      "term_ids": [
+        "reporting"
+      ]
+    },
+    {
+      "id": "db-j3",
+      "title": "订单展 BOM：这张订单要备多少料",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "scene": "计划员拿到一张销售订单，要算子件需求量去催采购。订单在 sales_orders（成品编码 + 数量），配方在 bom（parent_code 成品 → child_code 子件 + qty_per 单耗）。订单量 × 单耗 = 需求量，这就是 MRP 展开的最小原型。",
+      "goal": "对订单号最早的那张订单（order_no 最小）展开 BOM，输出 order_no、child_code、need_qty（订单数量 × 单耗，整数）三列，按 child_code 升序。",
+      "starterSql": "SELECT s.order_no, b.child_code, CAST(s.qty * b.qty_per AS INTEGER) AS need_qty\nFROM sales_orders s\nJOIN bom b ON s.item_code = b.parent_code\nWHERE s.order_no = (SELECT MIN(order_no) FROM sales_orders)\nORDER BY b.child_code",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT s.order_no, b.child_code, CAST(s.qty * b.qty_per AS INTEGER) AS need_qty FROM sales_orders s JOIN bom b ON s.item_code = b.parent_code WHERE s.order_no = (SELECT MIN(order_no) FROM sales_orders) ORDER BY b.child_code",
+        "expect": [
+          [
+            "SO2026201",
+            "BRG-6201",
+            74
+          ],
+          [
+            "SO2026201",
+            "FLT-HYD-10",
+            37
+          ],
+          [
+            "SO2026201",
+            "IMP-HOUS-3",
+            37
+          ],
+          [
+            "SO2026201",
+            "SCR-M8-30",
+            7
+          ]
+        ]
+      },
+      "answerSql": "SELECT s.order_no, b.child_code, CAST(s.qty * b.qty_per AS INTEGER) AS need_qty FROM sales_orders s JOIN bom b ON s.item_code = b.parent_code WHERE s.order_no = (SELECT MIN(order_no) FROM sales_orders) ORDER BY b.child_code",
+      "hint": "子查询 (SELECT MIN(order_no) FROM sales_orders) 定位最早的订单；CAST(x AS INTEGER) 取整",
+      "explanation": "这条 SQL 就是 MRP 物料需求展开的骨架：订单驱动 BOM，需求量 = 订单量 × 单耗。真实系统还要叠损耗率（÷(1-loss_rate)）、叠库存净算、多层 BOM 递归展开——但骨架就是这个 JOIN。面试被问「MRP 怎么算的」，能把这条 SQL 讲清楚就是懂行的信号。",
+      "term_ids": [
+        "bom",
+        "sales_order",
+        "mrp"
+      ]
+    },
+    {
+      "id": "db-j4",
+      "title": "数据断链：开工了却一条报工都没有的工单",
+      "difficulty": "进阶",
+      "minutes": 8,
+      "scene": "系统上线两周，顾问最怕的不是报错，是「现场干了活但系统里没数」。凡是状态不是 Released（已下达未开工）却查不到任何报工记录的工单，都是数据断链的嫌疑对象——要么现场没执行报工纪律，要么接口丢了数据。",
+      "goal": "找出状态不是 Released 且没有任何报工记录的工单，输出 wo_no、status 两列，按 wo_no 升序。",
+      "starterSql": "-- LEFT JOIN 保留左表所有行，右表匹配不上时是 NULL\nSELECT w.wo_no, w.status\nFROM work_orders w\nLEFT JOIN work_reports r ON w.wo_no = r.wo_no\nWHERE ... IS NULL AND w.status <> 'Released'\nORDER BY w.wo_no",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT w.wo_no, w.status FROM work_orders w LEFT JOIN work_reports r ON w.wo_no = r.wo_no WHERE r.report_id IS NULL AND w.status <> 'Released' ORDER BY w.wo_no",
+        "expect": [
+          [
+            "WO20261025",
+            "InProgress"
+          ],
+          [
+            "WO20261026",
+            "完成"
+          ],
+          [
+            "WO20261027",
+            "Completed"
+          ],
+          [
+            "WO20261028",
+            "InProgress"
+          ],
+          [
+            "WO20261031",
+            "已完成"
+          ],
+          [
+            "WO20261032",
+            "Completed"
+          ]
+        ]
+      },
+      "answerSql": "SELECT w.wo_no, w.status FROM work_orders w LEFT JOIN work_reports r ON w.wo_no = r.wo_no WHERE r.report_id IS NULL AND w.status <> 'Released' ORDER BY w.wo_no",
+      "hint": "LEFT JOIN 之后用「右表主键 IS NULL」筛出没有匹配的行，这是找孤儿记录的标准手法",
+      "explanation": "LEFT JOIN + IS NULL 是数据审计的招牌动作：找「A 表有、B 表没有」的断链记录。上线陪产期每天跑一遍这种检查，比等车间主任发现工资算少了再回头查体面得多。同样的手法可以查：有工单没入库、有入库没质检、有订单没排产——每个业务闭环都值得一条断链检查 SQL。",
+      "term_ids": [
+        "work_order",
+        "reporting",
+        "data_quality"
+      ]
+    }
+  ]
+}

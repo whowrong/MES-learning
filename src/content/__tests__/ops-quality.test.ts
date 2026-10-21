@@ -13,7 +13,8 @@ const termIds = new Set((termsRaw.terms as Array<{ id: string }>).map((t) => t.i
 function banks(): Array<{ file: string; bank: OpsDomainBank }> {
   const out: Array<{ file: string; bank: OpsDomainBank }> = []
   for (const [path, mod] of Object.entries(modules)) {
-    if (path.endsWith("index.json")) continue
+    // index.json 是清单、deploy-docs.json 是部署文档模板，都不是训练域文件
+    if (path.endsWith("index.json") || path.endsWith("deploy-docs.json")) continue
     out.push({ file: path.split("/").pop()!, bank: mod as unknown as OpsDomainBank })
   }
   return out
