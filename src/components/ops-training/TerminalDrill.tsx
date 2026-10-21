@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ClipboardList, Lightbulb, Send, FileCheck2, RotateCcw, CircleAlert } from "lucide-react"
+import { ClipboardList, Lightbulb, Send, FileCheck2, RotateCcw, CircleAlert, Copy, Check } from "lucide-react"
 import type { OpsTerminalDrill } from "@/content/opsTraining"
 import type { TerminalRun } from "@/game/opsTerminal"
 
@@ -20,6 +20,19 @@ const LINE_CLASS: Record<string, string> = {
   ok: "whitespace-pre-wrap text-primary",
 }
 
+/** 剪贴板兜底：clipboard API 在非安全上下文/iframe 里可能不可用，退回 execCommand */
+function legacyCopy(text: string) {
+  const ta = document.createElement("textarea")
+  ta.value = text
+  ta.setAttribute("readonly", "")
+  ta.style.position = "fixed"
+  ta.style.opacity = "0"
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand("copy")
+  document.body.removeChild(ta)
+}
+
 /** 交互式模拟终端：事故工单 + 逐步目标 + 命令输入 + 模拟输出 */
 export function TerminalDrill({
   view,
@@ -38,13 +51,19 @@ export function TerminalDrill({
 }) {
   const [input, setInput] = useState("")
   const [ticketOpen, setTicketOpen] = useState(true)
+  const [copyState, setCopyState] = useState<"" | "ok" | "fail">("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const copyTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [view.run.lines.length])
+
+  useEffect(() => () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+  }, [])
 
   const submit = () => {
     const cmd = input.trim()
@@ -52,6 +71,43 @@ export function TerminalDrill({
     onCommand(cmd)
     setInput("")
     inputRef.current?.focus()
+  }
+
+  /** 复制全部：工单上下文 + 完整终端记录，可直接贴给 AI 提问 */
+  const copyTranscript = async () => {
+    const t = view.drill.ticket
+    const parts = [
+      `【演练】${view.drill.title}`,
+      `【背景】${t.background}`,
+      `【现象】${t.symptom}`,
+      `【处置目标】${t.objective}`,
+    ]
+    if (!view.run.finished) parts.push(`【当前步骤目标】${view.currentObjective}`)
+    parts.push("—— 终端记录 ——")
+    for (const line of view.run.lines) {
+      parts.push(line.kind === "cmd" ? `${view.drill.prompt} ${line.text}` : line.text)
+    }
+    const text = parts.join("\n")
+    let ok = false
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+        ok = true
+      }
+    } catch {
+      ok = false
+    }
+    if (!ok) {
+      try {
+        legacyCopy(text)
+        ok = true
+      } catch {
+        ok = false
+      }
+    }
+    setCopyState(ok ? "ok" : "fail")
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = window.setTimeout(() => setCopyState(""), ok ? 1500 : 2500)
   }
 
   const doneCount = view.run.finished ? view.stepTotal : view.stepIndex
@@ -120,10 +176,27 @@ export function TerminalDrill({
 
       {/* 终端窗口 */}
       <div className="overflow-hidden rounded-xl border border-border bg-muted/60 shadow-sm">
+        <div className="flex items-center gap-2 border-b border-border bg-muted/80 px-3 py-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground">演练终端 · 文字可选中复制</span>
+          <button
+            type="button"
+            onClick={copyTranscript}
+            aria-label="复制全部终端记录"
+            className="ml-auto flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:shadow-[var(--focus-ring)]"
+          >
+            {copyState === "ok" ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}
+            {copyState === "ok" ? "已复制" : copyState === "fail" ? "复制失败，请手动全选" : "复制全部"}
+          </button>
+        </div>
         <div
           ref={scrollRef}
-          className="h-[46vh] min-h-[280px] overflow-y-auto px-3 py-2.5 font-mono text-xs leading-relaxed sm:h-[52vh]"
-          onClick={() => inputRef.current?.focus()}
+          className="h-[46vh] min-h-[280px] select-text overflow-y-auto px-3 py-2.5 font-mono text-xs leading-relaxed sm:h-[52vh]"
+          onClick={() => {
+            // 有选中文本时不抢焦点，保护复制操作（手机端尤其重要）
+            const sel = window.getSelection()
+            if (sel && sel.toString().length > 0) return
+            inputRef.current?.focus()
+          }}
           role="log"
           aria-live="polite"
         >

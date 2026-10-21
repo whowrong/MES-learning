@@ -226,4 +226,41 @@ describe("运维训练营全流程", () => {
     })
     expect(latest.terminalView!.run.hintsUsed).toBe(1)
   })
+
+  it("终端「复制全部」把工单上下文 + 终端记录写进剪贴板", async () => {
+    const writeText = vi.fn(async (_text: string) => {})
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true })
+    try {
+      await bootstrap()
+      await act(async () => {
+        fireEvent.click(screen.getByText("Linux 服务器实操"))
+      })
+      await act(async () => {
+        fireEvent.click(screen.getByText("磁盘打满：MES 采集服务停止写库"))
+      })
+      await typeCommand("df -h")
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /复制全部终端记录/ }))
+      })
+
+      expect(writeText).toHaveBeenCalledTimes(1)
+      const text = String(writeText.mock.calls[0][0])
+      // 工单三要素齐全，AI 拿到就有完整上下文
+      expect(text).toContain("【演练】磁盘打满")
+      expect(text).toContain("【背景】")
+      expect(text).toContain("【现象】")
+      expect(text).toContain("【处置目标】")
+      expect(text).toContain("【当前步骤目标】")
+      // 终端记录含命令行（带提示符）与输出
+      expect(text).toContain("—— 终端记录 ——")
+      expect(text).toContain("df -h")
+      expect(text).toContain("Filesystem")
+      expect(text).toContain("100%")
+      // 复制成功后按钮短暂变为「已复制」
+      expect(screen.getByText("已复制")).toBeTruthy()
+    } finally {
+      delete (navigator as unknown as { clipboard?: unknown }).clipboard
+    }
+  })
 })
