@@ -1,4 +1,8 @@
 /// <reference path="../pb_data/types.d.ts" />
+// 【独立部署注记】本文件中的 ALLOWED_MODELS 在平台部署时由平台把占位符渲染为
+// 真实模型清单; 本仓库内保存的是独立部署默认值 [] (无任何可用模型):
+// /api/llm/models 返回空清单, /api/llm/chat 返回 model_not_allowed,
+// 前端会按「无 AI 可用」降级, 不影响游戏主体。平台部署时由平台注入覆盖本默认值。
 // pb_hooks/llm.pb.js — RunningHub LLM 中转 (self-contained, 单路由 + allowlist, 含超时降级)
 //
 // 路由约定:
@@ -27,7 +31,7 @@
 //   - 不要默认给 LLM payload 加 temperature。GPT-5.5 等模型不支持该参数。
 //     只有前端显式传 temperature 且 cfg.supports_temperature=true 时才透传。
 
-var ALLOWED_MODELS = {{LLM_ALLOWED_MODELS}}
+var ALLOWED_MODELS = []
 var LLM_BASE = "https://llm.runninghub.cn"
 var LLM_APP_CODE = "vibex"
 
@@ -60,7 +64,7 @@ onBootstrap(function (e) {
 
 routerAdd("GET", "/api/llm/models", function (e) {
   try {
-    var allowedModels = {{LLM_ALLOWED_MODELS}}
+    var allowedModels = []
     var items = []
     for (var key in allowedModels) {
       if (!Object.prototype.hasOwnProperty.call(allowedModels, key)) continue
@@ -149,7 +153,7 @@ routerAdd("POST", "/api/llm/chat", function (e) {
   var jobRec = null
 
   try {
-    var allowedModels = {{LLM_ALLOWED_MODELS}}
+    var allowedModels = []
     var llmBase = "https://llm.runninghub.cn"
     var llmAppCode = "vibex"
     var key = readKey(e)

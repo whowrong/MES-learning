@@ -1,4 +1,8 @@
 /// <reference path="../pb_data/types.d.ts" />
+// 【独立部署注记】本文件中的 ALLOWED_MODELS 在平台部署时由平台把占位符渲染为
+// 真实模型清单; 本仓库内保存的是独立部署默认值 [] (无任何可用模型):
+// /api/aigc/models 返回空清单, 提交类路由返回 model_not_allowed,
+// 前端会按「无 AI 可用」降级, 不影响游戏主体。平台部署时由平台注入覆盖本默认值。
 // @vibex-protocol: markup/1
 // pb_hooks/aigc.pb.js — RunningHub AIGC 标准模型中转 (self-contained, 单路由 + allowlist)
 //
@@ -29,7 +33,7 @@
 // Published and dev containers inject the current app id. Keep the rendered
 // literal only as a local-export fallback so Remix copies follow their runtime.
 var VIBEX_APP_ID = $os.getenv("VIBEX_APP_ID") || "app-7a123b099b33415491c3b86860134f06"
-var ALLOWED_MODELS = {{AIGC_ALLOWED_MODELS}}
+var ALLOWED_MODELS = []
 
 onBootstrap(function (e) {
   e.next()
@@ -345,7 +349,7 @@ function itemFromRecord(rec) {
 
 routerAdd("GET", "/api/aigc/models", function (e) {
   try {
-    var allowedModels = {{AIGC_ALLOWED_MODELS}}
+    var allowedModels = []
     var items = []
     for (var key in allowedModels) {
       if (!Object.prototype.hasOwnProperty.call(allowedModels, key)) continue
@@ -636,7 +640,7 @@ routerAdd("POST", "/api/aigc/submit", function (e) {
     } catch (_) {}
   }
   try {
-    var allowedModels = {{AIGC_ALLOWED_MODELS}}
+    var allowedModels = []
     var key = localReadKey(e)
     if (!key) return e.json(412, { error: "rh_login_required", message: "请用右上角按钮登录 RunningHub" })
     var body = e.requestInfo().body || {}
@@ -792,7 +796,7 @@ routerAdd("POST", "/api/aigc/price-preview", function (e) {
     return payload
   }
   try {
-    var allowedModels = {{AIGC_ALLOWED_MODELS}}
+    var allowedModels = []
     var key = localReadKey(e)
     if (!key) return e.json(200, { ok: false, message: "rh_login_required" })
     var body = e.requestInfo().body || {}
@@ -884,7 +888,7 @@ routerAdd("POST", "/api/aigc/jobs/{jobId}/poll", function (e) {
     }
   }
   try {
-    var allowedModels = {{AIGC_ALLOWED_MODELS}}
+    var allowedModels = []
     var key = localReadKey(e)
     if (!key) return e.json(412, { error: "rh_login_required", message: "请用右上角按钮登录 RunningHub" })
     var jobId = e.request.pathValue("jobId")
@@ -1036,7 +1040,7 @@ routerAdd("POST", "/api/aigc/history", function (e) {
   }
   function localReconcileStaleRunning(records, key) {
     if (!key) return
-    var allowedModels = {{AIGC_ALLOWED_MODELS}}
+    var allowedModels = []
     var handled = 0
     for (var i = 0; i < records.length && handled < 3; i++) {
       var rec = records[i]
