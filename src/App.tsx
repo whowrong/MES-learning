@@ -11,10 +11,28 @@ const FactoryTypesRoute = lazy(() => import("./pages/FactoryTypes/index.tsx"))
 const OpsTrainingRoute = lazy(() => import("./pages/OpsTraining/index.tsx"))
 const DbTrainingRoute = lazy(() => import("./pages/DbTraining/index.tsx"))
 
+function RouteLoading() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="grid min-h-[50vh] place-items-center bg-gradient-to-br from-background via-secondary/40 to-card px-4"
+    >
+      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/85 px-5 py-4 shadow-sm">
+        <span
+          aria-hidden="true"
+          className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary"
+        />
+        <span className="text-sm font-medium text-muted-foreground">正在加载页面…</span>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div role="status">正在加载页面…</div>}>
+      <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
           <Route path="/level" element={<LevelRoute />} />
