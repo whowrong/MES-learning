@@ -80,6 +80,16 @@ onBootstrap(function (e) {
 // player_progress
 // ---------------------------------------------------------------------------
 
+// Require a normal MES app account for custom routes. Superusers are intentionally
+// excluded from the browser API; collection admin remains local to PocketBase.
+function requireMesUser(e) {
+  if (!e.auth) throw new UnauthorizedError("Authentication required")
+  if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") {
+    throw new ForbiddenError("MES app account required")
+  }
+  return e.next()
+}
+
 routerAdd("GET", "/api/player_progress", function (e) {
   var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
   var TEXT_FIELDS = ["last_route"]
@@ -119,7 +129,7 @@ routerAdd("GET", "/api/player_progress", function (e) {
   } catch (err) {
     return e.json(500, { error: "shorthand_list_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("GET", "/api/player_progress/{id}", function (e) {
   var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
@@ -139,7 +149,7 @@ routerAdd("GET", "/api/player_progress/{id}", function (e) {
   } catch (err) {
     return e.json(404, { error: "record_not_found", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/player_progress", function (e) {
   var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
@@ -165,7 +175,7 @@ routerAdd("POST", "/api/player_progress", function (e) {
   } catch (err) {
     return e.json(400, { error: "shorthand_create_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("PATCH", "/api/player_progress/{id}", function (e) {
   var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
@@ -193,7 +203,7 @@ routerAdd("PATCH", "/api/player_progress/{id}", function (e) {
   } catch (err) {
     return e.json(400, { error: "shorthand_update_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("DELETE", "/api/player_progress/{id}", function (e) {
   try {
@@ -206,7 +216,7 @@ routerAdd("DELETE", "/api/player_progress/{id}", function (e) {
   } catch (err) {
     return e.json(400, { error: "shorthand_delete_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 // ---------------------------------------------------------------------------
 // deploy_docs
@@ -249,7 +259,7 @@ routerAdd("GET", "/api/deploy_docs", function (e) {
   } catch (err) {
     return e.json(500, { error: "shorthand_list_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("GET", "/api/deploy_docs/{id}", function (e) {
   var TEXT_FIELDS = ["title", "content", "commands", "doc_type"]
@@ -267,7 +277,7 @@ routerAdd("GET", "/api/deploy_docs/{id}", function (e) {
   } catch (err) {
     return e.json(404, { error: "record_not_found", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/deploy_docs", function (e) {
   var TEXT_FIELDS = ["title", "content", "commands", "doc_type"]
@@ -290,7 +300,7 @@ routerAdd("POST", "/api/deploy_docs", function (e) {
   } catch (err) {
     return e.json(400, { error: "shorthand_create_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("PATCH", "/api/deploy_docs/{id}", function (e) {
   var TEXT_FIELDS = ["title", "content", "commands", "doc_type"]
@@ -315,7 +325,7 @@ routerAdd("PATCH", "/api/deploy_docs/{id}", function (e) {
   } catch (err) {
     return e.json(400, { error: "shorthand_update_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)
 
 routerAdd("DELETE", "/api/deploy_docs/{id}", function (e) {
   try {
@@ -328,4 +338,4 @@ routerAdd("DELETE", "/api/deploy_docs/{id}", function (e) {
   } catch (err) {
     return e.json(400, { error: "shorthand_delete_error", message: String(err && err.message || err) })
   }
-})
+}, requireMesUser)

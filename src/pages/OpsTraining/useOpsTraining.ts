@@ -2,7 +2,7 @@
 // 严肃练习模块：无剧情无拟人，评分依据 = 提示次数/错误尝试/答对率
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPocketBaseUrl } from "@/lib/pb"
+import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import { loadTerms, shuffle, type TermDef } from "@/content/loader"
 import {
   OPS_DOMAIN_ORDER,
@@ -105,7 +105,7 @@ export function useOpsTraining() {
           loadOpsIndex(),
           loadOpsBanks(),
           loadTerms(),
-          fetch(progressApi()),
+          pbFetch(progressApi()),
         ])
         if (cancelled) return
         setRankTexts(idxData.rankTexts ?? {})
@@ -147,7 +147,7 @@ export function useOpsTraining() {
       setOpsHistory(nextHistory)
       setNewReviewTerms(wrongTerms)
       if (recordId) {
-        void fetch(`${progressApi()}/${recordId}`, {
+        void pbFetch(`${progressApi()}/${recordId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ review_queue: nextQueue, study_days: nextDays, ops_history: nextHistory }),

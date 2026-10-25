@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { getPocketBaseUrl } from "@/lib/pb"
+import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import {
   CHAPTERS,
   buildDefaultProgress,
@@ -183,7 +183,7 @@ export function useLevel() {
         const [termMap, levelDef, listRes] = await Promise.all([
           loadTerms(),
           loadLevel(chapterMeta.id),
-          fetch(progressApi()),
+          pbFetch(progressApi()),
         ])
         if (cancelled) return
         setTerms(termMap)
@@ -216,7 +216,7 @@ export function useLevel() {
           const rec = items.length > 0 ? normalizeRecord(items[0]) : fallback
           if (items.length === 0) {
             // 无存档：立即创建默认进度（失败不阻塞游玩，结算时会再兜底 POST）
-            void fetch(progressApi(), {
+            void pbFetch(progressApi(), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(fallback),
@@ -540,14 +540,14 @@ export function useLevel() {
     }
     try {
       if (recordId) {
-        const res = await fetch(`${progressApi()}/${recordId}`, {
+        const res = await pbFetch(`${progressApi()}/${recordId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
       } else {
-        const res = await fetch(progressApi(), {
+        const res = await pbFetch(progressApi(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

@@ -347,6 +347,13 @@ function itemFromRecord(rec) {
   }
 }
 
+// Restrict every custom AI route to the native MES app account.
+function requireMesUser(e) {
+  if (!e.auth) throw new UnauthorizedError("Authentication required")
+  if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") throw new ForbiddenError("MES app account required")
+  return e.next()
+}
+
 routerAdd("GET", "/api/aigc/models", function (e) {
   try {
     var allowedModels = []
@@ -368,7 +375,7 @@ routerAdd("GET", "/api/aigc/models", function (e) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "aigc_models_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/aigc/upload", function (e) {
   // 每个 routerAdd 处理器是独立作用域, 看不到顶层函数 (本文件里 localReadKey /
@@ -453,7 +460,7 @@ routerAdd("POST", "/api/aigc/upload", function (e) {
     if (localIsRhAuthErr(msg)) return e.json(412, { error: "rh_login_required", message: "RunningHub 登录态已过期" })
     return e.json(500, { error: "aigc_upload_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/aigc/submit", function (e) {
   // 计价真正发生的入口, 票据在这里最关键: 丢了它 RH 认不出 app, 系数恒为 0。
@@ -695,7 +702,7 @@ routerAdd("POST", "/api/aigc/submit", function (e) {
     if (localIsRhAuthErr(msg)) return e.json(412, { error: "rh_login_required", message: "RunningHub 登录态已过期" })
     return e.json(500, { error: "aigc_submit_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 // 价格预估: 用和 /submit 完全相同的 payload 构造逻辑, 换成 RH 的 price-preview 端点
 // (POST /openapi/v2/price-preview/<原端点>)。任何失败都返回 { ok: false }, 不抛错、不 412
@@ -834,7 +841,7 @@ routerAdd("POST", "/api/aigc/price-preview", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, message: "price_preview_error" })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/aigc/jobs/{jobId}/poll", function (e) {
   function localReadKey(ev) {
@@ -954,7 +961,7 @@ routerAdd("POST", "/api/aigc/jobs/{jobId}/poll", function (e) {
     try { $app.logger().error("aigc_poll_transient: " + msg) } catch (_) {}
     return e.json(200, { ok: true, status: "RUNNING", outputs: [] })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/aigc/history", function (e) {
   function localReadKey(ev) {
@@ -1141,7 +1148,7 @@ routerAdd("POST", "/api/aigc/history", function (e) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "aigc_history_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/aigc/history/{jobId}/update", function (e) {
   function localReadKey(ev) {
@@ -1208,7 +1215,7 @@ routerAdd("POST", "/api/aigc/history/{jobId}/update", function (e) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "aigc_history_update_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/aigc/history/{jobId}/delete", function (e) {
   function localReadKey(ev) {
@@ -1240,4 +1247,4 @@ routerAdd("POST", "/api/aigc/history/{jobId}/delete", function (e) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "aigc_history_delete_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)

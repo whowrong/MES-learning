@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPocketBaseUrl } from "@/lib/pb"
+import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import { loadTerms, type TermDef } from "@/content/loader"
 import {
   CATEGORY_LIST,
@@ -88,7 +88,7 @@ export function useInterview() {
           loadInterviewIndex(),
           loadInterviewBanks(),
           loadTerms(),
-          fetch(progressApi()),
+          pbFetch(progressApi()),
         ])
         if (cancelled) return
         setRankTexts(idxData.rankTexts ?? {})
@@ -220,7 +220,7 @@ export function useInterview() {
       setInterviewHistory(nextHistory)
       setPhase("result")
       if (recordId) {
-        void fetch(`${progressApi()}/${recordId}`, {
+        void pbFetch(`${progressApi()}/${recordId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ review_queue: nextQueue, study_days: nextDays, interview_history: nextHistory }),

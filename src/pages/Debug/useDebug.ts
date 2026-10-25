@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPocketBaseUrl, getBasename } from "@/lib/pb"
+import { getPocketBaseUrl, getBasename, pbFetch } from "@/lib/pb"
 import { BUILD_VERSION } from "@/version"
 import { clearDebugEntries, getDebugEntries, initDebugLog, type DebugEntry } from "@/lib/debugLog"
 
@@ -34,7 +34,7 @@ async function timed(name: string, run: () => Promise<{ ok: boolean; status: str
 
 async function checkFetch(name: string, url: string, expectJson: boolean): Promise<CheckResult> {
   return timed(name, async () => {
-    const res = await fetch(url)
+    const res = url.includes("/api/player_progress") ? await pbFetch(url) : await fetch(url)
     if (!res.ok) {
       const bad = { ok: false, status: `HTTP ${res.status}`, detail: url }
       return bad
@@ -90,7 +90,7 @@ export function useDebug() {
 
   const loadSnapshot = useCallback(async () => {
     try {
-      const res = await fetch(`${pbBase}/api/player_progress`)
+      const res = await pbFetch(`${pbBase}/api/player_progress`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const items = Array.isArray(data?.items) ? data.items : []
@@ -129,7 +129,7 @@ export function useDebug() {
     // 存档写入：把 study_days 原值回写（幂等无害），验证 PATCH 链路；不 POST 新记录，避免污染存档
     results.push(
       await timed("存档写入", async () => {
-        const listRes = await fetch(`${pbBase}/api/player_progress`)
+        const listRes = await pbFetch(`${pbBase}/api/player_progress`)
         if (!listRes.ok) {
           const bad = { ok: false, status: `HTTP ${listRes.status}`, detail: "读取存档列表失败，无法测试写入" }
           return bad
@@ -140,7 +140,7 @@ export function useDebug() {
           const noRec = { ok: false, status: "无存档", detail: "还没有存档记录，先进一次游戏再测" }
           return noRec
         }
-        const patchRes = await fetch(`${pbBase}/api/player_progress/${rec.id}`, {
+        const patchRes = await pbFetch(`${pbBase}/api/player_progress/${rec.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ study_days: Array.isArray(rec.study_days) ? rec.study_days : [] }),

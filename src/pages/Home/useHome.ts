@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPocketBaseUrl } from "@/lib/pb"
+import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import {
   CHAPTERS,
   GAUGE_DEFS,
@@ -71,7 +71,7 @@ export function useHome() {
     async function loadProgress() {
       const fallback = buildDefaultProgress()
       try {
-        const listRes = await fetch(progressApi())
+        const listRes = await pbFetch(progressApi())
         if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`)
         const listData = await listRes.json()
         const items: Array<Partial<ProgressRecord> & { id?: string }> = Array.isArray(listData?.items)
@@ -82,7 +82,7 @@ export function useHome() {
           return
         }
         // 无存档：创建默认进度
-        const createRes = await fetch(progressApi(), {
+        const createRes = await pbFetch(progressApi(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(fallback),
@@ -110,7 +110,7 @@ export function useHome() {
     setLoadError("")
     setLoading(true)
     try {
-      const res = await fetch(progressApi())
+      const res = await pbFetch(progressApi())
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const items: Array<Partial<ProgressRecord> & { id?: string }> = Array.isArray(data?.items) ? data.items : []

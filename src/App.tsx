@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react"
 import { Route, Routes } from "react-router-dom"
 import { ErrorBoundary } from "./components/ErrorBoundary"
+import { MesAuthGate } from "./components/MesAuthGate"
 
 const HomeRoute = lazy(() => import("./pages/Home/index.tsx"))
 const LevelRoute = lazy(() => import("./pages/Level/index.tsx"))
@@ -30,21 +31,25 @@ function RouteLoading() {
 }
 
 function App() {
+  const routes = (
+    <Suspense fallback={<RouteLoading />}>
+      <Routes>
+        <Route path="/" element={<HomeRoute />} />
+        <Route path="/level" element={<LevelRoute />} />
+        <Route path="/glossary" element={<GlossaryRoute />} />
+        <Route path="/debug" element={<DebugRoute />} />
+        <Route path="/interview" element={<InterviewRoute />} />
+        <Route path="/factory-types" element={<FactoryTypesRoute />} />
+        <Route path="/ops-training" element={<OpsTrainingRoute />} />
+        <Route path="/db-training" element={<DbTrainingRoute />} />
+        <Route path="*" element={<HomeRoute />} />
+      </Routes>
+    </Suspense>
+  )
+  const selfHostedAuth = import.meta.env.VITE_MES_SELF_HOSTED_AUTH === "true"
   return (
     <ErrorBoundary>
-      <Suspense fallback={<RouteLoading />}>
-        <Routes>
-          <Route path="/" element={<HomeRoute />} />
-          <Route path="/level" element={<LevelRoute />} />
-          <Route path="/glossary" element={<GlossaryRoute />} />
-          <Route path="/debug" element={<DebugRoute />} />
-          <Route path="/interview" element={<InterviewRoute />} />
-          <Route path="/factory-types" element={<FactoryTypesRoute />} />
-          <Route path="/ops-training" element={<OpsTrainingRoute />} />
-          <Route path="/db-training" element={<DbTrainingRoute />} />
-          <Route path="*" element={<HomeRoute />} />
-        </Routes>
-      </Suspense>
+      {selfHostedAuth ? <MesAuthGate>{routes}</MesAuthGate> : routes}
     </ErrorBoundary>
   )
 }

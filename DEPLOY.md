@@ -21,9 +21,9 @@ API 钩子、lab 执行器路由、模型名单渲染)。仓库已做独立部�
 ```bash
 pnpm install
 # 挂在子路径 /mes 下:
-npx tsc -b && npx vite build --base=/mes/
+npx tsc -b && VITE_MES_SELF_HOSTED_AUTH=true npx vite build --base=/mes/
 # 或根路径部署:
-# npx tsc -b && npx vite build --base=/
+# npx tsc -b && VITE_MES_SELF_HOSTED_AUTH=true npx vite build --base=/
 ```
 
 产物在 `dist/`。PocketBase 地址自动取「<前缀>/__pb」, React Router 的
@@ -48,13 +48,18 @@ basename 自动取前缀; 原 VibeX 预览前缀(/app-preview/app-<hex>/、
 | `aigc.pb.js` | /api/aigc/* 生图任务代理(同上) |
 | `_rh_admin_sso.pb.js` | 平台管理员 SSO; 无平台环境变量时自动失效, 无影响 |
 | `shorthand_crud.pb.js` | **独立部署新增**: 简写 API(见第 3 节), 自动建集合 |
+| `mes_auth.pb.js` | 独立部署原生登录、关闭公开注册并在首次启动创建一个应用账号 |
 | `lab_proxy.pb.js` | **独立部署新增**: dblab/sshlab 执行器路由(见第 4 节) |
 
 启动与管理员:
 
 ```bash
-./pocketbase superuser upsert <你的邮箱> <你的口令>   # 仅首次, 用于进 /_/ 后台
-./pocketbase serve --http 127.0.0.1:8090 --dir ./pb_data --hooksDir ./pb_hooks --publicDir ./pb_public
+# 首次部署时通过平台机器级秘密注入 MES_APP_LOGIN_EMAIL 与 MES_APP_LOGIN_PASSWORD。
+# mes_auth.pb.js 在空数据目录首次启动时建立一个 mes_users 应用账号；不要公开注册。
+# PocketBase 管理员凭据仅供本机运维，切勿复用应用账号。
+./pocketbase superuser upsert <管理员邮箱> <管理员口令>   # 仅首次, 用于进 /_/ 后台
+MES_APP_LOGIN_EMAIL="$MES_APP_LOGIN_EMAIL" MES_APP_LOGIN_PASSWORD="$MES_APP_LOGIN_PASSWORD" \
+  ./pocketbase serve --http 127.0.0.1:8090 --dir ./pb_data --hooksDir ./pb_hooks --publicDir ./pb_public
 ```
 
 ## 3. 数据与简写 API
@@ -73,9 +78,7 @@ basename 自动取前缀; 原 VibeX 预览前缀(/app-preview/app-<hex>/、
 `?page`、`?perPage`(上限 500)、`?sort`(默认 `-created`)与文本字段等值
 过滤(如 `?doc_type=deploy`)。
 
-**数据恢复**: 平台版的数据就在 `player_progress` 集合里; 若你手头有平台
-导出的 pb_data 或该集合的备份, 覆盖/导入到 pb_data 即可。本仓库不携带
-任何真实存档数据。
+**数据恢复**: 平台版的数据就在 `player_progress` 集合里。本项目部署要求是隔离的全新演示实例；不要导入或覆盖任何现网 `pb_data`/学习存档。恢复流程不属于本部署步骤。
 
 ## 4. server/ 执行器(dblab / sshlab)
 
@@ -107,7 +110,7 @@ $http.send 转发, 不经执行器。
    脱敏; 部署时保证该目录存在且可写, 或改这两个文件顶部的 LAB_DATA
    常量为你的路径(这是部署配置, 不是业务逻辑)。
 4. ⚠️ 安全: dblab/sshlab 本质是「任意 SQL / 任意 SSH 命令」执行面,
-   只应放在有访问门禁的部署里(见第 6 节 Basic Auth), 不要裸奔公网。
+  只允许在对业务 API 强制原生应用认证的部署中使用，不得将高权限接口暴露给匿名公网访客。
 
 ## 5. 已知未覆盖的平台专有路由
 
@@ -122,13 +125,18 @@ $http.send 转发, 不经执行器。
 | `/uc/getUserInfo`、`/uc/logout` | RunningHub 账号信息/登出 | 独立部署以匿名身份运行(rhLogin 失败即匿名) |
 | `/api/sandbox/me`、`/api/sandbox/app-info`、`/api/sandbox-token/revoke` | 平台沙箱身份与令牌 | 同上, 降级匿名 |
 
-## 6. 子路径对外(边缘代理 + frp, 可选)
+## 6. 公开前必须验证 PocketBase 原生认证
+
+仅独立部署构建启用应用登录（构建时设置 `VITE_MES_SELF_HOSTED_AUTH=true`）；平台构建默认不包裹此登录页。静态页面与登录界面可公开，但所有 PocketBase 自定义业务 API 必须使用前端登录后获得的 `mes_users` token；该 token 通过 `X-Pb-Auth`（平台代理）或 `Authorization`（本机直连）传递。`mes_auth.pb.js` 创建 auth collection 时禁止公开注册、用户列表/修改/删除及其他认证方式；首次账号从机器级环境变量注入，任何账号创建之后都不会因进程重启覆盖其密码。严禁将 `MES_APP_LOGIN_*` 注入任意 SQL/SSH 子进程。
+
+上线验收至少包括：全部 lab_proxy、shorthand CRUD、LLM/AIGC 自定义路由无 token 返回 401；有效 mes_users token 可访问合法路径；无注册能力、超级用户 token 不能调用业务路由；检查 PocketBase 的 SSE/EventSource realtime，确保未授权订阅不会收到业务记录事件（PocketBase realtime 不是 WebSocket；只看订阅请求返回码不足以证明授权）；`pb_data` 是本实例新建空目录且 PocketBase 仅绑定 localhost。若这些检查无法在目标链路逐项确认，不得发布公开端口。
+
+## 7. 子路径对外(边缘代理 + frp, 可选)
 
 `deploy/` 提供通用样例(全部零敏感值, 占位符自行替换):
 
 - `deploy/edge-proxy.mjs` — 零依赖 Node 代理: 剥前缀、`__pb` 映射到
-  PocketBase、X-Pb-Auth 还原、WebSocket 透传; 可选 Basic Auth 大门
-  (`BASIC_AUTH_USER` / `BASIC_AUTH_PASS` 环境变量, 适合私人使用)。
+  PocketBase、X-Pb-Auth 还原、HTTP upgrade 透传（PocketBase realtime 使用 SSE/EventSource）。它不提供网站入口鉴权；应用 API 由 PocketBase 原生账号认证保护。PocketBase 本身必须绑定 `127.0.0.1`；公开边缘代理会屏蔽 PocketBase 管理 UI、superuser 登录与管理 API，只能经本机管理。
 - `deploy/frpc.toml.sample` — frp 客户端样例(serverAddr / token /
   domain 全是占位符), 把边缘代理按域名 + `/mes` 路径挂到网关。
 - `deploy/watchdog.sh.sample` — 无 systemd 环境下保活

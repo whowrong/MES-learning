@@ -110,6 +110,14 @@ export function pbAuthHeader(token?: string | null): Record<string, string> {
   return isDirectPbHost() ? { Authorization: token } : { [PB_USER_AUTH_HEADER]: token }
 }
 
+/** Fetch an app-owned PocketBase custom route with the current native auth token. */
+export function pbFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const auth = pbAuthHeader(pb.authStore.token)
+  for (const [name, value] of Object.entries(auth)) headers.set(name, value)
+  return fetch(input, { ...init, headers, credentials: init.credentials ?? "include" })
+}
+
 // B1 沙箱域(*.apps.vibex.cn)上访问者身份靠 X-Vibex-Scoped-Token 承载
 // (老域 getAuthHeaders() 返回空对象, 零影响)。挂在 SDK 层, 让所有
 // pb.collection(...) 请求自动携带, 业务代码不用感知。

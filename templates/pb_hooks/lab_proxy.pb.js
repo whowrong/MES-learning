@@ -26,11 +26,31 @@
 // dblab
 // ---------------------------------------------------------------------------
 
+// Require a normal MES app account for custom routes. Superusers are intentionally
+// excluded from the browser API; collection admin remains local to PocketBase.
+function requireMesUser(e) {
+  if (!e.auth) throw new UnauthorizedError("Authentication required")
+  if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") {
+    throw new ForbiddenError("MES app account required")
+  }
+  return e.next()
+}
+
+
 routerAdd("GET", "/api/dblab/connections", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -45,13 +65,22 @@ routerAdd("GET", "/api/dblab/connections", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/dblab/connections", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -67,13 +96,22 @@ routerAdd("POST", "/api/dblab/connections", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/dblab/connections/delete", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -89,13 +127,22 @@ routerAdd("POST", "/api/dblab/connections/delete", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/dblab/test", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -111,13 +158,22 @@ routerAdd("POST", "/api/dblab/test", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/dblab/exec", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -133,13 +189,22 @@ routerAdd("POST", "/api/dblab/exec", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/dblab/reset-builtin", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -154,7 +219,7 @@ routerAdd("POST", "/api/dblab/reset-builtin", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 // ---------------------------------------------------------------------------
 // sshlab
@@ -164,7 +229,16 @@ routerAdd("GET", "/api/sshlab/connections", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -179,13 +253,22 @@ routerAdd("GET", "/api/sshlab/connections", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/connections", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -201,13 +284,22 @@ routerAdd("POST", "/api/sshlab/connections", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/connections/delete", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -223,13 +315,22 @@ routerAdd("POST", "/api/sshlab/connections/delete", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/test", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -245,13 +346,22 @@ routerAdd("POST", "/api/sshlab/test", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/exec", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -270,13 +380,22 @@ routerAdd("POST", "/api/sshlab/exec", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/upload", function (e) {
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
-    var out = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload)).output()
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    // PocketBase creates each route handler in an isolated JSVM scope; keep this
+    // whitelist local to runLab. Never inherit app-login or InstaBox secrets.
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
     var text = ""
     var chunk = []
     for (var i = 0; i < out.length; i++) {
@@ -295,7 +414,7 @@ routerAdd("POST", "/api/sshlab/upload", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/webhook", function (e) {
   // 把部署任务包 POST 到用户自己的 AI agent 接收端(服务端转发避免跨域)。
@@ -329,4 +448,4 @@ routerAdd("POST", "/api/sshlab/webhook", function (e) {
   } catch (err) {
     return e.json(200, { ok: false, error: String(err && err.message || err).slice(0, 500) })
   }
-})
+}, requireMesUser)

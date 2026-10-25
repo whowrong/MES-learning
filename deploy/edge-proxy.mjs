@@ -7,20 +7,18 @@
 //   3. 前端在子路径下无法直达 PB 的 /api/files 缩略图等接口时通过 __pb 透传;
 //   4. 把请求头 X-Pb-Auth 还原为 Authorization(PocketBase JS SDK 在部分
 //      代理场景下会改用 X-Pb-Auth 携带令牌);
-//   5. WebSocket 升级透传(PocketBase realtime);
-//   6. 可选 Basic Auth 大门(口令只从环境变量读, 绝不写进代码)。
+//   5. 透传通用 HTTP upgrade; PocketBase 0.40.x realtime 使用 SSE/EventSource, 非 WebSocket;
 //
 // 环境变量:
 //   PORT             监听端口(默认 18090)
 //   PB_TARGET        PocketBase 地址(默认 http://127.0.0.1:8090)
 //   APP_PREFIX       子路径前缀(默认 /mes; 根路径部署填空或 /)
-//   BASIC_AUTH_USER  可选: 设置后启用 Basic Auth
-//   BASIC_AUTH_PASS  可选: 与 BASIC_AUTH_USER 配套(从环境变量注入)
 //
 // 启动: APP_PREFIX=/mes node deploy/edge-proxy.mjs
 import http from "node:http";
 import net from "node:net";
 import { URL } from "node:url";
+import path from "node:path";
 
 const PORT = Number(process.env.PORT || 18090);
 const TARGET = new URL(process.env.PB_TARGET || "http://127.0.0.1:8090");
@@ -29,25 +27,29 @@ if (PREFIX === "/") PREFIX = "";
 if (PREFIX && !PREFIX.startsWith("/")) PREFIX = "/" + PREFIX;
 if (PREFIX.endsWith("/")) PREFIX = PREFIX.slice(0, -1);
 
-const AUTH_USER = process.env.BASIC_AUTH_USER || "";
-const AUTH_PASS = process.env.BASIC_AUTH_PASS || "";
-
-function checkAuth(req) {
-  if (!AUTH_USER) return true;
-  const h = req.headers["authorization"] || "";
-  if (!h.startsWith("Basic ")) return false;
-  const decoded = Buffer.from(h.slice(6), "base64").toString("utf8");
-  const idx = decoded.indexOf(":");
-  if (idx < 0) return false;
-  return decoded.slice(0, idx) === AUTH_USER && decoded.slice(idx + 1) === AUTH_PASS;
-}
-
-function unauthorized(res) {
-  res.writeHead(401, { "WWW-Authenticate": 'Basic realm="mes"' });
-  res.end("unauthorized");
-}
-
 // 把带前缀的请求路径映射为 PocketBase 路径(不带前缀则返回 null → 404)
+function isPrivateAdminPath(pathnameOrUrl) {
+  let pathname;
+  try {
+    pathname = new URL(pathnameOrUrl, "http://placeholder").pathname;
+    // PocketBase and intermediary HTTP stacks may normalize percent escapes at
+    // different layers. Decode repeatedly and fail closed if malformed/deeply
+    // encoded paths remain, so %255f cannot become /_ after this proxy check.
+    for (let i = 0; i < 8; i++) {
+      const decoded = decodeURIComponent(pathname);
+      if (decoded === pathname) break;
+      pathname = decoded;
+    }
+    if (/%[0-9a-f]{2}/i.test(pathname)) return true;
+  } catch (_) { return true; }
+  // Canonicalize separators and dot segments before checking protected paths.
+  pathname = path.posix.normalize(pathname.replace(/\\/g, "/"));
+  return pathname === "/_" || pathname.startsWith("/_/") ||
+    pathname === "/api/collections/_superusers" || pathname.startsWith("/api/collections/_superusers/") ||
+    pathname === "/api/admins" || pathname.startsWith("/api/admins/") ||
+    pathname === "/__rh_admin_sso" || pathname.startsWith("/__rh_admin_sso/");
+}
+
 function mapPath(rawUrl) {
   const u = new URL(rawUrl, "http://placeholder");
   let p = u.pathname;
@@ -61,10 +63,11 @@ function mapPath(rawUrl) {
 }
 
 const server = http.createServer((req, res) => {
-  if (!checkAuth(req)) return unauthorized(res);
   const mapped = mapPath(req.url || "/");
   if (!mapped) { res.writeHead(404); return res.end("not found"); }
   if (mapped.redirect) { res.writeHead(302, { Location: mapped.redirect }); return res.end(); }
+  // Keep PocketBase admin UI and superuser authentication off the public site.
+  if (isPrivateAdminPath(mapped.path)) { res.writeHead(404); return res.end("not found"); }
 
   const headers = { ...req.headers, host: TARGET.host };
   if (headers["x-pb-auth"] && !headers["authorization"]) {
@@ -79,9 +82,8 @@ const server = http.createServer((req, res) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
-  if (!checkAuth(req)) { socket.destroy(); return; }
   const mapped = mapPath(req.url || "/");
-  if (!mapped || mapped.redirect) { socket.destroy(); return; }
+  if (!mapped || mapped.redirect || isPrivateAdminPath(mapped.path)) { socket.destroy(); return; }
   const upstream = net.connect(Number(TARGET.port), TARGET.hostname, () => {
     const headers = { ...req.headers, host: TARGET.host };
     if (headers["x-pb-auth"] && !headers["authorization"]) headers["authorization"] = headers["x-pb-auth"];
@@ -98,5 +100,5 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[edge-proxy] :${PORT} prefix="${PREFIX || "/"}" -> ${TARGET.origin} basicAuth=${AUTH_USER ? "on" : "off"}`);
+  console.log(`[edge-proxy] :${PORT} prefix="${PREFIX || "/"}" -> ${TARGET.origin} (PB token forwarding only)`);
 });

@@ -1,10 +1,10 @@
 // labApi — 数据库实操营 / 真实服务器模式的后端代理接口封装
 // 全部走 getPocketBaseUrl() 相对前缀（__pb 代理），凭据明文只在提交瞬间经过，接口响应永不回传
-import { getPocketBaseUrl } from "@/lib/pb"
+import { getPocketBaseUrl, pbFetch } from "@/lib/pb"
 import type { DbConnectionView } from "@/content/dbTraining"
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${getPocketBaseUrl()}${path}`, {
+  const res = await pbFetch(`${getPocketBaseUrl()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
@@ -18,7 +18,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${getPocketBaseUrl()}${path}`)
+  const res = await pbFetch(`${getPocketBaseUrl()}${path}`)
   const data = (await res.json().catch(() => null)) as T & { error?: string; message?: string } | null
   if (!res.ok || !data) {
     const msg = data?.message || data?.error || `HTTP ${res.status}`
@@ -133,7 +133,7 @@ export const deployDocsApi = {
     post<DeployDoc>("/api/deploy_docs", doc),
   /** MCP 装的 update 路由是 PATCH */
   update: async (id: string, patch: Partial<Omit<DeployDoc, "id">>): Promise<DeployDoc> => {
-    const res = await fetch(`${getPocketBaseUrl()}/api/deploy_docs/${id}`, {
+    const res = await pbFetch(`${getPocketBaseUrl()}/api/deploy_docs/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
@@ -142,5 +142,5 @@ export const deployDocsApi = {
     if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`)
     return data as DeployDoc
   },
-  remove: (id: string) => fetch(`${getPocketBaseUrl()}/api/deploy_docs/${id}`, { method: "DELETE" }).then(() => ({ ok: true })),
+  remove: (id: string) => pbFetch(`${getPocketBaseUrl()}/api/deploy_docs/${id}`, { method: "DELETE" }).then(() => ({ ok: true })),
 }

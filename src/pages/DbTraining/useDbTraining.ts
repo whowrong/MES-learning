@@ -2,7 +2,7 @@
 // 严肃练习模块：评分依据 = 提交校验次数 / 提示 / 看答案
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPocketBaseUrl } from "@/lib/pb"
+import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import { loadTerms, type TermDef } from "@/content/loader"
 import {
   DB_TYPE_META,
@@ -144,7 +144,7 @@ export function useDbTraining() {
           loadDbIndex(),
           loadDbGroups(),
           loadTerms(),
-          fetch(progressApi()),
+          pbFetch(progressApi()),
           dblabApi.listConnections().catch(() => ({ ok: false, connections: [] })),
         ])
         if (cancelled) return
@@ -189,7 +189,7 @@ export function useDbTraining() {
       setDbHistory(nextHistory)
       setNewReviewTerms(wrongTerms)
       if (recordId) {
-        void fetch(`${progressApi()}/${recordId}`, {
+        void pbFetch(`${progressApi()}/${recordId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ review_queue: nextQueue, study_days: nextDays, db_history: nextHistory }),

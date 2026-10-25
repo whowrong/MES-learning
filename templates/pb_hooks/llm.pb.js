@@ -62,6 +62,16 @@ onBootstrap(function (e) {
   }
 })
 
+// Require a normal MES app account for custom routes. Superusers are intentionally
+// excluded from the browser API; collection admin remains local to PocketBase.
+function requireMesUser(e) {
+  if (!e.auth) throw new UnauthorizedError("Authentication required")
+  if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") {
+    throw new ForbiddenError("MES app account required")
+  }
+  return e.next()
+}
+
 routerAdd("GET", "/api/llm/models", function (e) {
   try {
     var allowedModels = []
@@ -82,7 +92,7 @@ routerAdd("GET", "/api/llm/models", function (e) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "llm_models_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/llm/chat", function (e) {
   function readKey(ev) {
@@ -258,7 +268,7 @@ routerAdd("POST", "/api/llm/chat", function (e) {
     try { $app.logger().error("llm_error: " + msg) } catch (_) {}
     return e.json(500, { error: "llm_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)
 
 routerAdd("POST", "/api/llm/poll", function (e) {
   try {
@@ -282,4 +292,4 @@ routerAdd("POST", "/api/llm/poll", function (e) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "poll_error", message: msg, fingerprint: msg.substring(0, 80) })
   }
-})
+}, requireMesUser)

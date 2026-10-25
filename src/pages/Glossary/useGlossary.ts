@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getPocketBaseUrl } from "@/lib/pb"
+import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import { loadTerms, type TermDef } from "@/content/loader"
 import { dueTerms, masteryLabel, nextDueLabel, rateTerm, type Rating, type ReviewState } from "@/game/srs"
 import { addStudyDay, computeStreak } from "@/game/streak"
@@ -49,7 +49,7 @@ export function useGlossary() {
         setSaveError("存档还没就绪，这次复习进度只在本地生效。")
         return
       }
-      void fetch(`${progressApi()}/${recordId}`, {
+      void pbFetch(`${progressApi()}/${recordId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ review_state: nextState, review_queue: nextQueue }),
@@ -66,7 +66,7 @@ export function useGlossary() {
     let cancelled = false
     async function bootstrap() {
       try {
-        const [termMap, listRes] = await Promise.all([loadTerms(), fetch(progressApi())])
+        const [termMap, listRes] = await Promise.all([loadTerms(), pbFetch(progressApi())])
         if (cancelled) return
         setTerms(termMap)
         if (listRes.ok) {
@@ -208,7 +208,7 @@ export function useGlossary() {
         const nextDays = addStudyDay(studyDays, Date.now())
         setStudyDays(nextDays)
         if (recordId) {
-          void fetch(`${progressApi()}/${recordId}`, {
+          void pbFetch(`${progressApi()}/${recordId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ study_days: nextDays }),
