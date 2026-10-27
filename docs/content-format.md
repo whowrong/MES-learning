@@ -352,7 +352,7 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
       "check": {
         "mode": "result",               // result=比对用户 SQL 执行结果 | state=用户改库后跑校验 SQL 验证库状态
         "sql": "SELECT COUNT(*) AS n FROM work_orders WHERE status IN ('Completed','已完成','完成')",
-        "expect": [[16]]                // 期望结果：二维数组（行×列），顺序敏感
+        "expect": [[16]]                // 期望结果：二维数组（行×列），默认行序敏感
       },
       "answerSql": "…",                 // 参考答案（result 模式必须与 check.sql 结果一致）
       "hint": "提示按钮文案（计次扣分）",
@@ -363,7 +363,7 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 }
 ```
 
-计分（`src/game/dbTraining.ts`）：任务分 = 第 1 次提交校验通过 100 / 第 2 次 80 / 第 3 次起或看答案 60，用过提示再 -10；组总分 = 任务平均，档位与全站一致。执行 SQL 不限次数不扣分（真实结果就是最好的反馈），只有「提交校验」计次。红线：check.expect 必须由 `node server/backfill-db-expect.mjs` 对着真实练习库算出回填（禁止手编数字）；result 模式 answerSql 执行结果必须与 check.sql 一致（脚本自动验证）；清洗组（clean）任务用 state 模式（db-c4 盘点查询除外）；term_ids 指向真实术语——`src/content/__tests__/db-quality.test.ts` 自动扫描把关。
+计分（`src/game/dbTraining.ts`）：任务分 = 第 1 次提交校验通过 100 / 第 2 次 80 / 第 3 次起或看答案 60，用过提示再 -10；组总分 = 任务平均，档位与全站一致。执行 SQL 不限次数不扣分（真实结果就是最好的反馈），只有「提交校验」计次。若题目规定排序但不规定相同排序键的先后，可在 `check` 中设置可选的 `unorderedTieColumns`（零基输出列索引，例如 `[2]`）：同键行可互换，组间排序和行内容仍严格校验。红线：check.expect 必须由 `node server/backfill-db-expect.mjs` 对着真实练习库算出回填（禁止手编数字）；result 模式 answerSql 执行结果必须与 check.sql 一致（脚本自动验证）；清洗组（clean）任务用 state 模式（db-c4 盘点查询除外）；term_ids 指向真实术语——`src/content/__tests__/db-quality.test.ts` 自动扫描把关。
 
 **内置练习库种子**：`server/seed-practice-db.mjs`（确定性数据：固定种子伪随机，重置后断言稳定可复现；八张表 items/bom/work_orders/work_reports/inventory/sales_orders/employees/equipment，故意埋一物两码、单位混乱、状态口径不一、账实不符、编码尾部空格等典型脏数据）。改动种子数据后**必须重跑 backfill 脚本**刷新全部 expect。生成的 .db 文件在仓库外（/workspace/pocketbase-bin/lab-data/），不进 GitHub。
 

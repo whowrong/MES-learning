@@ -65,6 +65,14 @@ describe("数据库实操营内容红线", () => {
           expect(Array.isArray(task.check.expect), `${at} expect 必须是数组`).toBe(true)
           expect(task.check.expect.length, at).toBeGreaterThan(0)
           for (const row of task.check.expect) expect(Array.isArray(row), `${at} expect 行必须是数组`).toBe(true)
+          if (task.check.unorderedTieColumns !== undefined) {
+            expect(task.check.mode, `${at} 并列行配置只适用于结果题`).toBe("result")
+            expect(task.check.unorderedTieColumns.length, `${at} 并列键至少一列`).toBeGreaterThan(0)
+            for (const column of task.check.unorderedTieColumns) {
+              expect(Number.isInteger(column) && column >= 0, `${at} 并列键须为非负整数列索引`).toBe(true)
+              expect(task.check.expect.every((row) => column < row.length), `${at} 并列键超出结果列范围`).toBe(true)
+            }
+          }
           expect(task.answerSql.length, at).toBeGreaterThan(5)
           expect(task.hint.length, at).toBeGreaterThan(5)
           expect(task.explanation.length, at).toBeGreaterThan(20)

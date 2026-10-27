@@ -60,6 +60,14 @@ describe("judgeTaskResult 结果集判定", () => {
     const v = judgeTaskResult([["WO-2", 5, 0], ["WO-1", 10, 2]], expectRows)
     expect(v.passed).toBe(false)
   })
+
+  it("仅允许相同排序键的并列行互换，组间排序仍严格", () => {
+    const expected = [["钱秀英", "装配班", 10, 91], ["吴秀英", "装配班", 10, 100], ["韩秀英", "电气班", 8, 52]]
+    const tiedRowsReversed = [["吴秀英", "装配班", 10, 100], ["钱秀英", "装配班", 10, 91], ["韩秀英", "电气班", 8, 52]]
+    expect(judgeTaskResult(tiedRowsReversed, expected, [2]).passed).toBe(true)
+    expect(judgeTaskResult([expected[2], expected[0], expected[1]], expected, [2]).passed).toBe(false)
+    expect(judgeTaskResult([["钱秀英", "装配班", 10, 999], expected[1], expected[2]], expected, [2]).passed).toBe(false)
+  })
 })
 
 describe("计分", () => {

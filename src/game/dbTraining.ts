@@ -18,8 +18,15 @@ export interface JudgeVerdict {
   diffHint: string
 }
 
-/** 结果集对比：行列顺序敏感（任务目标里明确规定了排序），单元格归一化后比较 */
-export function judgeTaskResult(userRows: unknown[][], expect: unknown[][]): JudgeVerdict {
+/**
+ * 结果集对比：默认按行列顺序严格比较。题目声明 unorderedTieColumns 时，
+ * 仅允许排序键完全相同的并列行互换；不同排序键的顺序仍必须匹配期望。
+ */
+export function judgeTaskResult(
+  userRows: unknown[][],
+  expect: unknown[][],
+  unorderedTieColumns: number[] = [],
+): JudgeVerdict {
   if (!Array.isArray(userRows)) return { passed: false, diffHint: "没有可对比的执行结果" }
   if (userRows.length !== expect.length) {
     return {
@@ -36,6 +43,47 @@ export function judgeTaskResult(userRows: unknown[][], expect: unknown[][]): Jud
         diffHint: `第 ${r + 1} 行列数不对：你输出 ${uRow.length} 列，期望 ${eRow.length} 列。对照任务目标检查 SELECT 的列。`,
       }
     }
+  }
+
+  if (unorderedTieColumns.length > 0) {
+    if (unorderedTieColumns.some((c) => !Number.isInteger(c) || c < 0 || expect.some((row) => c >= row.length))) {
+      return { passed: false, diffHint: "结果校验配置错误：并列排序列超出输出列范围。" }
+    }
+    type RowGroup = { key: string; rows: string[] }
+    const groupRows = (rows: unknown[][]): RowGroup[] => {
+      const groups: RowGroup[] = []
+      for (const row of rows) {
+        const key = JSON.stringify(unorderedTieColumns.map((c) => normalizeCell(row[c])))
+        const normalizedRow = JSON.stringify(row.map(normalizeCell))
+        const last = groups[groups.length - 1]
+        if (last?.key === key) last.rows.push(normalizedRow)
+        else groups.push({ key, rows: [normalizedRow] })
+      }
+      return groups
+    }
+    const actualGroups = groupRows(userRows)
+    const expectedGroups = groupRows(expect)
+    if (actualGroups.length !== expectedGroups.length) {
+      return { passed: false, diffHint: "结果排序分组不一致；检查排序方向以及是否有行落在错误的排序组。" }
+    }
+    for (let g = 0; g < expectedGroups.length; g++) {
+      const actual = actualGroups[g]
+      const expectedGroup = expectedGroups[g]
+      if (actual.key !== expectedGroup.key) {
+        return { passed: false, diffHint: `第 ${g + 1} 个排序组不一致；检查排序方向或结果口径。` }
+      }
+      const actualRows = [...actual.rows].sort()
+      const expectedRows = [...expectedGroup.rows].sort()
+      if (actualRows.length !== expectedRows.length || actualRows.some((row, i) => row !== expectedRows[i])) {
+        return { passed: false, diffHint: `排序键相同的第 ${g + 1} 组行内容不一致；检查输出列和聚合口径。` }
+      }
+    }
+    return { passed: true, diffHint: "" }
+  }
+
+  for (let r = 0; r < expect.length; r++) {
+    const uRow = userRows[r] ?? []
+    const eRow = expect[r]
     for (let c = 0; c < eRow.length; c++) {
       const u = normalizeCell(uRow[c])
       const e = normalizeCell(eRow[c])

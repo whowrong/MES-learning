@@ -103,6 +103,9 @@
             6,
             69
           ]
+        ],
+        "unorderedTieColumns": [
+          2
         ]
       },
       "answerSql": "SELECT e.emp_name, e.team, COUNT(r.report_id) AS n, SUM(r.qty_ok) AS ok FROM work_reports r JOIN employees e ON r.employee_no = e.emp_no GROUP BY r.employee_no ORDER BY n DESC LIMIT 5",

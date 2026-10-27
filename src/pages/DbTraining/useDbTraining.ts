@@ -302,7 +302,7 @@ export function useDbTraining() {
         setExecError("先执行你的 SQL，拿到结果后再提交校验。")
         return
       }
-      const v = judgeTaskResult((execResult.rows ?? []) as unknown[][], task.check.expect)
+      const v = judgeTaskResult((execResult.rows ?? []) as unknown[][], task.check.expect, task.check.unorderedTieColumns)
       const attempts = checkAttempts + 1
       setCheckAttempts(attempts)
       setVerdict(v)
@@ -319,7 +319,7 @@ export function useDbTraining() {
         setExecError(r.error || "校验执行失败")
         return
       }
-      const v = judgeTaskResult((r.rows ?? []) as unknown[][], task.check.expect)
+      const v = judgeTaskResult((r.rows ?? []) as unknown[][], task.check.expect, task.check.unorderedTieColumns)
       const attempts = checkAttempts + 1
       setCheckAttempts(attempts)
       setVerdict(v)

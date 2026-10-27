@@ -11,6 +11,8 @@ export interface DbTaskCheck {
   mode: "result" | "state"
   sql: string
   expect: unknown[][]
+  /** 只对排序键相同的行忽略行序（零基输出列索引），其余排序仍严格校验 */
+  unorderedTieColumns?: number[]
 }
 
 export interface DbTask {
@@ -86,6 +88,15 @@ function validateTask(task: DbTask, at: string): void {
   if (!Array.isArray(task.check.expect) || task.check.expect.length === 0) throw new Error(`${at} 缺期望结果 check.expect`)
   for (const row of task.check.expect) {
     if (!Array.isArray(row)) throw new Error(`${at} check.expect 必须是二维数组`)
+  }
+  if (task.check.unorderedTieColumns !== undefined) {
+    const columns = task.check.unorderedTieColumns
+    if (task.check.mode !== "result" || !Array.isArray(columns) || columns.length === 0) {
+      throw new Error(`${at} unorderedTieColumns 仅适用于 result 模式且必须非空`)
+    }
+    if (columns.some((c) => !Number.isInteger(c) || c < 0 || task.check.expect.some((row) => c >= row.length))) {
+      throw new Error(`${at} unorderedTieColumns 必须是有效的零基输出列索引`)
+    }
   }
   if (!task.answerSql) throw new Error(`${at} 缺参考答案 answerSql`)
   if (!task.hint || task.hint.length < 5) throw new Error(`${at} 缺提示 hint`)
