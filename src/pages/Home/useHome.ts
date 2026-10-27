@@ -11,6 +11,7 @@ import {
   type ProgressRecord,
 } from "@/content/chapters"
 import { computeStreak } from "@/game/streak"
+import { getContinueChapter } from "@/game/continueChapter"
 
 function progressApi(): string {
   return `${getPocketBaseUrl()}/api/player_progress`
@@ -132,10 +133,9 @@ export function useHome() {
   }, [chapterState, navigate])
 
   const continueProgress = useCallback(() => {
-    const stateOf = (ch: ChapterDef) => chapterState[String(ch.id)] ?? (ch.playable ? "open" : "locked")
-    // 优先：已开放且关卡内容可玩的章节；其次任意未锁定章节（会弹锁定/施工提示）
-    const firstPlayable = CHAPTERS.find((ch) => ch.playable && stateOf(ch) !== "locked")
-    openChapter(firstPlayable ?? CHAPTERS.find((ch) => stateOf(ch) !== "locked") ?? CHAPTERS[0])
+    // 继续到最近尚未通关的可玩章节；全部通关后回到最后一章。
+    const chapter = getContinueChapter(CHAPTERS, chapterState)
+    if (chapter) openChapter(chapter)
   }, [chapterState, openChapter])
 
   const openGlossary = useCallback(() => {
