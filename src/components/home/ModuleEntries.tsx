@@ -1,4 +1,4 @@
-import { BookOpen, Factory, FlaskConical, Video, Server, Database, ArrowRight } from "lucide-react"
+import { BookOpen, Factory, FlaskConical, Video, Server, Database, Target, ArrowRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { SpotlightCard } from "@/components/bits/SpotlightCard"
 
@@ -8,18 +8,20 @@ interface ModuleEntriesProps {
   factoryCount: number
   opsCount: number
   dbCount: number
+  careerCount: number
   onGlossary: () => void
   onInterview: () => void
   onFactoryTypes: () => void
   onOpsTraining: () => void
   onDbTraining: () => void
+  onCareerPrep: () => void
   onSandbox: () => void
 }
 
 const CARD_ENTER =
   "animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
 
-export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onSandbox }: ModuleEntriesProps) {
+export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, careerCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onCareerPrep, onSandbox }: ModuleEntriesProps) {
   return (
     <section className="py-12">
       <div className="mx-auto max-w-6xl px-6">
@@ -182,6 +184,41 @@ export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCo
                 </span>
                 <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
                   开始实操
+                  <ArrowRight className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                </span>
+              </span>
+            </button>
+          </SpotlightCard>
+          <SpotlightCard
+            className={`group h-full rounded-2xl bg-card shadow-md [animation-delay:400ms] ${CARD_ENTER}`}
+          >
+            <button
+              type="button"
+              onClick={onCareerPrep}
+              className="relative flex h-full w-full items-start gap-4 p-6 text-left focus-visible:shadow-[var(--focus-ring)]"
+            >
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary transition-transform duration-300 group-hover:scale-110">
+                <Target className="h-6 w-6" />
+              </span>
+              <span className="flex h-full flex-col">
+                <span className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-foreground">实习准备营</span>
+                  <Badge variant="outline" className="rounded-full bg-primary/10 text-primary">
+                    方向 1 / 4
+                  </Badge>
+                  {careerCount > 0 && (
+                    <Badge variant="outline" className="rounded-full text-muted-foreground">
+                      已练 {careerCount} 场
+                    </Badge>
+                  )}
+                </span>
+                <span className="mt-1 text-sm leading-6 text-muted-foreground">
+                  两条求职方向的知识点卡片与组卷测验：ERP/MES/WMS 边界、实施九步与数据迁移、
+                  工业协议与网关、IO 点表与联机试运行，外加 SQL、Linux 与文档底座。
+                  答错的术语自动进复习队列。
+                </span>
+                <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
+                  开始准备
                   <ArrowRight className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </span>
               </span>

@@ -32,6 +32,7 @@ function normalizeRecord(raw: Partial<ProgressRecord> & { id?: string }): Progre
     factory_history: Array.isArray(raw.factory_history) ? raw.factory_history : [],
     ops_history: Array.isArray(raw.ops_history) ? raw.ops_history : [],
     db_history: Array.isArray(raw.db_history) ? raw.db_history : [],
+    career_history: Array.isArray(raw.career_history) ? raw.career_history : [],
     last_route: raw.last_route ?? "/home",
   }
   return normalized
@@ -50,6 +51,7 @@ export function useHome() {
   const [factoryCount, setFactoryCount] = useState(0)
   const [opsCount, setOpsCount] = useState(0)
   const [dbCount, setDbCount] = useState(0)
+  const [careerCount, setCareerCount] = useState(0)
   // 锁定章节提示弹窗（点未开放章节卡时）
   const [lockedChapter, setLockedChapter] = useState<ChapterDef | null>(null)
   // 施工中占位弹窗（目标页面尚未上线时，避免跳白屏）
@@ -64,6 +66,7 @@ export function useHome() {
     setFactoryCount((rec.factory_history ?? []).length)
     setOpsCount((rec.ops_history ?? []).length)
     setDbCount((rec.db_history ?? []).length)
+    setCareerCount((rec.career_history ?? []).length)
     if (rec.id) setRecordId(rec.id)
   }, [])
 
@@ -158,6 +161,10 @@ export function useHome() {
     navigate("/db-training")
   }, [navigate])
 
+  const openCareerPrep = useCallback(() => {
+    navigate("/career-prep")
+  }, [navigate])
+
   const openDebug = useCallback(() => {
     navigate("/debug")
   }, [navigate])
@@ -205,6 +212,8 @@ export function useHome() {
     openFactoryTypes,
     openOpsTraining,
     openDbTraining,
+    openCareerPrep,
+    careerCount,
     openDebug,
     openSandbox,
     closeDialogs,

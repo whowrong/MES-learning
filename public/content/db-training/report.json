@@ -194,6 +194,54 @@
         "sales_order",
         "work_order"
       ]
+    },
+    {
+      "id": "db-r5",
+      "title": "产线不良率排名：不良率相同时按产线号定序",
+      "difficulty": "进阶",
+      "minutes": 12,
+      "scene": "月度质量例会要按产线排不良率，名次并列时你希望报表顺序稳定：同一个不良率的两条产线，不能因为数据库返回顺序不同而在两次导出里换位置。",
+      "goal": "按产线统计报废数、总产出数与不良率，不良率降序；不良率相同的产线按产线号升序，保证结果可复现。",
+      "starterSql": "-- 分子分母都要来自报工明细，产线要 join 工单表才有\nSELECT w.line_code, SUM(r.qty_scrap) AS scrap_qty,\n       SUM(r.qty_ok) + SUM(r.qty_scrap) AS total_qty,\n       ROUND(1.0 * SUM(r.qty_scrap) / (SUM(r.qty_ok) + SUM(r.qty_scrap)), 4) AS scrap_rate\nFROM work_reports r\nJOIN work_orders w ON w.wo_no = r.wo_no\nGROUP BY w.line_code\nORDER BY scrap_rate DESC, w.line_code ASC;",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT w.line_code, SUM(r.qty_scrap) AS scrap_qty, SUM(r.qty_ok) + SUM(r.qty_scrap) AS total_qty, ROUND(1.0 * SUM(r.qty_scrap) / (SUM(r.qty_ok) + SUM(r.qty_scrap)), 4) AS scrap_rate FROM work_reports r JOIN work_orders w ON w.wo_no = r.wo_no GROUP BY w.line_code ORDER BY scrap_rate DESC, w.line_code ASC",
+        "expect": [
+          [
+            "L2",
+            27,
+            165,
+            0.1636
+          ],
+          [
+            "L1",
+            8,
+            60,
+            0.1333
+          ],
+          [
+            "L4",
+            37,
+            497,
+            0.0744
+          ],
+          [
+            "L3",
+            16,
+            299,
+            0.0535
+          ]
+        ]
+      },
+      "answerSql": "SELECT w.line_code, SUM(r.qty_scrap) AS scrap_qty, SUM(r.qty_ok) + SUM(r.qty_scrap) AS total_qty, ROUND(1.0 * SUM(r.qty_scrap) / (SUM(r.qty_ok) + SUM(r.qty_scrap)), 4) AS scrap_rate FROM work_reports r JOIN work_orders w ON w.wo_no = r.wo_no GROUP BY w.line_code ORDER BY scrap_rate DESC, w.line_code ASC",
+      "hint": "排序键写两个：不良率降序 + 产线号升序，并列行才有确定顺序",
+      "explanation": "并列排序是报表最容易被忽略的细节：只写 ORDER BY scrap_rate DESC 时，两条不良率相同的产线谁先谁后由数据库自行决定，同一份数据两次导出的行序可能不同，客户比对时就会怀疑数据被改过。稳定的做法是补一个唯一的次级排序键（产线号、主键、工单号）。另外 1.0 * 分子 这种写法是为了避免整数除法把比率算成 0，ROUND 到 4 位再参与排序，可以避免浮点尾差把本该并列的两行排成不同名次。",
+      "term_ids": [
+        "yield_rate",
+        "scrap",
+        "sql_join",
+        "slow_query"
+      ]
     }
   ]
 }

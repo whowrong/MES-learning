@@ -114,6 +114,34 @@
         "inventory_accuracy",
         "data_quality"
       ]
+    },
+    {
+      "id": "db-c5",
+      "title": "一物两码合并：带尾随空格的重复物料码归并到标准码",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "scene": "上线前的数据迁移演练：items 里同一张 Q235 钢板有两条记录，一条编码是 'STL-Q235-10'，另一条尾部多了一个空格成了 'STL-Q235-10 '。系统里看起来是两种物料，库存与 BOM 却引用了不同写法——迁移到新系统前必须先归并。",
+      "goal": "把引用统一到标准编码 'STL-Q235-10'（去掉尾随空格），然后删除带空格的重复物料记录。最后确认 items 与 inventory 里都不再有带空白的编码。",
+      "starterSql": "-- 归并三步：先改引用，再删重复主数据，最后验干净\nSELECT item_code FROM items WHERE item_code <> TRIM(item_code);\nUPDATE inventory SET item_code = 'STL-Q235-10' WHERE item_code = 'STL-Q235-10 ';\n-- ...",
+      "check": {
+        "mode": "state",
+        "sql": "SELECT (SELECT COUNT(*) FROM items WHERE item_code <> TRIM(item_code)) AS dirty_items, (SELECT COUNT(*) FROM inventory WHERE item_code <> TRIM(item_code)) AS dirty_inventory",
+        "expect": [
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "answerSql": "UPDATE inventory SET item_code = 'STL-Q235-10' WHERE item_code = 'STL-Q235-10 '; UPDATE bom SET parent_code = 'STL-Q235-10' WHERE parent_code = 'STL-Q235-10 '; UPDATE bom SET child_code = 'STL-Q235-10' WHERE child_code = 'STL-Q235-10 '; DELETE FROM items WHERE item_code = 'STL-Q235-10 '",
+      "hint": "顺序不能反：先 UPDATE 引用表（inventory、bom 的 parent_code/child_code），再 DELETE 重复主数据；反过来会先丢引用",
+      "explanation": "一物两码的标准处置顺序是「改引用 → 删重复主数据 → 验干净」。先删主数据会让引用变成悬挂外键，后续报表按编码关联时静默丢行。先改引用还要注意覆盖所有引用表：只改 inventory、漏掉 bom，就会出现 BOM 挂着一条已不存在的子物料，倒冲扣料时直接报错。验证要用 TRIM 比对而不是肉眼扫，这样以后做成定时校验脚本也能复用。迁移前记得保留一份「旧编码 → 新编码」映射表，出问题时能反查。",
+      "term_ids": [
+        "one_item_two_codes",
+        "data_cleaning",
+        "data_migration",
+        "master_data"
+      ]
     }
   ]
 }

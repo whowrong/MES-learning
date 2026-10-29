@@ -204,6 +204,174 @@
         "reporting",
         "data_quality"
       ]
+    },
+    {
+      "id": "db-j5",
+      "title": "三表关联：工单 × 物料 × 报工，算每张工单的合格与报废",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "scene": "实施顾问要交一份「工单级产出汇总」给客户：每张工单做了什么产品、合格多少、报废多少。工单表只有产品和数量，报工表才有实际数字，物料名称在 items 里——三张表得关联起来。",
+      "goal": "输出工单号、产品名称、合格总数、报废总数，按工单号升序排列。",
+      "starterSql": "-- 三表关联的骨架：work_orders → items 取名称 → work_reports 取实际数\nSELECT w.wo_no, i.item_name, SUM(r.qty_ok) AS ok_qty, SUM(r.qty_scrap) AS scrap_qty\nFROM work_orders w\nJOIN items i ON i.item_code = w.item_code\nJOIN work_reports r ON r.wo_no = w.wo_no\nGROUP BY w.wo_no, i.item_name\nORDER BY w.wo_no;",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT w.wo_no, i.item_name, SUM(r.qty_ok) AS ok_qty, SUM(r.qty_scrap) AS scrap_qty FROM work_orders w JOIN items i ON i.item_code = w.item_code JOIN work_reports r ON r.wo_no = w.wo_no GROUP BY w.wo_no, i.item_name ORDER BY w.wo_no ASC",
+        "expect": [
+          [
+            "WO20261001",
+            "电气控制柜",
+            31,
+            7
+          ],
+          [
+            "WO20261002",
+            "行星搅拌机",
+            46,
+            0
+          ],
+          [
+            "WO20261003",
+            "行星搅拌机",
+            56,
+            11
+          ],
+          [
+            "WO20261004",
+            "电气控制柜",
+            46,
+            0
+          ],
+          [
+            "WO20261005",
+            "气动隔膜泵",
+            17,
+            1
+          ],
+          [
+            "WO20261006",
+            "气动隔膜泵",
+            50,
+            15
+          ],
+          [
+            "WO20261007",
+            "气动隔膜泵",
+            53,
+            1
+          ],
+          [
+            "WO20261008",
+            "行星搅拌机",
+            63,
+            1
+          ],
+          [
+            "WO20261009",
+            "传动轴",
+            21,
+            3
+          ],
+          [
+            "WO20261010",
+            "电气控制柜",
+            16,
+            0
+          ],
+          [
+            "WO20261011",
+            "皮带输送机",
+            31,
+            11
+          ],
+          [
+            "WO20261012",
+            "传动轴",
+            17,
+            0
+          ],
+          [
+            "WO20261013",
+            "行星搅拌机",
+            27,
+            1
+          ],
+          [
+            "WO20261014",
+            "机架底座",
+            78,
+            8
+          ],
+          [
+            "WO20261015",
+            "行星搅拌机",
+            17,
+            5
+          ],
+          [
+            "WO20261016",
+            "泵体壳体",
+            69,
+            1
+          ],
+          [
+            "WO20261017",
+            "电气控制柜",
+            18,
+            1
+          ],
+          [
+            "WO20261018",
+            "行星搅拌机",
+            31,
+            5
+          ],
+          [
+            "WO20261019",
+            "电气控制柜",
+            18,
+            2
+          ],
+          [
+            "WO20261020",
+            "电气控制柜",
+            30,
+            0
+          ],
+          [
+            "WO20261021",
+            "机架底座",
+            64,
+            2
+          ],
+          [
+            "WO20261022",
+            "电气控制柜",
+            75,
+            9
+          ],
+          [
+            "WO20261023",
+            "皮带输送机",
+            5,
+            0
+          ],
+          [
+            "WO20261024",
+            "传动轴",
+            54,
+            4
+          ]
+        ]
+      },
+      "answerSql": "SELECT w.wo_no, i.item_name, SUM(r.qty_ok) AS ok_qty, SUM(r.qty_scrap) AS scrap_qty FROM work_orders w JOIN items i ON i.item_code = w.item_code JOIN work_reports r ON r.wo_no = w.wo_no GROUP BY w.wo_no, i.item_name ORDER BY w.wo_no ASC",
+      "hint": "GROUP BY 要把工单号和物料名都带上（SQLite 允许只按工单号，但换到 MySQL/PG 严格模式会报错）",
+      "explanation": "关联的三张表各解决一个问题：work_orders 给工单与产品编码，items 补产品名称，work_reports 给实际的合格与报废数。三个注意点：一是 JOIN 而不是 LEFT JOIN，因为没有报工的工单在这一版汇总里不参与（要参与就换 LEFT JOIN 并用 COALESCE 补 0，口径要写清楚）；二是 GROUP BY 带上全部非聚合列，SQLite 宽容、MySQL 与 PostgreSQL 的严格模式会直接报错，迁移到客户环境最常翻车的地方之一；三是聚合用 SUM 而不是逐行输出，明细行数会被放大，报表行数对不上数据就来自这里。",
+      "term_ids": [
+        "work_order",
+        "reporting",
+        "sql_join",
+        "scrap"
+      ]
     }
   ]
 }

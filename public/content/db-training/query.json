@@ -137,6 +137,53 @@
         "reporting",
         "shift"
       ]
+    },
+    {
+      "id": "db-q5",
+      "title": "工单状态口径体检：同一件事写了几种状态",
+      "difficulty": "入门",
+      "minutes": 6,
+      "scene": "运维把工单状态导给你做报表：Closed、Completed、Completed 中文写法「完成」「已完成」、InProgress、Released 全都出现。老板问「完成的有多少单」，你要先说清楚口径——'Closed' 到底算不算完成？",
+      "goal": "统计每个状态下各有多少张工单，按状态名升序输出，先把口径问题摆到台面上再谈口径怎么定。",
+      "starterSql": "-- 先看有哪些状态、各有多少张，别急着写过滤条件\nSELECT status, COUNT(*) AS cnt FROM work_orders GROUP BY status;",
+      "check": {
+        "mode": "result",
+        "sql": "SELECT status, COUNT(*) AS cnt FROM work_orders GROUP BY status ORDER BY status ASC",
+        "expect": [
+          [
+            "Closed",
+            4
+          ],
+          [
+            "Completed",
+            6
+          ],
+          [
+            "InProgress",
+            6
+          ],
+          [
+            "Released",
+            6
+          ],
+          [
+            "完成",
+            5
+          ],
+          [
+            "已完成",
+            5
+          ]
+        ]
+      },
+      "answerSql": "SELECT status, COUNT(*) AS cnt FROM work_orders GROUP BY status ORDER BY status ASC",
+      "hint": "GROUP BY status 之后再 ORDER BY status；口径不统一的问题先在报表上暴露出来",
+      "explanation": "同一业务含义存在多套写法（英文状态与中文状态混用、Completed 与 Closed 并存），是脏数据的典型形态。做报表的第一步不是写过滤条件，而是先把口径体检结果摆出来，让业务方确认「哪几个状态算完成」。确认后再固化成视图或字典，后续所有报表都引用它，而不是每个报表各写一遍 WHERE status IN (...)，那样口径迟早会漂。",
+      "term_ids": [
+        "master_data",
+        "data_quality",
+        "work_order"
+      ]
     }
   ]
 }

@@ -312,6 +312,270 @@
       "definition": "账实相符程度的量化指标：库存准确率 = 账实相符的库存记录数 ÷ 库存记录总数 × 100%（也有按金额或按盘点差异量加权的口径）。它是 MES/WMS 项目最常用的验收指标之一，行业里上线验收常要求 ≥95%。准确率低的根因几乎都在单据流：出入库不及时录、报工漏报、调拨不走单。",
       "example": "盘点 200 条库存记录，12 条账实不符，库存准确率 = 188/200 = 94%，未达 95% 验收线——先查这 12 条料最近的单据流水再定整改方案。",
       "knowledge_id": "K8-3"
+    },
+    {
+      "id": "erp",
+      "term": "企业资源计划 ERP",
+      "dialect": "厂里的总管账先生",
+      "definition": "管订单、采购、库存、成本与财务的系统，粒度是「经营与计划」，不碰车间怎么干；它把销售订单拆成生产订单和采购申请下发给 MES。",
+      "example": "销售接了 500 把椅子的订单，ERP 算出要买多少钢管、排进哪个月的产能，再把生产订单推给 MES。",
+      "knowledge_id": "K9-1"
+    },
+    {
+      "id": "wms",
+      "term": "仓储管理系统 WMS",
+      "dialect": "仓库的管家",
+      "definition": "管库位分配、收货发货、盘点、拣选与批次追溯的系统，与 MES 的入库、出库、领退料指令对接，负责「东西放在哪、还在不在」。",
+      "example": "MES 完工入库，WMS 给出实际库位并回写；盘点差异从 WMS 查起，别在 MES 里猜。",
+      "knowledge_id": "K9-2"
+    },
+    {
+      "id": "order_to_ship_flow",
+      "term": "订单到发货全流程",
+      "dialect": "一笔生意走完全程",
+      "definition": "销售订单→评审→生产订单→计划排产→工单下达→报工→检验→入库→发货开票的完整链路，实施时必须逐环节确认责任系统与数据交接点。",
+      "example": "交期告急时，能立刻说清卡在哪个环节、该找哪个系统，是实施顾问最值钱的能力之一。",
+      "knowledge_id": "K9-3"
+    },
+    {
+      "id": "data_migration",
+      "term": "数据迁移",
+      "dialect": "把老家的家当搬进新系统",
+      "definition": "按字段映射规则把旧系统或 Excel 的数据清洗转换后导入新系统，老数据质量直接决定上线后系统能不能用。",
+      "example": "老系统里的物料编码是 6 位，新系统要 8 位，迁移时统一补零并做唯一性校验。",
+      "knowledge_id": "K9-4"
+    },
+    {
+      "id": "data_cleaning",
+      "term": "数据清洗",
+      "dialect": "先洗干净再上桌",
+      "definition": "对主数据做去重、编码统一、字段对齐、格式规范与逻辑校验，把脏数据挡在正式库之外。",
+      "example": "同一台设备在三个部门有三个名字，合并成一个标准编码并保留映射表。",
+      "knowledge_id": "K9-5"
+    },
+    {
+      "id": "data_owner",
+      "term": "数据责任人",
+      "dialect": "每份数据有主人",
+      "definition": "为某类主数据指定维护与审批的责任部门或个人，解决「出了错没人认」的典型实施困境。",
+      "example": "物料描述由工艺负责，成本价由财务负责，变更要走各自审批。",
+      "knowledge_id": "K9-6"
+    },
+    {
+      "id": "blueprint",
+      "term": "实施蓝图",
+      "dialect": "先画图纸再动工",
+      "definition": "需求调研后输出的业务蓝图与解决方案设计，规定流程怎么走、数据怎么落、边界到哪，是配置开发与验收的共同依据。",
+      "example": "蓝图里写清订单从接收到发货经过哪几个环节、每个环节谁在哪个系统里操作。",
+      "knowledge_id": "K9-7"
+    },
+    {
+      "id": "go_live",
+      "term": "上线切换",
+      "dialect": "换班交接",
+      "definition": "从旧系统或纯手工并行切换到新系统的动作，包含数据截止点、切换窗口、回滚方案与应急手册。",
+      "example": "上线日 18:00 停旧系统录入，22:00 前完成首日补录与对账。",
+      "knowledge_id": "K9-8"
+    },
+    {
+      "id": "acceptance",
+      "term": "上线验收",
+      "dialect": "验收交作业",
+      "definition": "依据合同与蓝图逐条核对功能、数据、性能与培训记录，双方签字确认项目达到约定目标。",
+      "example": "验收单里写明试运行 30 天、月度报表与 ERP 对账无差异。",
+      "knowledge_id": "K9-9"
+    },
+    {
+      "id": "requirement_survey",
+      "term": "需求调研记录",
+      "dialect": "把口头需求钉在纸上",
+      "definition": "记录调研对象、原话、痛点、确认结论与待决事项，防止上线后各部门各说各话。",
+      "example": "车间希望按班次汇总产量，确认后写进蓝图并注明确认人。",
+      "knowledge_id": "K9-10"
+    },
+    {
+      "id": "oper_manual",
+      "term": "操作手册",
+      "dialect": "给操作员的手电筒",
+      "definition": "面向具体岗位的图文操作说明，写清在哪点、点什么、常见错误怎么补救。",
+      "example": "报工手册：扫码 → 选工单 → 输合格数 → 提交，附错误提示截图。",
+      "knowledge_id": "K9-11"
+    },
+    {
+      "id": "training_ppt",
+      "term": "培训课件",
+      "dialect": "给操作员上课的 PPT",
+      "definition": "分岗位分场景的操作培训材料，通常配演练与考核记录，作为培训完成率的凭据。",
+      "example": "班组长课件包含派工演示、报工审核演练和考核题。",
+      "knowledge_id": "K9-12"
+    },
+    {
+      "id": "barcode_report",
+      "term": "扫码报工",
+      "dialect": "对着扫一下就记一笔",
+      "definition": "扫工单或物料条码报工，把产量、工序、人员与时间绑定到批次，避免纸单转录造成的失真。",
+      "example": "操作员扫工单条码，系统自动带出产品与工序，只需输入数量。",
+      "knowledge_id": "K9-13"
+    },
+    {
+      "id": "modbus",
+      "term": "Modbus 协议",
+      "dialect": "现场最通用的老电报",
+      "definition": "基于 TCP 或串口的请求-应答寄存器读写协议，结构极简、不描述数据结构，适合读仪表和简单设备。",
+      "example": "网关用 Modbus RTU 读 03 号站保持寄存器里的温度值。",
+      "knowledge_id": "K10-1"
+    },
+    {
+      "id": "s7_protocol",
+      "term": "西门子 S7 通信",
+      "dialect": "西门子 PLC 的自家话",
+      "definition": "面向西门子 PLC 的私有通信协议，可直接读写 DB 数据块与存储区，字段级访问方便但强绑定厂商。",
+      "example": "网关用 S7 协议读 DB100 里的节拍与报警位。",
+      "knowledge_id": "K10-2"
+    },
+    {
+      "id": "opc_ua",
+      "term": "OPC UA",
+      "dialect": "跨厂商的通用会话",
+      "definition": "跨平台工业通信标准，自带信息模型、订阅机制、加密签名与权限体系，适合 MES、上位机与多品牌设备对接。",
+      "example": "MES 通过 OPC UA 订阅设备的报警与质量数据，字段带类型与语义。",
+      "knowledge_id": "K10-3"
+    },
+    {
+      "id": "profinet",
+      "term": "PROFINET",
+      "dialect": "产线上的实时以太网",
+      "definition": "基于工业以太网的实时通信标准，支持 IO 设备与运动控制，用于设备级高速数据交换。",
+      "example": "机械臂通过 PROFINET 实时传送工艺参数与报警位。",
+      "knowledge_id": "K10-4"
+    },
+    {
+      "id": "ethernet_ip",
+      "term": "EtherNet/IP",
+      "dialect": "另一种实时以太网",
+      "definition": "通用工业以太网协议，常见于罗克韦尔体系与设备联网场景。",
+      "example": "扫码器通过 EtherNet/IP 接入产线网络并上报读码结果。",
+      "knowledge_id": "K10-5"
+    },
+    {
+      "id": "edge_gateway",
+      "term": "工业网关",
+      "dialect": "现场的翻译官",
+      "definition": "部署在产线侧的边缘采集设备，负责协议转换、点位映射、数据缓存与断网续传，把 PLC 数据送进 MES。",
+      "example": "网关把 Modbus 寄存器映射成 MES 点位表里的标签名。",
+      "knowledge_id": "K10-6"
+    },
+    {
+      "id": "io_point",
+      "term": "IO 点表",
+      "dialect": "点和线的接线清单",
+      "definition": "列出信号名、地址、类型、量程与含义的对照表，是 PLC 程序与上位机采集共同的契约。",
+      "example": "IO 点表：DI_启动 = I0.0，DO_红灯 = Q0.1，量程 0/1。",
+      "knowledge_id": "K10-7"
+    },
+    {
+      "id": "plc",
+      "term": "可编程逻辑控制器 PLC",
+      "dialect": "会按程序开关的继电器箱",
+      "definition": "执行顺序控制与逻辑联锁的工业控制器，程序可下载修改，现场调试以 IO 点表与梯形图为准。",
+      "example": "PLC 程序里安全门未关闭就锁死启动信号。",
+      "knowledge_id": "K10-8"
+    },
+    {
+      "id": "plc_commission",
+      "term": "程序下载与联调",
+      "dialect": "把程序灌进控制器再逐点验证",
+      "definition": "把 PLC 工程下载到设备后，与传感器、执行器、安全回路一起做联机试运行，逐点核对信号与实际动作。",
+      "example": "下载完成后逐点确认 DI/DO 状态与现场设备一致，再空载试跑。",
+      "knowledge_id": "K10-9"
+    },
+    {
+      "id": "vision_inspection",
+      "term": "视觉检测",
+      "dialect": "机器的眼睛",
+      "definition": "用工业相机成像加算法判定尺寸、缺陷与装配到位情况，检测结果写入 MES 作为质量记录。",
+      "example": "视觉发现外观缺陷后回写工单并触发不良报警。",
+      "knowledge_id": "K10-10"
+    },
+    {
+      "id": "requirement_tier",
+      "term": "需求分级",
+      "dialect": "先做能上线的",
+      "definition": "把现场需求按影响面与紧急度分成必须做、上线后再做与明确不做三档，避免范围失控。",
+      "example": "工位拍照上传排到上线后做，不影响当月上线。",
+      "knowledge_id": "K10-11"
+    },
+    {
+      "id": "onsite_comm",
+      "term": "驻场沟通",
+      "dialect": "在车间里把话说明白",
+      "definition": "面向班组长与操作员的双向沟通：用他们的语言解释系统变化，确认顾虑与操作习惯的适配。",
+      "example": "跟班组长说明扫码后自动带出工序，能少录一次。",
+      "knowledge_id": "K10-12"
+    },
+    {
+      "id": "sql_join",
+      "term": "多表关联 JOIN",
+      "dialect": "把几张表按钥匙拼起来",
+      "definition": "通过主外键把分散的表拼成可查询的结果集，是 MES 查数的主路径。",
+      "example": "工单 join 报工 join 物料，得到每张工单的产出明细。",
+      "knowledge_id": "K11-1"
+    },
+    {
+      "id": "sql_index",
+      "term": "索引",
+      "dialect": "给查表装目录",
+      "definition": "建立在高频过滤与关联字段上的辅助数据结构，用额外存储和写入代价换查询速度。",
+      "example": "报工表按工单号建索引后，月度汇总从分钟级降到毫秒级。",
+      "knowledge_id": "K11-2"
+    },
+    {
+      "id": "slow_query",
+      "term": "慢查询",
+      "dialect": "查得久就是慢查询",
+      "definition": "执行时间或扫描行数超阈值的 SQL，常见原因是缺索引、在字段上套函数、全表扫描或隐式类型转换。",
+      "example": "报表慢是因为对日期字段套了函数，索引失效。",
+      "knowledge_id": "K11-3"
+    },
+    {
+      "id": "sql_view",
+      "term": "视图",
+      "dialect": "存起来的查询",
+      "definition": "把常用查询定义固化在数据库里，兼具口径统一与权限收敛的作用。",
+      "example": "把三系统对账口径固化成视图，让业务只查一个入口。",
+      "knowledge_id": "K11-4"
+    },
+    {
+      "id": "stored_procedure",
+      "term": "存储过程",
+      "dialect": "存进数据库的脚本",
+      "definition": "预先编写在数据库端执行的程序，可封装多步业务逻辑并提供统一调用入口。",
+      "example": "把月度结账口径写成存储过程供 ERP 定时调用。",
+      "knowledge_id": "K11-5"
+    },
+    {
+      "id": "transaction",
+      "term": "事务",
+      "dialect": "要么全成要么全不成",
+      "definition": "保证一组数据库操作原子性的机制，中途失败整体回滚，避免留下半截数据。",
+      "example": "扣减库存与写台账必须放进同一个事务。",
+      "knowledge_id": "K11-6"
+    },
+    {
+      "id": "linux_troubleshoot",
+      "term": "Linux 排障",
+      "dialect": "进程、端口、日志三层查",
+      "definition": "服务异常时按进程状态、监听端口、日志与资源占用逐层定位的固定套路。",
+      "example": "先看 systemctl status，再看 ss -lntp，最后 journalctl 看日志。",
+      "knowledge_id": "K11-7"
+    },
+    {
+      "id": "script_error_handling",
+      "term": "脚本错误处理",
+      "dialect": "失败了要停下来",
+      "definition": "脚本里显式检查返回码与错误输出，遇错中止并留下上下文，避免错误被静默吞掉。",
+      "example": "备份脚本先判断磁盘挂载是否成功，失败立即退出并告警。",
+      "knowledge_id": "K11-8"
     }
   ]
 }

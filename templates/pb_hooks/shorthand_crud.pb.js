@@ -40,6 +40,7 @@ onBootstrap(function (e) {
         { name: "factory_history", type: "json" },
         { name: "ops_history", type: "json" },
         { name: "db_history", type: "json" },
+        { name: "career_history", type: "json" },
         { name: "last_route", type: "text", max: 500 },
         { name: "created", type: "autodate", system: true, onCreate: true, onUpdate: false },
         { name: "updated", type: "autodate", system: true, onCreate: true, onUpdate: true },
@@ -61,7 +62,35 @@ onBootstrap(function (e) {
     try {
       var existing = null
       try { existing = $app.findCollectionByNameOrId(DEFS[i].name) } catch (_) { existing = null }
-      if (existing) continue
+      if (existing) {
+        // 已有集合: 补齐缺失字段。老实例(早期版本建的集合)少了后来新增的字段时,
+        // 前端 PATCH 带新字段会被 PocketBase 拒绝 → 整次存档写入失败(读回来也是空的)。
+        // 这里按 aigc.pb.js 的同款做法升级 schema, 只加字段, 不动已有数据。
+        try {
+          var changed = false
+          function hasField(name) {
+            try { return !!existing.fields.getByName(name) } catch (_) {}
+            try {
+              for (var k = 0; k < existing.fields.length; k++) {
+                if (String(existing.fields[k].name) === String(name)) return true
+              }
+            } catch (_) {}
+            return false
+          }
+          for (var fi = 0; fi < DEFS[i].fields.length; fi++) {
+            var def = DEFS[i].fields[fi]
+            if (hasField(def.name)) continue
+            try { existing.fields.add(new Field(def)); changed = true } catch (_) {}
+          }
+          if (changed) {
+            $app.save(existing)
+            try { $app.logger().info("shorthand collection upgraded: " + DEFS[i].name) } catch (_) {}
+          }
+        } catch (schemaErr) {
+          try { $app.logger().error("shorthand schema upgrade " + DEFS[i].name + ": " + String(schemaErr && schemaErr.message || schemaErr)) } catch (_) {}
+        }
+        continue
+      }
       var col = new Collection({
         type: "base",
         name: DEFS[i].name,
@@ -91,7 +120,7 @@ function requireMesUser(e) {
 }
 
 routerAdd("GET", "/api/player_progress", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -132,7 +161,7 @@ routerAdd("GET", "/api/player_progress", function (e) {
 }, requireMesUser)
 
 routerAdd("GET", "/api/player_progress/{id}", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -152,7 +181,7 @@ routerAdd("GET", "/api/player_progress/{id}", function (e) {
 }, requireMesUser)
 
 routerAdd("POST", "/api/player_progress", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -167,18 +196,23 @@ routerAdd("POST", "/api/player_progress", function (e) {
     var body = e.requestInfo().body || {}
     var rec = new Record(col)
     var all = JSON_FIELDS.concat(TEXT_FIELDS)
+    var skipped = []
     for (var i = 0; i < all.length; i++) {
-      if (body[all[i]] !== undefined) rec.set(all[i], body[all[i]])
+      if (body[all[i]] === undefined) continue
+      // 逐字段容错: 集合缺这个字段时跳过它, 而不是让整次存档写入 400 失败
+      try { rec.set(all[i], body[all[i]]) } catch (err) { skipped.push(all[i]) }
     }
     $app.save(rec)
-    return e.json(200, recObj(rec))
+    var out = recObj(rec)
+    if (skipped.length > 0) out.skipped_fields = skipped
+    return e.json(200, out)
   } catch (err) {
     return e.json(400, { error: "shorthand_create_error", message: String(err && err.message || err) })
   }
 }, requireMesUser)
 
 routerAdd("PATCH", "/api/player_progress/{id}", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -195,11 +229,16 @@ routerAdd("PATCH", "/api/player_progress/{id}", function (e) {
     if (!rec) return e.json(404, { error: "record_not_found", message: "player_progress record not found" })
     var body = e.requestInfo().body || {}
     var all = JSON_FIELDS.concat(TEXT_FIELDS)
+    var skipped = []
     for (var i = 0; i < all.length; i++) {
-      if (body[all[i]] !== undefined) rec.set(all[i], body[all[i]])
+      if (body[all[i]] === undefined) continue
+      // 逐字段容错: 集合缺这个字段时跳过它, 而不是让整次存档写入 400 失败
+      try { rec.set(all[i], body[all[i]]) } catch (err) { skipped.push(all[i]) }
     }
     $app.save(rec)
-    return e.json(200, recObj(rec))
+    var out = recObj(rec)
+    if (skipped.length > 0) out.skipped_fields = skipped
+    return e.json(200, out)
   } catch (err) {
     return e.json(400, { error: "shorthand_update_error", message: String(err && err.message || err) })
   }

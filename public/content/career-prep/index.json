@@ -1,0 +1,48 @@
+{
+  "tracks": [
+    {
+      "id": "direction1",
+      "file": "direction1.json",
+      "name": "方向1 · 工业软件实施与交付",
+      "hint": "ERP/MES/WMS 边界、订单全流程、主数据治理、扫码报工、实施九步与数据迁移、安全常识"
+    },
+    {
+      "id": "direction4",
+      "file": "direction4.json",
+      "name": "方向4 · 产线现场信息化实施",
+      "hint": "五种工业协议、工业网关与边缘采集、PLC 与 IO 点表、视觉与传感器、驻场沟通与需求分级"
+    },
+    {
+      "id": "base",
+      "file": "base.json",
+      "name": "通用底座",
+      "hint": "SQL 与关系型数据库、Linux 排障、带错误处理的脚本、文档与培训课件"
+    }
+  ],
+  "rankTexts": {
+    "S": "模拟面试官点头：「这些概念你不是在背，是真在项目里用过——上机位、点表、迁移对账都讲得清。」",
+    "A": "面试官写下「可培养，思路清楚」：「主线知识扎实，缺的是项目里程数与现场历练。」",
+    "B": "面试官说：「概念都懂，一追细节就露怯——回去把每条错题对应的场景想透再来。」",
+    "C": "面试官收尾：「这更像教科书答案。我们想找能把系统推进到上线的人，建议先补一次完整实施。」"
+  },
+  "paperSizes": [
+    {
+      "id": "quick",
+      "label": "速练卷",
+      "questionCount": 6,
+      "orderCount": 0
+    },
+    {
+      "id": "standard",
+      "label": "标准卷",
+      "questionCount": 10,
+      "orderCount": 1
+    },
+    {
+      "id": "full",
+      "label": "全量卷",
+      "questionCount": 0,
+      "orderCount": 1
+    }
+  ]
+}

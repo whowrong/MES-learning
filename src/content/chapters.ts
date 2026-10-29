@@ -172,6 +172,8 @@ export interface ProgressRecord {
   ops_history?: OpsHistoryEntry[]
   /** 数据库实操营练习历史（每次任务组练习追加一条） */
   db_history?: DbHistoryEntry[]
+  /** 实习准备营练习历史（每次组卷测验追加一条） */
+  career_history?: CareerHistoryEntry[]
   last_route: string
 }
 
@@ -204,6 +206,16 @@ export interface OpsHistoryEntry {
   itemId: string
   /** 形式：terminal/choice/order */
   kind: string
+  score: number
+  total: number
+}
+
+/** 一次实习准备营测验的存档记录 */
+export interface CareerHistoryEntry {
+  /** 本地日期时间串 YYYY-MM-DD HH:mm */
+  at: string
+  /** 赛道：direction1 / direction4 / base */
+  track: string
   score: number
   total: number
 }
@@ -246,6 +258,7 @@ export function buildDefaultProgress(): ProgressRecord {
     factory_history: [],
     ops_history: [],
     db_history: [],
+    career_history: [],
     last_route: "/home",
   }
 }
