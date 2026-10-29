@@ -82,6 +82,8 @@ onBootstrap(function (e) {
             if (hasField(def.name)) continue
             try { existing.fields.add(new Field(def)); changed = true } catch (_) {}
           }
+          // 只升级集合结构, 不写任何一条记录: 老记录的进度字段一律原样保留,
+          // 新字段在老记录上保持空值, 不写入任何默认值(不会覆盖历史进度)。
           if (changed) {
             $app.save(existing)
             try { $app.logger().info("shorthand collection upgraded: " + DEFS[i].name) } catch (_) {}
@@ -135,7 +137,9 @@ routerAdd("GET", "/api/player_progress", function (e) {
     var q = e.requestInfo().query || {}
     var page = parseInt(q.page || "1", 10); if (!(page > 0)) page = 1
     var perPage = parseInt(q.perPage || "100", 10); if (!(perPage > 0)) perPage = 100; if (perPage > 500) perPage = 500
-    var sort = String(q.sort || "-created")
+    // 默认按最近更新排序：老存档是「最后玩过的那条」，
+    // 避免新插入的空记录排在最前、让用户看到一片空白的进度。
+    var sort = String(q.sort || "-updated")
     var clauses = []
     var params = {}
     for (var i = 0; i < TEXT_FIELDS.length; i++) {
