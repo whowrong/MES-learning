@@ -126,6 +126,40 @@ export function useDebug() {
     }
     results.push(await checkFetch("后端服务心跳", `${pbBase}/api/health`, true))
     results.push(await checkFetch("存档读取", `${pbBase}/api/player_progress`, true))
+    // 存档字段完整性（只读）：简写 API 把集合里不存在的字段读成 null，
+    // 前端会把对应进度回落成默认值 —— 表现就是「存档读不出来 / 进度被清空」。
+    // 这里把缺字段点出来，便于对照服务器上的 player_progress 集合结构。
+    results.push(
+      await timed("存档字段完整性", async () => {
+        const listRes = await pbFetch(`${pbBase}/api/player_progress`)
+        if (!listRes.ok) {
+          return {
+            ok: false,
+            status: `HTTP ${listRes.status}`,
+            detail: "读不到存档列表，无法核对字段（先看『存档读取』一项的返回码）",
+          }
+        }
+        const data = await listRes.json()
+        const items = Array.isArray(data?.items) ? data.items : []
+        if (items.length === 0) {
+          return { ok: false, status: "无存档", detail: "player_progress 一条记录都没有：集合可能还没建，或被清空过" }
+        }
+        const expected = [
+          "chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days",
+          "interview_history", "factory_history", "ops_history", "db_history", "career_history", "last_route",
+        ]
+        const rec = items[0] as Record<string, unknown>
+        const missing = expected.filter((f) => rec[f] === null || rec[f] === undefined)
+        if (missing.length > 0) {
+          return {
+            ok: false,
+            status: `缺 ${missing.length} 个字段`,
+            detail: `集合缺这些字段：写入会被拒、读取会回落默认值 —— ${missing.join("、")}（重启 PocketBase 可让钩子补齐）`,
+          }
+        }
+        return { ok: true, status: "完整", detail: `${items.length} 条记录，${expected.length} 个存档字段全部就位` }
+      }),
+    )
     // 存档写入：把 study_days 原值回写（幂等无害），验证 PATCH 链路；不 POST 新记录，避免污染存档
     results.push(
       await timed("存档写入", async () => {

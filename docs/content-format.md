@@ -30,6 +30,28 @@ public/content/
 
 **讲解图（illustration）**：给难懂概念配一张可视化图，术语卡弹窗里自动渲染在大白话和定义之间。当前注册表（16 张）：`bom_tree`（BOM 树）/ `route_flow`（工艺路线流动图）/ `backflush_flow`（倒冲扣料算式流）/ `work_order_states`（工单状态机）/ `yield_funnel`（产出漏斗）/ `wip_level`（在制品水位图）/ `inventory_count`（账实对照）/ `loss_rate_bar`（损耗备料条）/ `dispatch_board`（派工板）/ `unit_mismatch`（单位断链）/ `duplicate_codes`（一物两码合并）/ `calendar_strip`（工厂日历周条）/ `takt_line`（节拍时间轴）/ `batch_trace`（批次追溯链）/ `rework_loop`（返工回环）/ `shift_rotation`（班次轮转）。另有 `FactoryShape`（三厂型形态小图，用于厂型选卡页）。加新图：在 `src/components/illustrations/` 写组件（只用 token 色）→ `index.ts` 注册 → 术语卡加 `illustration` 字段，不改弹窗代码；`__tests__/registry.test.ts` 自动把关「术语引用的图必须已注册」。
 
+## 知识点映射表（knowledge_id）
+
+`terms.json` 的 `knowledge_id`、关卡文件的 `knowledge_ids`、各题库的 `term_ids` 都指向这张表；
+映射不到的机制不要加（见文末红线）。
+
+| 编号 | 主题 | 覆盖内容 |
+| --- | --- | --- |
+| K0 | 数据意识（跨章） | 数据准确率 |
+| K1 | 调研认知（第一章） | 工单、BOM、工艺路线、报工、在制品、库存、倒冲扣料、工作中心、损耗率、派工单、缺料分析 |
+| K2 | 静态数据与脏数据（第二章） | 一物两码、计量单位口径、一行两料、BOM 层级、主数据 |
+| K3 | 建模与配置（第三章） | 物料主档、工序、工厂日历、半成品 |
+| K4 | 执行与报工（第四章） | 报废、合格率、班次、返工、生产日报、计件工资 |
+| K5 / K6 | 预留（路线图阶段） | 第五章质量与库存、第六章上线陪产等，尚未建卡，暂不产出内容 |
+| K7 | 厂型认知 | 节拍时间、产线、工位、配方、批次、混线生产 |
+| K8 | 订单与供应链 | 销售订单、物料需求计划 MRP、库存准确率 |
+| K9 | 实施与交付（实习准备营 方向 1） | ERP、WMS、订单到发货全流程、数据迁移、数据清洗、数据责任人、实施蓝图、上线切换、上线验收、需求调研记录、操作手册、培训课件、扫码报工 |
+| K10 | 产线现场信息化（实习准备营 方向 4） | Modbus、西门子 S7、OPC UA、PROFINET、EtherNet/IP、工业网关、IO 点表、PLC、程序下载与联调、视觉检测、需求分级、驻场沟通 |
+| K11 | 通用底座（实习准备营 通用底座） | 多表关联 JOIN、索引、慢查询、视图、存储过程、事务、Linux 排障、脚本错误处理 |
+
+> K9 ~ K11 是随「实习准备营」新增的三块知识域（见下一节）。编号只增不改：新增机制一律续用
+> 对应知识域的下一个编号，不要重排已有编号（存档与验收对账按编号走）。
+
 ## levels/index.json
 
 ```jsonc
@@ -370,6 +392,66 @@ match / quiz / fill 三种题型都是**题库制**：内容文件里放完整�
 ## 部署文档模板（public/content/ops-training/deploy-docs.json）
 
 运维训练营·真实服务器模式的预置部署手册（Linux 环境初始化 / MySQL 演练库 / 采集服务 systemd 部署 / Prometheus+Grafana 监控）。每份文档 = markdown 正文 + 可选「一键部署命令序列」（每条 `{label, cmd}`，发送后逐条预览确认执行）。⚠️ 该文件与训练域文件同目录，`ops-quality.test.ts` 的 glob 扫描已显式跳过它；再加同目录非域文件同样要跳过。
+
+## 实习准备营（public/content/career-prep/）
+
+面向实习 / 校招实施岗的备考模块：三条学习路线（方向 1 工业软件实施与交付、方向 4 产线现场信息化、
+通用底座），每条路线 = 知识卡 + 模拟面试题 + 流程排序题，答完出 S/A/B/C 评分与面试官评语。
+内容文件放在 `public/content/career-prep/`，页面运行时加载（`src/content/careerPrep.ts`），
+组卷与判分在 `src/game/careerPrep.ts`。
+
+```
+public/content/career-prep/
+├── index.json        # 赛道清单 + 卷型配置 + 四档评语
+├── direction1.json   # 方向 1 · 工业软件实施与交付
+├── direction4.json   # 方向 4 · 产线现场信息化
+└── base.json         # 通用底座
+```
+
+`index.json`：
+
+```jsonc
+{
+  "tracks": [
+    { "id": "direction1", "file": "direction1.json", "name": "方向 1 · …", "hint": "…" },
+  ],
+  "paperSizes": [ { "id": "full", "questionCount": 8, "orderCount": 1 } ],  // 卷型：抽多少题
+  "rankTexts": { "S": "…", "A": "…", "B": "…", "C": "…" },                // 四档评语
+}
+```
+
+赛道文件 `{trackId}.json`：
+
+```jsonc
+{
+  "trackId": "direction1",
+  "trackName": "方向 1 · 工业软件实施与交付",
+  "subtitle": "…", "intro": "…",
+  "cards": [   // 知识卡
+    { "id": "c-erp", "title": "…", "summary": "…",
+      "points": ["…", "…", "…"], "pitfalls": ["…"], "term_ids": ["erp"] }
+  ],
+  "questions": [   // 模拟面试题（单选 / 多选 / 判断 / 简答自评）
+    { "id": "i-biz-4", "type": "single", "prompt": "…", "options": ["…", "…"],
+      "answer": 0, "reference": "…", "bonus_points": ["…"], "term_ids": ["…"] }
+  ],
+  "orders": [   // 流程排序题：步骤全对才得分
+    { "id": "o-impl", "title": "…", "intro": "…",
+      "steps": [ { "id": "s1", "label": "…", "note": "…" } ] }
+  ]
+}
+```
+
+**红线**（由 `src/content/__tests__/career-quality.test.ts` 自动扫描全部赛道文件把关，
+新增赛道文件会被自动发现，不用改测试）：
+- 清单登记的赛道文件必须存在；赛道 id 与 `CAREER_TRACK_ORDER` 一致；
+- `rankTexts` 四档齐全，每档不少于 10 字；
+- 题目 id 全局唯一（存档与复习队列按 id 记录）；
+- 每题 `reference` 不少于 60 字、`bonus_points` 至少 1 条且每条不少于 6 字（防空口套话）；
+- `term_ids` 必须指向 `terms.json` 里真实存在的术语；
+- 知识卡至少 3 条要点 + 1 条常见坑；
+- 顺序题步骤 id 唯一且不少于 3 步；
+- 顺序题必须全对才得分：判定会额外拒绝重复步骤与不在题面里的非法步骤。
 
 ## 约定与红线
 

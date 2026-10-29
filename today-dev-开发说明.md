@@ -1,6 +1,6 @@
 ---
 title: today-dev 开发说明（实习准备营新增 + 存档修复 + 部署脚本）
-summary: today-dev 以 wabi-dev 为基线新增「实习准备营」模块，覆盖方向1（工业软件实施与交付：ERP/MES/WMS 边界、生产订单全流程、主数据治理、扫码报工、实施九步、数据迁移清洗与对账、安全基础）、方向4（产线现场信息化：工业协议选型、网关与边缘采集、PLC 与 IO 点表认知、视觉与传感器、驻场沟通与需求分级）与通用底座（SQL、Linux 排障、脚本、文档培训）。同步扩充术语库 33 条、数据库实操营 4 题、面试题库 8 题，并修复 PocketBase 存档写入在老集合上因缺字段而整次失败的问题。附部署与备份保留脚本（保留 3 份、超额删最旧、失败自动回滚）。新增学习进度数据保护一节：备份覆盖存档数据本体、部署前后做进度不变量逐条校验、失败自动回滚且不触碰存档数据。自测：类型检查、构建与 625 条用例全部通过；生产部署因缺服务器凭据待执行。
+summary: today-dev 以 wabi-dev 为基线新增「实习准备营」模块（方向1 工业软件实施与交付、方向4 产线现场信息化、通用底座），扩充术语库 33 条、数据库实操营 4 题、面试题库 8 题；修复 PocketBase 存档在老集合缺字段时整次写入失败、读取回落默认值的成因（补齐字段 + 写入端逐字段容错，已用真实 PocketBase 0.40.6 实测老记录逐字节不变）。新增学习进度数据保护一节：备份覆盖存档数据本体、部署前后做进度不变量逐条校验、失败自动回滚且不触碰存档数据。本轮按 Muse 交接文档逐条对齐（内容格式文档、README 数字、回填脚本多语句修正）。自测：类型检查、构建与 625 条用例通过。部署按 Muse 意见挂起（现网是两台 QwenPaw，aliyun 非现网，目标待刘先生确认）；推送 today-dev 因缺 GitHub 凭据且出口被拦未成功。
 ---
 
 # today-dev 开发说明
@@ -8,8 +8,16 @@ summary: today-dev 以 wabi-dev 为基线新增「实习准备营」模块，覆
 ## 一、这次做了什么（一句话）
 
 在 wabi-dev 基线上新建 today-dev 分支，新增「实习准备营」学习模块（方向1 / 方向4 / 通用底座），
-扩充既有模块（术语库、数据库实操营、面试题库），定位并修复「存档写不进 / 读不出」的成因，
-并补齐可重复执行的部署与备份保留脚本。**未推送任何分支、未改动 main、未打 tag。**
+扩充既有模块（术语库、数据库实操营、面试题库），定位并修复「存档写不进 / 读不出」中「集合缺字段」这一支的成因，
+并补齐可重复执行的部署与备份保留脚本。
+
+本轮（第二轮）按 Muse 转交的《MES 信息文档》逐条对齐了实现：补写内容格式文档里的实习准备营格式与
+K9~K11 知识点映射、修正 README 的规模数字、修正数据库回填脚本多语句执行的问题、把「存档读不出」的
+根因论证与只读排查清单写清楚。
+
+**部署已按 Muse 意见挂起**（现网是两台 QwenPaw，47.122.104.160 不是现网，目标待刘先生确认）；
+**推送 today-dev 已获授权，但本环境没有可用 GitHub 凭据且出口被拦，尚未推上去**；
+main、wabi-dev 未动，未打 tag。
 
 ## 二、分支与基线
 
@@ -17,8 +25,10 @@ summary: today-dev 以 wabi-dev 为基线新增「实习准备营」模块，覆
 | --- | --- |
 | 仓库 | github.com/whowrong/MES-learning |
 | 基线 | `wabi-dev`（bed9246 «修正 SQL 排行题并列结果判分»） |
-| 新分支 | `today-dev`（本地提交，未推送，未设置 upstream） |
+| 新分支 | `today-dev`（本地提交，未设置 upstream；推送授权已到位，但环境缺凭据未推成功） |
 | 站点形态 | 子路径部署 `https://mes.nya.je/mes/`，构建必须 `--base=/mes/` |
+| 现网形态 | 两台 QwenPaw（AgentScope）互为备份，经香港网关对外；**生产机器与生产数据由喵喵运维，today 不动生产环境**（据 Muse《MES 信息文档》第 3 节） |
+| 入口门禁 | 现网入口有 Basic Auth（账号 `monika`，**口令需向刘先生本人索取**） |
 
 `main`（b5c8335）全程未被读取合并，也未修改。wabi-dev 上的演示版专用账号认证改动原样保留在
 today-dev 里，没有回流到 main。
@@ -91,20 +101,66 @@ SQL（多表 join、索引与慢查询、视图与存储过程、事务）；Lin
 
 ### 4.2 修复：存档「写不进 / 读不出」
 
-**现象**：前端对 `player_progress` 做 PATCH 时带上新字段，若 PocketBase 里已有的集合缺少该字段，
-PocketBase 会拒绝整次请求 → 整次存档写入失败（读回来自然是空的）。
+Muse《MES 信息文档》第 5 节记载：2026-10-28 刘先生报过一次「网站内存档读不出来」；喵喵查实生产机内全绿
+（进程 / 磁盘 / 数据库健康，存档在 10-27 仍有写入），**根因未最终定位**，文档点名要重点看
+`src/lib/pb.ts` 与 `shorthand_crud.pb.js`。本轮按这条线索把简写 API 与前端读取路径都过了一遍，
+下面是改动前后的行为差异、兼容性论证，以及**这条修复覆盖不到的部分**。
 
-**成因**：`templates/pb_hooks/shorthand_crud.pb.js` 的 `onBootstrap` 只在集合**不存在**时才创建集合，
-字段白名单又写死在 4 处；老实例的 `player_progress` 集合里没有后来新增的字段（`db_history`、
-本次新增的 `career_history` 等），于是后续任何带新字段的存档写入都会整次失败。
+**改动前（bed9246 的钩子）**
 
-**修复**（两处，均在 `templates/pb_hooks/shorthand_crud.pb.js`）：
-1. 集合已存在时，按 `aigc.pb.js` 里已在用的同款做法补齐缺失字段（只加字段、不动已有数据），
-   改完 `$app.save(existing)`，并打日志；PocketBase 下次重启加载钩子时自动生效。
-2. 写入端改为**逐字段容错**：某个字段缺失时跳过该字段而不是让整次请求 400，
-   并在返回体里回报 `skipped_fields`，让前端能知道哪些字段没存上。
+- `onBootstrap` 建集合时是 `if (existing) continue` —— 集合一旦存在就**再也不看字段结构**，
+  早期版本建的集合缺的字段永远补不上；
+- `POST` / `PATCH` 直接 `rec.set(field, value)`：集合缺这个字段时 `rec.set` 抛错，
+  整个请求 400（`shorthand_create_error` / `shorthand_update_error`）→ **一次写失败，整份存档写不进去**；
+- 读取侧 `recObj` 对每个字段单独 try/catch，集合缺字段时该字段读成 `null` →
+  前端 `normalizeRecord` 把缺的字段回落成默认值（章节进度回落成「全未通关」）→ **看起来就是「存档读不出来」**；
+- 列表默认按 `-created` 排序，前端取 `items[0]`。
 
-**未在生产验证**：生产实例的集合结构与重启时机需要登服务器确认（见第七节）。
+**改动后（today-dev 的钩子）**
+
+- `onBootstrap` 遇到已存在的集合时走**只加不删**的字段补齐：缺哪个字段就
+  `existing.fields.add(new Field(def))` 再 `$app.save(existing)`，**只改集合结构、不写任何一条记录**；
+- `POST` / `PATCH` 改为**逐字段容错**：集合缺字段时跳过该字段并在响应体回报 `skipped_fields`，
+  不再让整次写入失败；
+- 读取侧的字段清单补上 `career_history`；
+- 列表默认按 `-updated` 排序（最近玩过的那条排最前），避免新建的空记录排在最前、让刘先生看到一片空白进度。
+
+**向后兼容性：补字段会不会把历史记录重置成默认值**
+
+不会 —— 这一点是实测的，不是推断：
+
+- PocketBase 加字段只改表结构，已有行的新字段为空值，**不会把老字段刷成默认值**；
+- 用真实 PocketBase 0.40.6 复现「老实例」：只含老字段的 `player_progress` 集合 + 一条真实结构的进度记录 →
+  装上本次钩子并重启 → 老记录的 6 个进度字段**逐字节一致**、`created` / `updated` 未变、
+  新增字段为空值（不是默认值）；再只 PATCH 新字段（`career_history`）→ 老字段仍逐字节一致；
+- 部署侧另有 `deploy/progress-guard.mjs`：部署前后只读快照 `player_progress` 逐条比对，
+  任何一条记录被改动或消失即判失败并自动回滚（第七节）。
+
+**这条修复覆盖不到的部分（如实说明）**
+
+- 它治的是「集合字段缺失 → 写整次失败 / 读回落默认值」这一支症状。喵喵记载的生产现象
+  （机内全绿、10-27 仍有写入）与「集合缺字段」并不完全吻合：如果集合缺字段，前端每次 PATCH 都带全量字段，
+  写入本该持续失败。所以**根因仍未最终定位**，本次修复不能被认定为唯一根因；
+- 另一条尚未排除的可能在读取路径：`src/lib/pb.ts` 的 `pbFetch` 在非直连域名（现网经香港网关穿透，
+  hostname 不是裸 IP）时把 PocketBase token 放进 `X-Pb-Auth` 头而不是 `Authorization`；
+  若网关不把这个头还原成 Authorization，`requireMesUser` 会直接 401，前端 `useHome` 走 catch 分支
+  展示空进度并提示「存档读取失败」。这条只能到生产机上只读验证，不能靠本地推断；
+- 仓库里 `/debug` 页（`src/pages/Debug/useDebug.ts`）本来就有「存档读取 / 存档写入（幂等回写 study_days）」
+  体检。本轮给它加了一项**只读**的「存档字段完整性」检查：直接看简写 API 返回的记录里 12 个存档字段
+  有没有读成 `null`，缺哪个字段一目了然，不用碰生产数据。
+
+**只读排查清单（将来在生产机上做，全程不写数据）**
+
+1. `node deploy/progress-guard.mjs snapshot --data-dir <pb_data> --out /tmp/before.json`
+   —— 看 `player_progress` 有几条记录、各字段实际值（只读）；
+2. 用 app 账号登录后打开 `/debug` 页跑一次体检，看「存档读取」的返回码：
+   401 = 鉴权没打通（指向上面 `X-Pb-Auth` 那条），200 = 鉴权正常；
+3. 看「存档字段完整性」是否报缺字段：缺 = 集合结构漂移（本次修复能治，重启 PocketBase 即补齐）；
+   字段齐全但前端仍是空进度 = 不是字段问题，要往鉴权 / 网关方向查；
+4. 把生产 `player_progress` 集合的字段清单与钩子 DEFS
+   （`templates/pb_hooks/shorthand_crud.pb.js` 顶部）对一遍，缺字段由钩子补齐即可，不写记录。
+
+**未在生产验证**：生产实例的集合结构与重启时机需要登服务器确认（见第七节；本轮部署已挂起）。
 
 ## 五、自测结果（本地实测）
 
@@ -120,6 +176,24 @@ PocketBase 会拒绝整次请求 → 整次存档写入失败（读回来自然�
 
 ## 六、部署与备份保留策略
 
+> **部署已挂起（2026-10-29，按 Muse 审核意见）**
+>
+> Muse 的记录里没有 47.122.104.160 这台机器。现网 MES 生产实际跑在**两台 QwenPaw** 上
+> （由喵喵运维、经香港网关对外），不是公网 SSH 部署 —— 因此「往 aliyun 部署 today-dev」
+> 属于**新开一个部署**，不等于更新现网，两者要分开定。
+>
+> 在刘先生明确说明 aliyun（47.122.104.160 / Tailscale 节点 aliyun 100.92.168.11）是**预演机**
+> 还是**新生产目标**、以及现网两台 QwenPaw 各自如何接入与操作之前：
+>
+> - **不执行任何生产部署**；不连接、不改动 47.122.104.160；不在 aliyun 上落地站点、nginx 配置、
+>   备份目录或任何文件；
+> - 本节脚本照旧保留在分支里，作为**可执行的现成工具**，只做到「脚本就绪 + 自测通过 + 文档写清用法」；
+> - 将来真要部署时，认证方式按新规矩走：由本任务**现生成一次性临时 SSH 密钥对**
+>   （工具已就绪：`deploy/make-ephemeral-key.sh`），只把公钥交给刘先生去目标机追加，用完撤销；
+>   **不接受、不索取、不使用任何既有私钥文件**，私钥不外放。
+>
+> 本轮已做的自测都在本地假站点与本地 PocketBase 上完成，**没有连接生产、没有写入任何生产数据**。
+
 ### 6.1 脚本
 
 | 脚本 | 作用 |
@@ -127,6 +201,7 @@ PocketBase 会拒绝整次请求 → 整次存档写入失败（读回来自然�
 | `deploy/mes-deploy.sh` | 备份现网（源码 + nginx 配置 + 存档数据本体）→ 部署产物 → 校验站点与进度不变量 → 失败自动回滚；另有 `--rollback <备份目录>` 手动回滚模式 |
 | `deploy/backup-retention.sh` | 备份保留策略：总数超过 KEEP 份时删除最早一份；删除前逐份核对是否含存档数据快照 |
 | `deploy/progress-guard.mjs` | 学习进度不变量校验工具：只读快照 `player_progress` 并逐条比对，不经 API、不需要超级用户口令、不产生任何写操作 |
+| `deploy/make-ephemeral-key.sh` | 生成/撤销**一次性临时 SSH 密钥对**：只输出公钥，私钥留在本机不外放，用完 `--revoke` 删除 |
 
 **备份内容**：`mes-backup-YYYYmmdd-HHMMSS/` 目录下包含
 - `app/`：项目目录快照（前端产物 + 钩子 + 执行器）；
@@ -165,34 +240,54 @@ PocketBase 会拒绝整次请求 → 整次存档写入失败（读回来自然�
 **不触碰的东西**：脚本不启用 Tailscale SSH，不改动 `/qq/` 讨论站，不重启 nginx 之外的无关服务，
 不改生产数据与存档数据；nginx 配置只做备份副本，不自动改写。
 
-### 6.2 上线时需要的凭据（当前缺口）
+### 6.2 上线时需要刘先生确认/提供的事项（当前缺口）
 
-生产环境是 `47.122.104.160`（阿里云杭州，Debian 12，root）。沙箱内实测：22 端口可达，
-但 `ssh root@47.122.104.160` 返回 `Permission denied (publickey,password)`，
-沙箱内没有 SSH 私钥、ssh-agent 也没有可用口令，因此**本次没有实际执行生产部署**。
+**先要一个决定**：现网是两台 QwenPaw（喵喵运维），aliyun 47.122.104.160 不是现网。
+请刘先生明确二选一（或另指）：
 
-需要刘先生提供以下任一即可继续（均不写进仓库）：
-1. root 的 SSH 公钥授权（在服务器上追加沙箱临时公钥，或把既有私钥放到工作区并告知路径）；或
-2. root 口令 + 服务器允许密码登录（配合 `sshpass`/交互式登录）；或
-3. 由刘先生（或服务器上的既有拉取方式）执行下面两条命令，把结果回传：
+- **A. aliyun 只是预演机**：那就先在 aliyun 上演一遍部署流程（用一次性临时密钥），现网更新另走喵喵的通道；
+- **B. aliyun 是新的生产目标**：那要先把目标机角色、域名与网关方案定下来，属于「新开一个部署」，
+  需要单独规划（涉及香港网关、Basic Auth、nginx 与备份目录的落位），本分支的脚本可直接复用。
+
+**其次需要这些信息（都是「要问刘先生本人」的项，本轮不猜、不代填）**：
+
+1. **部署执行方式与认证**（将来执行时）：
+   - 由本任务现生成一次性临时 SSH 密钥对 → 只把**公钥**给刘先生，请他在目标机 `~/.ssh/authorized_keys` 追加 →
+     部署完 `--revoke` 撤销并请他删掉那一行；
+   - 或由刘先生 / 喵喵在机器内直接执行 `deploy/mes-deploy.sh` 并回传输出。
+   - 明确不接受、不索取、不使用任何既有私钥文件。
+2. **现网入口 Basic Auth 门禁口令**（账号是 `monika`，**口令必须向刘先生本人索取**）——
+   用于部署后验证 `/mes/` 首页与资源是否正常；本仓库、脚本、文档里都不写口令。
+3. **生产 PocketBase 的启停命令**（例如 `systemctl stop pocketbase`）→ 填进 `POCKETBASE_STOP_CMD` /
+   `POCKETBASE_START_CMD`，回滚才能自动还原存档数据；留空则回滚只给人工步骤。
+4. **服务器上的真实目录与 nginx 站点配置**（`DEPLOY.md` 是权威，需要现场核实），
+   尤其是 PocketBase 数据目录（`DATA_DIR`）—— 进度不变量校验与数据备份都指向它。
+
+本机侧的已知缺口（与部署目标无关，属于推送/访问通道）：
+
+- **沙箱出口到 `github.com` / `api.github.com` 一律 403**（代理 MITM 拦截），
+  本地克隆只能走 `ghfast.top` / `gh-proxy.com` 镜像；这直接影响推送（见第十一节）。
+- 本环境**没有可用的 GitHub 凭据**：`GH_TOKEN` 无效、无凭据助手（credential.helper 未配置）、
+  `~/.ssh` 下没有私钥。按规矩不向刘先生索取私钥，只缺「GitHub 推送凭据」这一项。
+
+将来真在目标机执行时，命令形态如下（占位路径需按现场实际替换）：
 
 ```bash
 # 在服务器上执行（产物与脚本需先上传到服务器）
 BACKUP_ROOT=/var/backups/mes KEEP=3 APP_DIR=<mes 项目目录> \
 PB_PUBLIC_DIR=<mes 项目目录>/pb_public PB_HOOKS_DIR=<mes 项目目录>/pb_hooks \
 SERVER_DIR=<mes 项目目录>/server NGINX_CONF_DIR=/etc/nginx \
+DATA_DIR=<mes 项目目录>/pb_data \
 SITE_URL=https://mes.nya.je SITE_PREFIX=/mes \
+POCKETBASE_STOP_CMD="systemctl stop pocketbase" POCKETBASE_START_CMD="systemctl start pocketbase" \
 bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb_hooks --server server
 ```
 
 保留策略也可以挂成计划任务（每天一次即可，脚本幂等）：
 
 ```cron
-30 4 * * * BACKUP_ROOT=/var/backups/mes KEEP=3 /opt/mes/deploy/backup-retention.sh >> /var/log/mes-backup-retention.log 2>&1
+30 4 * * * BACKUP_ROOT=/var/backups/mes KEEP=3 DATA_DIR=<mes 项目目录>/pb_data /opt/mes/deploy/backup-retention.sh >> /var/log/mes-backup-retention.log 2>&1
 ```
-
-> 服务器上的实际目录名需要先用 `DEPLOY.md` 与线上实际配置核实（DEPLOY.md 是权威依据），
-> 上面的占位路径要按实际情况替换。
 
 ## 七、学习进度数据保护
 
@@ -269,27 +364,144 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 
 ## 八、未能核对与未完成的部分（如实说明）
 
-1. **Muse 交接文档读不到**：Koofr 应用密码不在手，`curl https://app.koofr.net/dav/Koofr/Muse/` 返回
-   `401 Unauthorized`，因此 `mes-learning-info-for-today-20261029.md` 的内容**本次没有核对**，
-   其中的额外要求（若存在）没有并入本次实现。本次实现依据的是任务书中的知识清单与仓库内的
-   `DEPLOY.md`。若刘先生提供可用的 Koofr 应用密码（或把该文件贴过来），我再做一轮对齐。
-2. **生产部署未执行**：缺 SSH 认证方式（见 6.2）。部署脚本本身在本地假站点环境跑通了
-   备份 / 部署 / 验证 / 回滚全流程，但没有在真实服务器上验证过目录结构、nginx 配置路径与
+1. **生产部署未执行（按 Muse 意见主动挂起）**：现网是两台 QwenPaw（喵喵运维），aliyun 47.122.104.160
+   不是现网；部署目标属于「新开一个部署」还是「更新现网」尚未分开定，本轮**没有连接也没有改动
+   47.122.104.160**，没有在 aliyun 上落地任何文件。脚本本身在本地假站点 + 本地 PocketBase 环境跑通了
+   备份 / 部署 / 校验 / 回滚全流程，但没有在真实服务器上验证过目录结构、nginx 配置路径与
    PocketBase 进程管理方式。
+2. **「存档读不出来」的根因仍未最终定位**：Muse 文档记载喵喵查实生产机内全绿、10-27 仍有写入，
+   根因未定位。本次修复的是「集合缺字段 → 写整次失败 / 读回落默认值」这一支；
+   鉴权头（`X-Pb-Auth` vs `Authorization`）那条尚未排除，需要在生产机上只读验证（清单见 4.2）。
 3. **存档修复与进度保护未在生产验证**：钩子改动需要 PocketBase 加载新钩子（重启）才会补齐老集合的
    缺失字段；验证方式：重启后用 `progress-guard.mjs snapshot` 看 `player_progress` 集合是否已含
    `career_history` 字段，再比对部署前后逐条快照一致，最后用刘先生账号登录前端确认看到的是原进度。
-4. **未推送**：`today-dev` 只在本地提交（`cf5a12b` 及说明文档提交），等刘先生确认后再推；
-   推送目标分支为 `today-dev`，**不推 main、不推 wabi-dev、不打 tag**。
+4. **today-dev 未推送成功**：推送授权已到位（仅 `today-dev` 一支），但本环境缺 GitHub 推送凭据，
+   且出口到 `github.com` / `api.github.com` 被代理拦截（403）。具体缺什么、怎么补，见第十一节。
+   main、wabi-dev 全程未动，未打 tag。
+5. **Muse 文档里提到的「门禁口令」需要向刘先生本人索取**：现网 Basic Auth 账号是 `monika`，
+   口令文档里明确写了不外发、需本人提供；本轮未猜测、未写入任何文件。
 
-## 九、后续步骤（拿到凭据即可继续）
+## 九、后续步骤（按刘先生的确认推进）
 
-1. 用第 6.2 节的任一方式取得服务器访问能力；
-2. 按 `DEPLOY.md` 核实服务器上的真实目录与 nginx 站点配置；
-3. 上传 `dist/`、钩子与两个部署脚本，执行 `mes-deploy.sh`；
-4. 验证 `/mes/` 首页、入口脚本、实习准备营页面（`/mes/career-prep`）、数据库实操营判分链路
-   （登录后跑一题 `db-c5` 或 `db-r5`，确认真实执行比对）；
-4.1 用刘先生账号登录前端，确认看到的是原学习进度（不是空白/重置），并核对
-   `progress-before.json` 与 `progress-after.json` 逐条一致；
-5. 确认备份目录里保留了 3 份、旧备份未被误删；
-6. 刘先生确认无异常后推送 `today-dev` 到远端。
+1. **先定部署目标**：请刘先生明确 aliyun（47.122.104.160 / Tailscale 节点 aliyun 100.92.168.11）是
+   预演机还是新的生产目标，以及现网两台 QwenPaw 各自如何接入与操作（谁执行、怎么执行）。
+2. **再补齐执行要素**：Basic Auth 门禁口令（monika）、生产 PocketBase 启停命令、服务器真实目录与
+   nginx 配置（`DEPLOY.md` 为权威）。
+3. **按现场方式执行部署**：本任务现生成一次性临时 SSH 密钥对（只用公钥、用完撤销），
+   或由刘先生 / 喵喵在机内执行 `deploy/mes-deploy.sh` 并回传输出；
+   执行时务必带上 `DATA_DIR`（进度不变量校验与数据备份都指向它）。
+4. **验证**：备份目录含 `data/data.db` 与 `progress-before.json` → 校验 `/mes/` 首页、入口脚本、
+   `/mes/career-prep`、数据库实操营判分链路（跑一题 `db-c5` 或 `db-r5`）→
+   `progress-after.json` 与基线逐条一致 → 用刘先生账号登录前端确认看到的是原进度；
+   异常按脚本回滚（回滚可一并还原存档数据）。
+5. **推送**：拿到 GitHub 推送凭据后只推 `origin/today-dev`（不推 main、不推 wabi-dev、不打 tag、
+   不 force push）；推送前再跑一次 `npx tsc -b`、`npx vitest run`、`npx vite build --base=/mes/`。
+6. **存档读不出的根因**：按 4.2 的只读排查清单在生产机上定位，确认后同步给刘先生与喵喵。
+
+## 十、与 Muse 交接文档的逐条对齐结果
+
+对照的是 Muse 转交的《MES 信息文档》（2026-10-29，直接提供原件，不再需要 Koofr 应用密码）。
+「一致」= 今天的实现本来就符合；「已修正」= 原来不一致、按文档改了。
+
+| 文档条目 | 文档要求 | 今天的实现 | 对齐结果 |
+| --- | --- | --- | --- |
+| §1 技术栈 | React 19 + TS + Vite + Tailwind v3 + shadcn/ui；后端 PocketBase；执行器 Node（mysql2/pg/mssql/ssh2/node:sqlite） | 一致；today-dev 未引入新依赖 | 一致 |
+| §1 内容规模 | 以 main@b5c8335 的 README 为准 | README 数字已过期（写 34 张术语卡 / 320 题 / 595 测试，实际基线 37 张术语卡）。本轮按 today-dev 实测数字更新：术语 70、面试 93 题、厂型 33 题、关卡 202 题、实习准备营 40 题、数据库 20 任务、测试 625 | 已修正（README） |
+| §1 内容格式规范 | 新增/修改题目先读 `docs/content-format.md`（红线扫描规则也在里面） | 已读并据此核对：面试题库走 `interview-quality.test.ts`、数据库实操营走 `db-quality.test.ts`（本次新增 4 题的 `check.expect` 由 `server/backfill-db-expect.mjs` 对真实练习库算出） | 一致（并修了一个工具 bug，见下） |
+| §2 基线确认 | 开工前必须向刘先生确认以哪条分支为基线；不擅自合 wabi-dev，不把演示版改动带进 main | 基线 `wabi-dev`@bed9246（刘先生已确认）；未合并 main，未改 main，未带演示版改动进 main | 一致 |
+| §3 现网形态 | 生产跑在两台 QwenPaw，由喵喵运维，today 不要动生产环境，只改代码 | 本轮**没有连接也没有改动任何生产机器**；原「47.122.104.160 生产部署」的前提已作废，部署挂起 | 已修正（本轮认知与文档一致） |
+| §3 部署细节 | 以仓库 `DEPLOY.md` 为权威 | 脚本按 `DEPLOY.md` 的目录布局写（pb_public / pb_hooks / server），并额外新增 `DATA_DIR` 以便备份存档数据本体 | 一致（补充，未改 DEPLOY.md） |
+| §3 门禁 | Basic Auth 账号 monika，密码向刘先生索取 | 未猜测、未写入任何文件；已在 6.2 / 八 / 九 三处列为「需刘先生本人提供」 | 一致（待刘先生提供） |
+| §4 构建硬规矩 | 子路径必须 `npx vite build --base=/mes/`；`vite.config.ts` 不要整体重写，`rhSourcePlugin()` 必须留在 plugins 第 0 位，改动只做局部 Edit | `vite.config.ts` 相对基线**零改动**（`git diff bed9246..HEAD -- vite.config.ts` 为空）；构建用 `--base=/mes/`，产物入口 `/mes/assets/index-<hash>.js`；未碰 `rhSourcePlugin` | 一致（已在第十一节单列，供 Muse 审） |
+| §4 本地后端 | PocketBase 0.40.x + `templates/pb_hooks/*.js` 全部拷进 `pb_hooks/` + `dist/` 内容放进 `pb_public/` | 一致；本次本地验证用的正是 PocketBase 0.40.6，钩子全量拷入 `pb_hooks/`，产物放 `pb_public/` | 一致 |
+| §5 红线一 | 仓库不携带任何真实存档数据 / 真实账号 | today-dev 里没有生产 `pb_data`、没有真实存档、没有账号口令；备份快照一律落在服务器侧且不进仓库；全仓 grep 确认未落盘用户给的代理串 | 一致 |
+| §5 红线二 | 学习存档只有一条记录，在 `player_progress`，经简写 API 读写 | 简写 API 的读写路径保持不变；本次只加「只加不删」的字段补齐与逐字段容错 | 一致 |
+| §5 未结案问题 | 「存档读不出来」根因未定位；重点看 `src/lib/pb.ts` 与 `shorthand_crud.pb.js`，把发现同步给刘先生 | 已逐条看过 `src/lib/pb.ts`（含 `X-Pb-Auth` 头与 `isDirectPbHost` 的判定）与 `shorthand_crud.pb.js`；本次修复治的是「集合缺字段」这一支；鉴权那条尚未排除，已写进 4.2 的只读排查清单 | 部分对齐（根因仍未最终定位，已如实标注） |
+| §6 协作流程 | 建议开自己的分支；改动清单 + 构建/测试结果交刘先生确认；**刘先生确认后才推 main** | 分支是 `today-dev`；本说明文档即改动清单；测试结果见第五节；推送只涉及 `today-dev`，不推 main | 一致 |
+| §6 红线三 | 不提交真实密码/密钥/生产 IP/基础设施细节/生产数据；需要配置值用占位符或环境变量 | 部署脚本全部用环境变量，无凭据；一次性临时密钥工具只输出公钥；本说明中出现的机器信息仅限任务书已提供且不新增秘密 | 一致（但见下方「需注意」） |
+| §7 路线图 | 第五章质量与库存、第六章上线陪产、自由沙盘、登录注册 + 精简后台 | 本轮**未做**（不在本次任务范围）；README 路线图保持原样 | 一致（未做，非不一致） |
+
+**对齐中实际做的修正（本轮新增改动）**
+
+1. `docs/content-format.md`：新增「知识点映射表（knowledge_id）」一节（K0~K11，含本次新增的 K9 实施与交付 /
+   K10 产线现场信息化 / K11 通用底座，说明编号只增不改）；新增「实习准备营（public/content/career-prep/）」
+   一节（文件结构、字段说明、红线清单与把关测试），让新模块的内容格式进规范，而不是只存在于代码里。
+2. `README.md`：把过期的规模数字更新为实测值（术语 34→70、面试 85→93 题、数据库 16→20 任务、
+   测试 595→625、题库 320→368），并补「实习准备营」玩法条目。
+3. `server/backfill-db-expect.mjs`：修了工具的一个真 bug —— `node:sqlite` 的 `prepare()` 只执行多语句 SQL 的
+   **第一条**，导致多语句参考答案（如 clean 组「改引用 → 删主数据 → 验干净」）在 state 模式下被误判为
+   「正确答案下断言不成立」。改用 `exec()` 执行 DDL/DML、结果模式改为「执行 answerSql 后重跑 check.sql 比对」。
+   修完后脚本对全部 20 个任务输出 `problems: []`、4 个 state 任务全部 verified，且 4 个新增任务的
+   `check.expect` 与脚本输出逐字节一致（内容文件零改动）。
+4. `src/pages/Debug/useDebug.ts`：新增**只读**的「存档字段完整性」体检项（12 个存档字段有没有读成 null），
+   用于在生产机上区分「集合字段缺失」与「鉴权/网关问题」两类根因。
+5. `deploy/make-ephemeral-key.sh`：新增一次性临时 SSH 密钥对工具（只出公钥、私钥本机留存、`--revoke` 撤销），
+   对应「将来部署的认证方式由本任务现生成、用完撤销、不使用既有私钥」这条新规矩。
+
+**需要刘先生留意的两点**
+
+- 文档 §6 红线三提到「不提交生产 IP / 基础设施细节」。本分支的说明文档里出现了任务书已提供的机器信息
+  （47.122.104.160、Tailscale 节点名、现网是两台 QwenPaw）—— 这些是刘先生自己提供的背景信息，
+  但仓库是公开仓库。**要不要在推送前把文档里的具体 IP / 节点名脱敏（例如写成「预演机（IP 见任务书）」），
+  请刘先生定**；本轮为审阅方便保留了原样，没有擅自改写。
+- 文档里提到的「门禁口令」：本仓库的实现**不需要**任何门禁口令（现网 Basic Auth 是入口层的，
+  与前端代码无关）；只有将来做生产验证时需要它来访问站点，需要向刘先生本人索取。
+
+## 十一、供 Muse 审阅的 diff 摘要
+
+**审阅范围**：`today-dev` 相对 `wabi-dev`@bed9246 的全部改动（Muse 文档要求的「完整 diff」
+另附为补丁文件 `today-dev-vs-wabi-dev.diff`，随本说明一起交付）。
+
+**提交序列**（`git log --oneline bed9246..today-dev`）：
+
+| 提交 | 内容 |
+| --- | --- |
+| `cf5a12b` | 新增实习准备营（方向1 / 方向4 / 通用底座）；扩充术语库 33 条、数据库实操营 4 题、面试题库 8 题；修复存档写入链路 |
+| `31bf7ed` | 补充 today-dev 开发说明 |
+| `33a7d9c` | 学习进度数据保护（存档数据备份 + 进度不变量校验 + 增量兼容） |
+| 本轮 | 与 Muse 文档逐条对齐（内容格式文档、README、回填脚本修正、/debug 只读体检项、一次性临时密钥工具、本说明的两节新增） |
+
+**重点一：简写 CRUD 钩子的存档修复**（`templates/pb_hooks/shorthand_crud.pb.js`）
+
+| 位置 | 改动前 | 改动后 |
+| --- | --- | --- |
+| `onBootstrap` 集合已存在 | `if (existing) continue`（不再看字段结构） | 只加不删地补齐缺失字段并 `$app.save(existing)`；**不写任何一条记录** |
+| `POST` / `PATCH` 写字段 | `rec.set(field, value)` 直接写，字段缺失就抛错 → 整次 400 | 逐字段 try/catch，缺字段跳过并在响应体回报 `skipped_fields` |
+| 读取字段清单 | 10 个字段 | 11 个字段（补 `career_history`） |
+| 列表默认排序 | `-created` | `-updated`（避免新建空记录排在最前） |
+
+**向后兼容性论证**：补字段只改表结构，已有行的新字段为空值、不会把老字段刷成默认值；
+用真实 PocketBase 0.40.6 复现老实例（只含老字段的集合 + 一条进度记录）实测：补齐后老记录 6 个进度字段
+逐字节一致、`created`/`updated` 未变、新字段为空值；再只 PATCH 新字段，老字段仍逐字节一致。
+完整论证与只读排查清单见第 4.2 节。
+
+**重点二：构建相关**
+
+- `vite.config.ts` **零改动**（`git diff bed9246..today-dev -- vite.config.ts` 输出为空），
+  `rhSourcePlugin()` 仍在 plugins 第 0 位；
+- 构建命令一律 `npx vite build --base=/mes/`，产物入口为 `/mes/assets/index-<hash>.js`
+  （实测 `dist/index.html` 引用形如 `/mes/assets/index-<hash>.js`）；
+- 前端运行时前缀仍由 `src/lib/pb.ts` 从入口脚本地址推导（未改），PocketBase 地址自动取 `<前缀>/__pb`；
+- 新增内容目录 `public/content/career-prep/`（4 个 JSON），路由 `/career-prep`（`src/App.tsx` 新增一条，
+  页面走懒加载）。
+
+**其余改动分组**
+
+| 组 | 文件 |
+| --- | --- |
+| 新模块代码 | `src/content/careerPrep.ts`、`src/game/careerPrep.ts`、`src/pages/CareerPrep/*`、`src/components/career/*` |
+| 新模块内容 | `public/content/career-prep/{index,direction1,direction4,base}.json` |
+| 既有模块扩充 | `public/content/terms.json`（+33 条）、`public/content/db-training/{query,join,clean,report}.json`（+4 题）、`public/content/interview/{campus,intern}.json`（+8 题） |
+| 既有模块修复 | `templates/pb_hooks/shorthand_crud.pb.js`、`src/content/chapters.ts`、`src/pages/Home/*`、`src/components/home/ModuleEntries.tsx`、`src/App.tsx`、`src/pages/Debug/useDebug.ts` |
+| 测试 | `src/game/__tests__/careerPrep.test.ts`、`src/content/__tests__/career-quality.test.ts` |
+| 部署与工具 | `deploy/mes-deploy.sh`、`deploy/backup-retention.sh`、`deploy/progress-guard.mjs`、`deploy/make-ephemeral-key.sh`、`server/backfill-db-expect.mjs` |
+| 文档 | `README.md`、`docs/content-format.md`、`today-dev-开发说明.md` |
+
+**建议的审阅命令**：
+
+```bash
+git fetch origin wabi-dev
+git diff bed9246..today-dev -- templates/pb_hooks/shorthand_crud.pb.js   # 重点一
+git diff bed9246..today-dev -- vite.config.ts                            # 重点二（应为空）
+git diff bed9246..today-dev --stat                                        # 全量概览
+```

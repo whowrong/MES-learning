@@ -19,14 +19,17 @@ function normalize(v) {
 function runSql(dbPath, sql) {
   const db = new DatabaseSync(dbPath)
   try {
-    const stmt = db.prepare(sql)
-    if (/^\s*(select|with)\b/i.test(sql)) {
-      const rows = stmt.all()
+    const text = String(sql || "").trim()
+    if (/^(select|with)\b/i.test(text)) {
+      const rows = db.prepare(text).all()
       const cols = rows.length ? Object.keys(rows[0]) : []
       return { columns: cols, rows: rows.map((r) => cols.map((c) => normalize(r[c]))) }
     }
-    const info = stmt.run()
-    return { affected: Number(info.changes ?? 0) }
+    // DDL/DML 用 exec()：node:sqlite 的 prepare() 只编译并执行第一条语句，
+    // 多语句的参考答案（例如 clean 组的「改引用 → 删主数据 → 验干净」）会被截断，
+    // 导致 state 模式误报「正确答案下断言不成立」。
+    db.exec(text)
+    return { affected: 0 }
   } finally {
     db.close()
   }
@@ -50,9 +53,11 @@ for (const file of ["query.json", "join.json", "clean.json", "report.json"]) {
       task.check.expect = r.rows
       changed = true
       filled++
-      // 参考答案必须能得到同样结果（用 answerSql 验证）
+      // 参考答案必须能得到同样结果：执行 answerSql 后重跑 check.sql 比对
+      // （answerSql 可能是查询，也可能是多语句 DML，统一按「执行后再查」验证）
       seedPracticeDb(TMP_DB)
-      const r2 = runSql(TMP_DB, task.answerSql)
+      runSql(TMP_DB, task.answerSql)
+      const r2 = runSql(TMP_DB, task.check.sql)
       if (JSON.stringify(r2.rows) !== JSON.stringify(r.rows)) {
         problems.push(`${task.id}: answerSql 与 check.sql 结果不一致`)
       }
