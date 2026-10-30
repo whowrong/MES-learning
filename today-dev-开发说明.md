@@ -501,6 +501,15 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 | `cf503d1` | 存档读写白名单放行 `delivery_history` / `delivery_workspace` |
 | `7827c95` | 文档第十三节：交付闭环模块 + AI 接入的部署与验证记录 |
 | `0a06c0b` | **本轮**：站内登录标识改为自定义账号名，登录框不再强制邮箱格式 |
+| `55491cf` | 修掉沙盘页未使用导入与登录入口测试选择器（`npx tsc -b` 由报错转干净） |
+| `81f2268` | 为数据库/运维实操营 40 道题各生成一份独立文档（`public/content/labs/<id>.md`），题目 JSON 增加 `doc` 字段，一一对应校验脚本 |
+| `f5d68f8` | 新增 7 道小型排障题与 1 道 10 阶段综合题，文档扩到 48 份 |
+| `0501b86` | 打通「AI 读文档 → 生成环境准备/执行脚本 → 预览 → 执行 → 按既有 accept 正则判分」链路；连接表单加演练环境提示语 |
+| `2209efb` | 修掉连接保存按钮重复属性、验收正则比对展开方式与危险命令判定遗漏 |
+| `edf3b66` | 数据库题的 AI 脚本限定为纯 SQL、服务器题限定为单条 shell 命令 |
+| `d95a34e` | 修掉实操通道的中文乱码与中文字面量比不上两个缺陷 |
+| `e7fb218` | UTF-8 解码 helper 提到文件顶层 |
+| `97b3965` | 每个路由处理器各带一份 UTF-8 解码 helper（PocketBase 路由作用域隔离） |
 
 **重点一：简写 CRUD 钩子的存档修复**（`templates/pb_hooks/shorthand_crud.pb.js`）
 
@@ -518,7 +527,7 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 
 **推送状态与还缺什么**（2026-10-30 中午已推送完成，本节为推送后的现状）
 
-- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `0a06c0b`，与推送时的本地 HEAD 逐位一致。
+- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `97b3965`，与推送时的本地 HEAD 逐位一致（推送参数与只读复核见 §15.8）。
   本轮仍走 HTTPS，用的是刘先生当场给出的仓库 PAT（有 repo 写权限）：推送时它只作为本地
   `credential.helper` 凭据文件（600 权限）使用，推送结束后即删除；
   **PAT 不写入仓库任何文件、文档、bundle、diff、git 历史或日志**，本文档与交付物中也不出现。
@@ -957,3 +966,69 @@ PB 允许的可行形态是：新增一个 **text 类型的身份字段**并给�
 - **两台 QwenPaw 现网、metabase 站点、nginx default 站点、nginx map 改写、Basic Auth 凭据**：本轮一律未动。
 - **`MES_APP_LOGIN_PASSWORD` 的引导守卫**：口令长度 11 < 12 时，`mes_auth.pb.js` 的引导逻辑会跳过建号，
   所以新装环境仍需注意本轮设定的口令不满足引导口令长度要求（现有实例不受影响）。
+
+---
+
+## 十五、本轮：实操营「每题一文档 + AI 读文档生成脚本」链路（2026-10-30 下午）
+
+### 15.1 题目与文档一一对应
+
+- 范围：数据库实操营 20 题（`db-q1~q5`、`db-j1~j5`、`db-c1~c5`、`db-r1~r5`）+ 运维实操营 28 题（原 20 题 + 本轮新增 8 题）= **48 题 / 48 份文档**。
+- 每题一份独立文档 `public/content/labs/<id>.md`，固定十个小节：目标与背景、表与服务、账号与权限、环境要求（含规格基线、附加要求、破坏性操作提醒）、标准步骤、**可机器判定的验收**（直接引用该题的检查 SQL 与期望值，或 accept 正则）、常见坑、AI 环境准备步骤、AI 执行脚本要点、安全边界与失败处理。
+- 题目 JSON 增加 `doc` 字段（`{id, path, title}`）；`scripts/check-lab-docs.mjs` 做一一对应校验（缺文档、文档与题目错配、验收正则对不上即非零退出，当前输出「题目 48 道 / 文档 48 份，一一对应校验通过」）；`scripts/build-lab-docs.mjs` 负责由题目与 `public/content/labs/meta.json` 重新生成全部文档。
+
+### 15.2 规格基线（实测，不猜）
+
+在目标机上实测：4 vCPU AMD EPYC、7.8 GiB 内存（无 swap，可用约 5.5 GiB）、`/` 16 GB（45% 已用）、`/data` 20 GB（7% 已用）、Debian GNU/Linux 13 (trixie)、kernel 6.18.54、Docker 29.8.2 可用、未安装 MySQL 客户端与服务端（MySQL 演练一律走 Docker 一次性容器）。各题的「最小配置」按实测值约一半给出，「推荐配置」直接等于实测值；数据库题另给数据库版本与空间要求。
+
+### 15.3 AI 生成脚本链路（单通道、复用站内 AI）
+
+- 模型固定 `mimo-v2.6-pro`（`src/game/labScripts.ts` 的 `LAB_LLM_MODEL`），走站内已有 `/api/llm/chat`（即已接好的 tokenrhythm.studio OpenAI 兼容端点），**不新增第二条通道，浏览器不携带任何密钥**；密钥只在目标机 `MES_LLM_API_KEY` 环境变量里。
+- `buildLabScriptPrompt`：提示词只含「题目标题 + 该题文档全文 + 连接信息（主机/端口/库名/用户名）」，**不含口令**（实测 4082 字符，扫描确认无口令/密钥）。
+- `parseLabScriptResponse`：解析模型返回的 JSON 块；缺 `assert` 的步骤直接判失败。
+- `detectLabDanger`：复用既有 `GLOBAL_DANGER` + 破坏性命令正则（`rm -rf`、`mkfs`、`dd if=`、`shutdown`/`reboot`、`kill -9`、`drop`/`truncate`/`delete from`、`chmod -R 777`、`iptables`、`firewall-cmd`、`systemctl stop|restart|disable`），命中即在预览里标红并要求二次确认。
+- `matchLabAssert`：用题目既有的 `accept` 正则判分，与运维实操营原有判分口径一致。
+- 执行复用既有通道：数据库题走 `dblabApi.exec`（并受既有只读护栏约束），服务器题走 `sshlabApi.exec`。
+- 面板 `src/components/lab/LabScriptPanel.tsx` 挂在 `TerminalDrill`（运维）与 `TaskStage`（数据库）：填连接 → 生成 → **预览**（逐条列出命令、期望、断言正则、危险标记）→ 确认后逐条执行 → 判分。
+- 失败模式全部显式化：上游不可用、文档缺失、解析失败、环境不匹配（文档要求 MySQL 而连接是 PostgreSQL 或反之）、执行报错，都有明确文案，不静默。
+
+### 15.4 演练环境提示语
+
+- `src/components/lab/DrillEnvironmentNotice.tsx`：连接表单顶部醒目中文提示——「请使用可丢弃的演练环境：删除/重建/清库/kill/改防火墙/重启服务都可能发生」；主机名含 prod / production / 生产 / 正式 / 线上 时额外红色告警并要求勾选确认，未勾选不能保存连接。
+- 已接入数据库连接对话框（`ConnDialog`）与服务器连接对话框（`SrvConnDialog`）。
+
+### 15.5 新增题目（8 道，均带文档、判分与安全边界）
+
+`lx-d4` logrotate 重复配置、`lx-d5` inode 耗尽、`lx-d6` 证书过期、`lx-d7` cron 从未执行、`lx-d8` 权限不足导致服务起不来、`lx-d9` 零字节备份、`lx-d10` 连接池耗尽（7 道小排障）；`lx-d11` 一道 10 阶段综合题：资产盘点 → Docker 部署 MySQL(3307) → 离线应用与 systemd → nginx 反代 8099 → 监控/备份脚本与 cron → 故障取证 → 带备份修复 → 四层端到端验收 → 真实回滚演练 → 输出验收清单文件。
+
+### 15.6 本轮同时修掉的缺陷
+
+1. **窄屏登录入口遮挡顶栏按钮**：登录浮层原为 `fixed right-3 top-3`，与 `SiteHeader`（sticky `top-0 h-16`）同高、同 `z-50`，窄屏完全遮挡。改为窄屏 `top-16`（顶栏正下方）并收成 40×40 图标按钮，宽屏（≥sm）位置与外观不变。
+2. **「自由沙盘」没有解锁判定**：此前只是写死的占位提示。新增 `src/game/sandbox.ts`（`SANDBOX_UNLOCK_CHAPTER_ID = 3`，只认第三章「建模与配置」通关 `chapter_status["3"] === "cleared"`，**不擅自放宽门槛**）、`src/content/sandbox.ts` + `public/content/sandbox/index.json`（4 物料 / 2 产品 / 3 工作中心 / 4 条提示）、`src/pages/Sandbox/*` 与 `/sandbox` 路由；库存与工单只活在页面状态，不写 `player_progress`。
+3. 连接保存按钮重复 `disabled` 属性导致构建失败。
+4. 危险命令判定遗漏 `systemctl stop|restart|disable` 等。
+5. AI 给数据库题生成 mysql 命令行，经既有执行接口会报语法错：提示词按题型分别约束（数据库题 = 纯 SQL 单语句、查询类只读；服务器题 = 单条 shell 命令）。
+6. **实操通道中文乱码**：`lab_proxy.pb.js` 的 `runLab` 用 `String.fromCharCode` 逐字节拼字符串（等于按 latin1 解码），库里/终端里的中文全部以乱码返回浏览器。改为按 UTF-8 解码；注意 PocketBase 每个路由处理器是独立 JSVM 作用域，helper 必须每个处理器各带一份（顶层那份在处理器里不可见）。
+7. MySQL 连接未声明字符集：显式 `charset: "utf8mb4"`。
+
+### 15.7 实测证据
+
+- `npx tsc -b` 退出码 0；`npx vitest run` 29 个测试文件 **689 例全过**（上一轮 649 例无回归）。
+- 构建 `VITE_MES_SELF_HOSTED_AUTH=true npx vite build --base=/mes/` 成功；`bash /data/mes/run_deploy.sh` 返回 DEPLOY_EXIT=0，部署校验「学习进度不变量」通过：部署前后 `player_progress` 均为 1 条，changed / missing / added 全空。
+- 基线复核：未认证 `/mes/` 401、已认证 200；未认证 `/mes/delivery` 401、已认证 200；新增内容 `/mes/content/labs/db-q1.md`、`/mes/content/labs/lx-d11.md`、`/mes/content/sandbox/index.json` 均 200；`mes-pocketbase` / `mes-edge-proxy` / `nginx` 均 active；`player_progress` 仍 1 条且 id 不变。
+- **数据库题真实链路 E2E**（一次性 MySQL 演练库，Docker 容器用完即删）：站内登录 → 取该题文档 → 用前端真实代码 `buildLabScriptPrompt` 生成提示词 → 站内 `/api/llm/chat` 出脚本 → 用前端真实代码 `parseLabScriptResponse` 解析（4 条准备 + 3 条执行）→ 注册一次性连接 → 逐条执行 → `matchLabAssert` 与题目判分口径：**7/7 步骤通过、判分 PASS（期望 16，实测 16）**；结束后删除连接登记、销毁容器，无残留。
+  - 附带发现：平台网关对较长响应约 30s 就会断开，前端与本次测试同样在 25s 放弃等待、改用 `/api/llm/poll` 轮询取回结果，因此长脚本生成在生产链路上是通的。
+
+### 15.8 本轮未完成（如实说明）
+
+- **服务器题（1 道）的真实链路 E2E 未做**：需要在目标机上再起一台可丢弃的 SSH 演练机，本轮时间预算内未完成。代码路径与数据库题同构（`sshlabApi.exec` + 同一套 `accept` 正则判分），但**未实测**，不作为已验证结论。
+- **手机端视口实测（360 / 390 / 412px）本轮未做**：窄屏修复有组件级测试覆盖，但没有窄视口截图级证据。
+- 桌面端 640–1440px 宽度区间，登录浮层仍可能压住顶栏右侧按钮（既有状况，本轮未扩大改动范围）。
+
+### 15.9 推送
+
+- 推送参数：`git push --no-follow-tags --no-force origin refs/heads/today-dev:refs/heads/today-dev`，fast-forward。
+- 第一次（代码）：`17e3ce9..97b3965`。
+- 只读复核：远端 `today-dev` 与推送时的本地 HEAD 逐位一致；`main` 仍 `b5c8335`、`wabi-dev` 仍 `bed9246`；12 个 v1.x tag（v1.7.0–v1.14.2）名称与对象 SHA 逐条不变，无新增或删除。
+- 凭据：PAT 只写目标机临时文件（权限 600），推送后立即删除；无 `~/.git-credentials`、无 credential.helper 残留。
+- 本节文档对应的提交随后再推一次，最终远端 `today-dev` 哈希以交付的 `today-dev.bundle` 内 HEAD 为准。
