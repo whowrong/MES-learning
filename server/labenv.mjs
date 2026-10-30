@@ -275,6 +275,8 @@ async function createServerEnv() {
     removeContainer(name)
     return fail("创建一次性 sshd 容器失败（可重试）", r.stderr || r.stdout)
   }
+  // 演练账号给免密 sudo：站点自己建的一次性容器，非 root 账号要能建目录、看服务状态
+  docker(["exec", name, "sh", "-c", "printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' > /etc/sudoers.d/lab && chmod 440 /etc/sudoers.d/lab"], 30000)
   const ready = await waitReady(name, "sshd", READY_TIMEOUT_MS.sshd)
   if (!ready) {
     removeContainer(name)
