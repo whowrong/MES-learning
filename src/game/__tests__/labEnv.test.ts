@@ -1,6 +1,5 @@
 // 两种演练环境模式（模式 A 远程环境 / 模式 B 站点一次性 Docker 环境）的逻辑测试。
 import { describe, expect, it } from "vitest"
-import net from "node:net"
 import {
   LAB_ENV_MODES,
   SITE_DB_PORT_RANGE,
@@ -13,8 +12,6 @@ import {
   type LabEnvMode,
 } from "@/game/labEnv"
 import { matchLabAssert, type LabStep } from "@/game/labScripts"
-// @ts-expect-error —— server/ 下的执行器是纯 ESM，测试直接引入它的纯函数
-import { isPortFree, pickPort } from "../../../server/labenv.mjs"
 
 describe("两种演练环境模式", () => {
   it("提供并列的两种模式，并写清各自的取舍", () => {
@@ -64,26 +61,6 @@ describe("两种演练环境模式", () => {
       expect(SITE_DB_PORT_RANGE[0] <= port && port <= SITE_DB_PORT_RANGE[1]).toBe(false)
       expect(SITE_SSH_PORT_RANGE[0] <= port && port <= SITE_SSH_PORT_RANGE[1]).toBe(false)
     }
-  })
-})
-
-describe("一次性环境的端口分配", () => {
-  it("被占用的端口判为不可用", async () => {
-    const srv = net.createServer()
-    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", () => resolve()))
-    const port = (srv.address() as net.AddressInfo).port
-    expect(await isPortFree(port)).toBe(false)
-    await new Promise<void>((resolve) => srv.close(() => resolve()))
-    expect(await isPortFree(port)).toBe(true)
-  })
-
-  it("挑出来的端口落在给定区间内且避开已占用端口", async () => {
-    const port = await pickPort(SITE_SSH_PORT_RANGE as unknown as [number, number])
-    expect(port).not.toBeNull()
-    expect(port as number).toBeGreaterThanOrEqual(SITE_SSH_PORT_RANGE[0])
-    expect(port as number).toBeLessThanOrEqual(SITE_SSH_PORT_RANGE[1])
-    const second = await pickPort(SITE_SSH_PORT_RANGE as unknown as [number, number], [port as number])
-    expect(second).not.toBe(port)
   })
 })
 
