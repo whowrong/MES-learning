@@ -28,6 +28,27 @@ function loadMeta() {
 }
 
 /** 收集全部题目：数据库实操营 tasks + 运维实操营 items */
+/** 模式 B 用的数据库引擎：题目里没写就按 MySQL 8.0（与站内默认一致） */
+function dbEngineOf(q) {
+  const raw = q.raw || {}
+  const declared = String(raw.engine || raw.dbType || raw.type || "").toLowerCase()
+  if (declared.includes("postgres") || declared.includes("pg")) return "postgres"
+  if (declared.includes("sqlserver") || declared.includes("mssql")) return "sqlserver"
+  return "mysql"
+}
+function engineLabel(engine) {
+  if (engine === "postgres") return "PostgreSQL 16"
+  if (engine === "sqlserver") return "SQL Server 2022"
+  return "MySQL 8.0"
+}
+/** 这道题是不是依赖 systemd / 数据库服务这类「一次性容器里没有」的东西 */
+function needsSystemd(m, q) {
+  const extra = ((m && m.env_extra) || []).join(" ")
+  const services = ((m && m.services) || []).join(" ")
+  const text = extra + " " + services + " " + JSON.stringify(q.raw || {})
+  return /systemd|journalctl|mysqld|nginx|\.service|crontab|supervisor/.test(text)
+}
+
 export function collectQuestions() {
   const list = []
   for (const file of fs.readdirSync(path.join(CONTENT, "db-training")).filter((f) => f.endsWith(".json"))) {
@@ -330,7 +351,85 @@ export function renderLabDoc(q, meta) {
   push("- 只在用户自己提供的演练环境上执行；不连接任何生产实例，也不改动本站服务端配置。")
   push("- 生成的脚本一律先给出预览，用户确认后才执行；危险命令走站内既有拦截清单与二次确认。")
   push("- 失败处理：上游模型不可用 → 明确提示「AI 暂时不可用」，并保留手工执行入口；文档缺失 → 明确提示「该题文档缺失」；命令执行失败 → 原样回显报错行并停止该步；环境不符（例如题目要求 MySQL 却连的是 PostgreSQL）→ 在执行前就提示不匹配，不静默继续。")
-  push("- 本题涉及的判分一律以第 6 节的机器判据为准，不采信模型自述的「已完成」。")
+  push("- 本题涉及的判据一律以第 6 节的机器判据为准，不采信模型自述的「已完成」。")
+  push()
+
+  // 11 两种演练环境模式
+  const isDb = q.kind === "db"
+  const engine = isDb ? dbEngineOf(q) : "sshd"
+  const sitePreset = isDb
+    ? [
+        `一次性 ${engineLabel(engine)} 容器（端口 14200-14249 段，现场生成；随机口令只回显一次，不落盘）`,
+        "空库：建表 / 写入 / 索引重建类步骤可以从零做",
+        "容器内只有数据库本身，没有宿主机上的 systemd / nginx / 业务应用",
+      ]
+    : [
+        "一次性 sshd 容器（账号 lab、随机口令；端口 14300-14349 段，现场生成，只回显一次）",
+        "干净的系统盘与数据目录：没有预置脏数据",
+        "容器内只有基础命令（df / du / find / touch / rm 等），没有 systemd，也没有数据库服务",
+      ]
+  const siteMin = isDb
+    ? "1 vCPU / 1 GiB 内存 / 2 GiB 可用磁盘（MySQL 8.0 实例约需 512 MiB 内存）"
+    : "1 vCPU / 512 MiB 内存 / 2 GiB 可用磁盘"
+  const siteRec = isDb
+    ? "2 vCPU / 2 GiB 内存 / 5 GiB 可用磁盘（给 InnoDB 留 1 GiB buffer pool）"
+    : "2 vCPU / 1 GiB 内存 / 5 GiB 可用磁盘（inode 占用类题目建议 1 GiB 以上 inode 配额）"
+  const remoteReq = isDb
+    ? [
+        "一个可登录的数据库账号（MySQL / PostgreSQL / SQL Server，与题目要求一致）",
+        "对目标库表的建表、写入、删除权限（本题含删除 / 重建 / 清库类步骤）",
+        "一个可丢弃的练习用库：不要指向生产库",
+      ]
+    : [
+        "一台可 SSH 登录的 Linux 主机（演练专用，别用生产机）",
+        "能执行 systemctl / journalctl / df / du / find 等命令的账号",
+        "sudo 权限（部分步骤要停服务、改配置、重启）",
+        "主机名不要含 prod / 生产 / 正式 / 线上，否则站内会红色告警并要求二次确认",
+      ]
+  const limits = []
+  if (needsSystemd(m, q)) {
+    limits.push("本题第 4.2 节要求预置 systemd 服务 / 数据库服务 / 业务进程，模式 B 的一次性容器里没有这些服务——这类步骤请用模式 A，或在模式 A 的机器上预置后再练。")
+  } else if (isDb) {
+    limits.push("模式 B 的容器里只有数据库本身；依赖宿主机服务（systemd / nginx / 业务进程）的步骤请用模式 A。")
+  } else {
+    limits.push("模式 B 的容器里没有 systemd 与数据库服务；练 systemd 启停、日志轮转、备份定时任务这类步骤请用模式 A。")
+  }
+  limits.push("模式 B 的容器是一次性的：演练结束或超时后自动销毁，容器里的数据不保留。")
+
+  push("## 11. 两种演练环境模式下的准备要求")
+  push()
+  push("站内实操面板提供两种并列的执行环境：**模式 A（我的远程环境）** 与 **模式 B（站点的一次性 Docker 演练环境）**。")
+  push("两种模式共用同一份题目文档、同一套 AI 脚本生成、预览与二次确认、危险命令拦截和判分口径，只有「命令打到哪里」这一层不同。")
+  push()
+  push("### 11.1 模式 A：使用我的远程环境")
+  push()
+  push("你提供自己部署的练习用数据库 / 服务器，站内 AI 按本文档生成准备与执行脚本，并在你那台机器上真实执行。")
+  push()
+  push(bullets(remoteReq))
+  push()
+  push("- 优势：贴近真实交付环境（真实数据形态、真实账号权限），可长期复用为演练台；")
+  push("- 代价：环境、账号、权限都要自己准备与维护。")
+  push()
+  push("### 11.2 模式 B：使用站点的一次性 Docker 演练环境")
+  push()
+  push("站点在部署机上起一个可丢弃的容器，演练结束或超时后自动销毁并释放端口；端口与随机口令现场生成、只回显一次，不进仓库、不进文档、不进日志。")
+  push()
+  push("**站点预置的内容：**")
+  push()
+  push(bullets(sitePreset))
+  push()
+  push(`- 最小组件配置：${siteMin}`)
+  push(`- 推荐配置：${siteRec}`)
+  push()
+  push("**模式 B 的限制：**")
+  push()
+  push(bullets(limits))
+  push()
+  push("### 11.3 两种模式怎么选")
+  push()
+  push("- 反复练习、破坏性操作、想零准备随时开始 → 选模式 B；")
+  push("- 正式交付前的真实环境验证、想保留数据与账号权限 → 选模式 A；")
+  push("- 两者可混用：先在模式 B 把步骤练熟，再到模式 A 的机器上按同一份文档复跑一遍。")
   push()
 
   return lines.join("\n") + "\n"
