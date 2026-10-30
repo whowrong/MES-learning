@@ -253,7 +253,7 @@ if [ "$SKIP_VERIFY_SITE" != "1" ] && [ -n "$SITE_URL" ]; then
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL$entry" || echo 000)
     if [ "$code" = "200" ]; then log "入口脚本 OK: $entry"; else log "入口脚本失败 ($code): $entry"; VERIFY_FAILED=1; fi
   fi
-  for f in content/levels/index.json content/terms.json content/career-prep/index.json; do
+  for f in content/levels/index.json content/terms.json content/career-prep/index.json content/delivery/index.json; do
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL$SITE_PREFIX/$f" || echo 000)
     if [ "$code" = "200" ]; then log "内容文件 OK: $f"; else log "内容文件失败 ($code): $f"; VERIFY_FAILED=1; fi
   done
