@@ -122,6 +122,9 @@ async function execMysql(conn, statements, action) {
     user: conn.username,
     password: conn.password,
     database: conn.database,
+    // 显式声明 utf8mb4：否则连接字符集可能落到 latin1，中文字面量与库里的中文值
+    // 比较不上（'已完成' 这类 IN 列表会静默少算），演练题的判分就会失真。
+    charset: "utf8mb4",
     multipleStatements: true,
     connectTimeout: TIMEOUT_MS,
   })

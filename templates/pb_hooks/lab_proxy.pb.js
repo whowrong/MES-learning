@@ -38,6 +38,30 @@ function requireMesUser(e) {
 
 
 routerAdd("GET", "/api/dblab/connections", function (e) {
+  function decodeUtf8Bytes(bytes) {
+    var out = ""
+    var i = 0
+    var len = bytes.length
+    while (i < len) {
+      var b = bytes[i++] & 0xff
+      if (b < 0x80) { out += String.fromCharCode(b); continue }
+      if (b >= 0xc0 && b < 0xe0 && i < len) {
+        out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f)); continue
+      }
+      if (b >= 0xe0 && b < 0xf0 && i + 1 < len) {
+        var b1 = bytes[i++] & 0x3f, b2 = bytes[i++] & 0x3f
+        out += String.fromCharCode(((b & 0x0f) << 12) | (b1 << 6) | b2); continue
+      }
+      if (b >= 0xf0 && i + 2 < len) {
+        var c1 = bytes[i++] & 0x3f, c2 = bytes[i++] & 0x3f, c3 = bytes[i++] & 0x3f
+        var cp = ((b & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3
+        cp -= 0x10000
+        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)); continue
+      }
+      out += "\ufffd"
+    }
+    return out
+  }
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
@@ -51,13 +75,9 @@ routerAdd("GET", "/api/dblab/connections", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -81,13 +101,9 @@ routerAdd("POST", "/api/dblab/connections", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -112,13 +128,9 @@ routerAdd("POST", "/api/dblab/connections/delete", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -143,13 +155,9 @@ routerAdd("POST", "/api/dblab/test", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -174,13 +182,9 @@ routerAdd("POST", "/api/dblab/exec", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -205,13 +209,9 @@ routerAdd("POST", "/api/dblab/reset-builtin", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -239,13 +239,9 @@ routerAdd("GET", "/api/sshlab/connections", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -269,13 +265,9 @@ routerAdd("POST", "/api/sshlab/connections", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -300,13 +292,9 @@ routerAdd("POST", "/api/sshlab/connections/delete", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -331,13 +319,9 @@ routerAdd("POST", "/api/sshlab/test", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -362,13 +346,9 @@ routerAdd("POST", "/api/sshlab/exec", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
@@ -396,13 +376,9 @@ routerAdd("POST", "/api/sshlab/upload", function (e) {
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     command.env = childEnv
     var out = command.output()
-    var text = ""
-    var chunk = []
-    for (var i = 0; i < out.length; i++) {
-      chunk.push(out[i])
-      if (chunk.length === 8192) { text += String.fromCharCode.apply(null, chunk); chunk = [] }
-    }
-    if (chunk.length) text += String.fromCharCode.apply(null, chunk)
+    // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
+    // 否则库里/终端里的中文会以「æˆ¥å®Œ」这类乱码返回给浏览器。
+    var text = decodeUtf8Bytes(out)
     return JSON.parse(text)
   }
   try {
