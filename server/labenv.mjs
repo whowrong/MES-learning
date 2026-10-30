@@ -230,12 +230,23 @@ async function createDbEnv(dbType) {
     removeContainer(name)
     return fail("容器内服务已就绪，但端口连不上，已自动销毁，可重试")
   }
+  // MySQL 容器的初始化脚本会先起一个临时实例（日志里也会出现 ready for connections），
+  // 随后重启成正式实例——所以灌数据要带重试，否则会被临时实例断连。
   let seededRows = 0
-  try {
-    seededRows = await seedDatabase(engine, connection)
-  } catch (e) {
+  let lastErr = null
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      seededRows = await seedDatabase(engine, connection)
+      lastErr = null
+      break
+    } catch (e) {
+      lastErr = e
+      await waitFor(5000)
+    }
+  }
+  if (lastErr) {
     removeContainer(name)
-    return fail("一次性数据库容器灌入练习库数据失败，已自动销毁，可重试", e?.message || e)
+    return fail("一次性数据库容器灌入练习库数据失败，已自动销毁，可重试", lastErr?.message || lastErr)
   }
   return out({
     ok: true,
