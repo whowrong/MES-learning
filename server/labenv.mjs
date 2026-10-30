@@ -291,6 +291,7 @@ async function createServerEnv() {
   const provision = docker(
     ["exec", name, "sh", "-c", [
       "printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' > /etc/sudoers.d/lab && chmod 440 /etc/sudoers.d/lab",
+      "grep -q '^lab ALL=(ALL) NOPASSWD: ALL$' /etc/sudoers || printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' >> /etc/sudoers",
       "mkdir -p /data/archive && chown -R lab:users /data 2>/dev/null || chown -R lab /data",
       "id lab",
     ].join("; ")],
