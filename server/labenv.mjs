@@ -275,8 +275,6 @@ async function createServerEnv() {
     removeContainer(name)
     return fail("创建一次性 sshd 容器失败（可重试）", r.stderr || r.stdout)
   }
-  // 演练账号给免密 sudo：站点自己建的一次性容器，非 root 账号要能建目录、看服务状态
-  docker(["exec", name, "sh", "-c", "printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' > /etc/sudoers.d/lab && chmod 440 /etc/sudoers.d/lab"], 30000)
   const ready = await waitReady(name, "sshd", READY_TIMEOUT_MS.sshd)
   if (!ready) {
     removeContainer(name)
@@ -287,6 +285,9 @@ async function createServerEnv() {
     removeContainer(name)
     return fail("sshd 已就绪但端口连不上，已自动销毁，可重试")
   }
+  // 演练账号给免密 sudo：站点自己建的一次性容器里，非 root 账号要能建目录、看服务状态。
+  // 必须在容器就绪之后再写 —— 镜像的初始化脚本会在启动阶段重建 sudoers 配置。
+  docker(["exec", name, "sh", "-c", "printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' > /etc/sudoers.d/lab && chmod 440 /etc/sudoers.d/lab"], 30000)
   return out({
     ok: true,
     env: {
