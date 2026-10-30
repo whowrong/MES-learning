@@ -483,6 +483,8 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 | `33a7d9c` | 学习进度数据保护（存档数据备份 + 进度不变量校验 + 增量兼容） |
 | `9f0e579` | 与 Muse 文档逐条对齐（内容格式文档、README、回填脚本修正、/debug 只读体检项、一次性临时密钥工具、本说明的两节新增） |
 | `HEAD`（本轮） | 部署目标表述改正：47.122.104.160 = 代理服务器、非部署目标；新增 6.3「目标环境确定后脚本必须复核的项」；补充代理出口用法 |
+| `09ba071` | 修复 `deploy/mes-deploy.sh` 的存档一致性快照：`VACUUM INTO` 目标路径从双引号改成单引号（SQLite 把双引号当标识符，导致每次都退回复制数据文件） |
+| `HEAD`（本轮） | 第十一节改为推送后现状；新增第十二节「instabox 部署实录」 |
 
 **重点一：简写 CRUD 钩子的存档修复**（`templates/pb_hooks/shorthand_crud.pb.js`）
 
@@ -498,21 +500,23 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 逐字节一致、`created`/`updated` 未变、新字段为空值；再只 PATCH 新字段，老字段仍逐字节一致。
 完整论证与只读排查清单见第 4.2 节。
 
-**推送状态与还缺什么**（Muse 审 diff 的前提）
+**推送状态与还缺什么**（已于 2026-10-29 推送完成，本节为推送后的现状）
 
-- 授权范围：只推 `origin/today-dev` 一支供审阅；不推 main、不推 wabi-dev、不打 tag、不 force push。
-- 已实测：`github.com` / `api.github.com` 在本沙箱出口一律 403（连公开的 pocketbase/pocketbase 也 403，
-  是环境级拦截，不是仓库权限问题）；`ssh.github.com:443` 通道**可达**（认证层提示 Permission denied，即只差密钥）。
-- **还缺两样，二选一即可**：
-  1. **GitHub 写凭据** —— 本任务现生成的一次性公钥加为 `whowrong/MES-learning` 的 Deploy key
-     （勾 write 权限），或一个仅对该仓库、仅 Contents: Read and write 的 fine-grained PAT；
-     私钥只在本机，用完删除 Deploy key。按规矩不索取、不使用任何既有私钥文件。
-  2. **代理出口**（若走代理路线）—— 刘先生那台代理服务器的 hysteria2 连接串；凭据只在运行时用，
-     不落盘、不入库、不写进文档。本轮上下文里没有保留该串（按规矩没落盘），需要刘先生再发一次。
-     注意：**代理只解决「能不能连上 GitHub」，推送本身仍需要第 1 项的 GitHub 写凭据**。
-- 替代方案：随附 `today-dev.bundle`（含 `today-dev` 全部分支状态），刘先生可在能连 GitHub 的机器上
-  `git clone today-dev.bundle mes-today-dev && cd mes-today-dev && git push <repo> today-dev:refs/heads/today-dev`。
-- 当前远端状态确认：仍只有 `main`（b5c8335）与 `wabi-dev`（bed9246），**本轮没有任何推送发生**。
+- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `4aa4e1d`，与本地 HEAD 一致。
+  认证用的是本任务现生成的一次性临时密钥对，推完即删（本机私钥已清除，不留存）。
+- **远端核对**（ssh 通道 + 只读镜像双通道结果一致）：
+  - 分支：`main` = `b5c8335`、`wabi-dev` = `bed9246`、`today-dev` = `4aa4e1d`；
+  - tag：仍是基线那 12 个 v1.x（`v1.7.0`–`v1.14.2`），与本地 `refs/tags` 集合完全一致；
+  - 未推 `main` / `wabi-dev`、未打 tag、未 force push、未删任何远端引用。
+- **GitHub 上那条 Deploy key**：现在没有对应私钥（不可用，也没有泄露风险）；删留由刘先生定，
+  本轮不擅自处理。
+- **长期推送路径已搁置**：刘先生 2026-10-29 明确表示「好麻烦，算了，累死了」，
+  因此不再提 Deploy key / PAT / 密钥对 / 分支保护等建议，也不再生成新密钥、不动远端引用；
+  只有他明确给出推送方式时才执行写操作。
+- **本轮（VACUUM 修复 + 文档更新）的改动只在本地提交，未推送**。随附交付物供后续推送：
+  - `today-dev.bundle`（含 `today-dev` 全部分支状态，可用 `git clone today-dev.bundle` 后推送）；
+  - `today-dev-vs-4aa4e1d.diff`（本轮两个改动的补丁，相对 `4aa4e1d`）；
+  - `today-dev-vs-wabi-dev.diff`（相对 `wabi-dev`@bed9246 的全量 diff，仍然有效）。
 
 **重点二：构建相关**
 
@@ -544,3 +548,111 @@ git diff bed9246..today-dev -- templates/pb_hooks/shorthand_crud.pb.js   # 重�
 git diff bed9246..today-dev -- vite.config.ts                            # 重点二（应为空）
 git diff bed9246..today-dev --stat                                        # 全量概览
 ```
+
+## 十二、instabox 部署实录（2026-10-30）
+
+本节记录本轮在目标机（Instabox 机器 `dev`）上的实际落地形态与实测结果，供后续维护与复盘。
+**本节不含任何凭据**：Basic Auth 口令、应用账号口令、SSH token 均不写入文档，只保存在目标机的
+`/data/mes/secrets/`（600 权限）里。
+
+### 12.1 目录布局与 DATA_DIR
+
+| 路径 | 用途 |
+| --- | --- |
+| `/data/mes/src/repo` | 只读克隆的 `today-dev` 源码（`4aa4e1d`），构建与部署脚本的来源 |
+| `/data/mes/app` | 运行目录：`pocketbase` 二进制、`pb_hooks/`、`pb_public/`（前端产物）、`server/`、`pb_data/`、`lab-data/`、`edge-proxy.mjs` |
+| `/data/mes/app/pb_data` | **DATA_DIR**：PocketBase 数据目录（`data.db` + `auxiliary.db*`），进度存档即在此库内 |
+| `/data/mes/app/lab-data` | 数据库实操营练习库（`practice.db`）与连接凭据文件 |
+| `/data/mes/backups` | 备份根目录（`mes-backup-<时间戳>/`，保留 3 份） |
+| `/data/mes/secrets` | 凭据文件（`mes.env`、`credentials.txt`，均 600） |
+| `/data/mes/nginx` | Basic Auth 口令文件、自签证书、已部署站点配置副本 |
+
+`node_modules` 放在 `/data/mes/node_modules`（仓库根级），`server/` 运行时由 Node 向上解析依赖，
+这样 `mes-deploy.sh` 打包 `APP_DIR` 时不会把 600M 依赖卷进每份备份。
+
+### 12.2 端口拓扑
+
+```
+外网（平台发布端口 8080）
+        │  https://<机器>.instabox.tech/mes/
+        ▼
+   nginx 0.0.0.0:80 / 443 / 8080     ← 对外唯一入口：Basic Auth 门禁 + /mes 前缀 + 代理
+        │  proxy_pass http://127.0.0.1:8091
+        ▼
+   edge-proxy 127.0.0.1:8091          ← 剥掉 /mes 前缀；/mes/__pb/* 映射到 PB 根；X-Pb-Auth → Authorization
+        │
+        ▼
+   PocketBase 127.0.0.1:8090          ← 只绑回环，不对外暴露
+```
+
+应用端口（8090 / 8091）只监听回环地址，外网不可达；对外只有 nginx 的 80/443/8080 三个端口，
+且都要先过 Basic Auth。平台已发布的 8080 端口正好落到 nginx 的 8080（实测外网未认证请求返回
+401 门禁页，证明命中的是 nginx 而不是应用本体）。
+
+### 12.3 Basic Auth 与令牌传递（一个必须注意的坑）
+
+- 口令文件：`/data/mes/nginx/.htpasswd`，属主 `root:www-data`、权限 `640`
+  （必须是 www-data 组可读，600 会让 nginx worker 读不到而返回 500）。
+- **坑**：nginx 的 `auth_basic` 会把客户端的 `Authorization` 头原样转发给上游，
+  于是 Basic 凭据会占住 `Authorization`；而 `deploy/edge-proxy.mjs` 只在「上游没有 Authorization」
+  时才用 `X-Pb-Auth` 还原 PocketBase 令牌 → 令牌被 Basic 凭据挤掉，站点登录后的接口全部 401。
+  **解法（在 nginx 侧做，不需要改仓库）**：把发给上游的 `Authorization` 改写成 `X-Pb-Auth` 的值。
+
+  ```nginx
+  map $http_x_pb_auth $mes_pb_authorization {
+      default $http_x_pb_auth;
+      ''      '';
+  }
+  # location / 内
+  proxy_set_header Authorization $mes_pb_authorization;
+  ```
+
+  站前端的 `src/lib/pb.ts` 已有配套逻辑：非「localhost / 裸 IP」的部署形态一律把 PB 令牌放进
+  `X-Pb-Auth`（见该文件 `PB_USER_AUTH_HEADER` 与 `pb.beforeSend`），所以域名形态下这条链路是通的。
+  **遗留建议**：`deploy/edge-proxy.mjs` 本身可以改成「`x-pb-auth` 优先于 `authorization`」，
+  这样任何前置 Basic Auth 网关都不必再配这段 map；该改动属仓库变更，等刘先生或 Muse 确认后再动。
+
+### 12.4 /workspace 软链的用途
+
+`server/dblab.mjs` / `server/sshlab.mjs` 把练习库目录写死在 `/workspace/pocketbase-bin/lab-data`
+（部署机没有 /workspace 目录时会落到临时盘）。因此建了软链
+`/workspace/pocketbase-bin → /data/mes/app`：软链由 root 的一次性单元 `mes-app-prepare.service` 负责重建，
+练习库与连接凭据因此真正落在 `/data` 持久盘上，重启不丢。
+
+### 12.5 systemd 单元
+
+| 单元 | 作用 | 关键设置 |
+| --- | --- | --- |
+| `mes-app-prepare.service` | root 一次性准备：建 `/workspace`、重建软链、把应用目录属主改回 `user` | `Type=oneshot`、`RemainAfterExit=yes` |
+| `mes-pocketbase.service` | 跑 PocketBase | `User=user`、`EnvironmentFile=/data/mes/secrets/mes.env`、`Restart=always`、`RestartSec=3` |
+| `mes-edge-proxy.service` | 跑边缘代理 | `Environment=PORT=8091 / APP_PREFIX=/mes / PB_TARGET=http://127.0.0.1:8090`、`Restart=always` |
+
+四个单元（三个 + nginx）全部 `enabled` 且 `active`。**依赖关系注意**：`edge-proxy` 对 PocketBase
+只用 `Wants=`（软依赖）而不是 `Requires=`，否则 PocketBase 一重启，edge-proxy 会被连带停掉且不会
+自动回来（实测踩过：改回 Wants 后，单独重启 PocketBase 不再影响 edge-proxy）。
+
+### 12.6 平台约束与可用性判断
+
+Instabox 免费档的硬约束：闲置 30 分钟自动暂停（关不掉）、单次运行上限 480 分钟、进程不跨运行周期恢复。
+因此这台机器做不到「永不掉线」——平台暂停期间外网 URL 一定不通。本轮能做的都做了：
+
+- 三个 MES 单元 `enabled` + `Restart=always`：机器一恢复（保活拉起或 8 小时上限到点重启），
+  nginx、PocketBase、edge-proxy 自己起来并对外服务；
+- 数据全部在 `/data` 持久盘，平台停机不丢；
+- 实测 `kill -9` 两个进程后，systemd 在 6 秒内重新拉起，站点与存档立即恢复正常。
+
+### 12.7 本轮实测结论
+
+| 项目 | 结果 |
+| --- | --- |
+| 外网未认证 `/mes/`、`/mes/career-prep` | 401（门禁生效） |
+| 外网认证后 `/mes/`、`/mes/career-prep`、入口脚本 | 200 |
+| 外网根路径 `/` | 302 跳 `/mes/` |
+| 站内登录（应用账号） | 成功，取到令牌；带令牌读 `player_progress` 200、带令牌打 `dblab` 200、无令牌 401 |
+| db-c5 判分 | 校验查询返回 `[[0, 0]]`，与期望一致 |
+| db-r5 判分 | 返回 L2 27/165/0.1636、L1 8/60/0.1333、L4 37/497/0.0744、L3 16/299/0.0535，与期望逐值一致 |
+| progress-guard 不变量 | 部署前 1 条 → 部署后 1 条，12 个受监控字段逐条一致（`changed/missing/added` 全空） |
+| 备份快照 | 修复后日志出现「存档数据一致性快照完成」，备份 `data/` 下只剩单个 `data.db`（无 `-wal`/`-shm`），备份库记录数 1 且字段完整 |
+| 进程被杀 | 6 秒内 systemd 拉起 |
+| 磁盘 | `/data` 用 1.1–1.2 G / 20 G（约 6%） |
+| 既有服务 | 机器上原有的 metabase（平台发布 3000）不受影响，外网 200 |
