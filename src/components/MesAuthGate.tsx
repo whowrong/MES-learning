@@ -9,7 +9,7 @@ function hasMesAuth(): boolean {
 
 export function MesAuthGate({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = useState<AuthState>(() => ({ valid: hasMesAuth(), revision: 0 }))
-  const [email, setEmail] = useState("")
+  const [identity, setIdentity] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -23,10 +23,10 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
     setError("")
     setBusy(true)
     try {
-      await pb.collection("mes_users").authWithPassword(email.trim(), password)
+      await pb.collection("mes_users").authWithPassword(identity.trim(), password)
       setPassword("")
     } catch {
-      setError("邮箱或密码不正确，或账号尚未配置。")
+      setError("账号或密码不正确，或账号尚未配置。")
     } finally {
       setBusy(false)
     }
@@ -48,8 +48,8 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
           <form onSubmit={submit} className="w-72 max-w-[calc(100vw-3rem)] space-y-3 p-2">
             <p className="text-xs text-muted-foreground">学习内容公开可读；数据库/SSH 实操与个人存档需要应用账号。此站不开放注册。</p>
             <label className="block space-y-1">
-              <span>邮箱</span>
-              <input autoComplete="username" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2" />
+              <span>账号</span>
+              <input autoComplete="username" type="text" required value={identity} onChange={(e) => setIdentity(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2" />
             </label>
             <label className="block space-y-1">
               <span>密码</span>
