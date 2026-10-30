@@ -93,7 +93,13 @@ if [ -f "$DATA_DB" ]; then
       const { DatabaseSync } = require("node:sqlite");
       const src = process.argv[1], dst = process.argv[2];
       const db = new DatabaseSync(src, { readOnly: true });
-      try { db.exec(`VACUUM INTO "${dst}"`); } finally { db.close(); }
+      // SQLite parses a double-quoted token as an identifier, so "path" fails with
+      // "no such column"; the target must be a single-quoted string literal.
+      // (The apostrophe is built by char code: this snippet lives inside a
+      // shell single-quoted string, where a literal quote would end it.)
+      const q = String.fromCharCode(39);
+      const safeDst = dst.split(q).join(q + q);
+      try { db.exec("VACUUM INTO " + q + safeDst + q); } finally { db.close(); }
     ' "$DATA_DB" "$BACKUP_DIR/data/data.db" 2>/dev/null \
       && log "存档数据一致性快照完成: $BACKUP_DIR/data/data.db" \
       || {
