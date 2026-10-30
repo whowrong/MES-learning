@@ -25,7 +25,12 @@
       "explanation": "COUNT(*) + WHERE status IN (...) 是口径归类的标准写法。实施现场的教训：上线前必须把状态字典管住（枚举值 + 录入约束），否则每个报表都要写这种「翻译」条件，漏一种写法数就错。汇报口径时记得注明「含历史多种写法」，让客户知道数据治理欠账在哪。",
       "term_ids": [
         "work_order"
-      ]
+      ],
+      "doc": {
+        "id": "db-q1",
+        "path": "/content/labs/db-q1.md",
+        "title": "月会拷问：这个月到底完工了多少张工单 · 题目文档"
+      }
     },
     {
       "id": "db-q2",
@@ -51,7 +56,12 @@
       "term_ids": [
         "data_quality",
         "one_item_two_codes"
-      ]
+      ],
+      "doc": {
+        "id": "db-q2",
+        "path": "/content/labs/db-q2.md",
+        "title": "接口对不上：找出编码带尾部空格的物料 · 题目文档"
+      }
     },
     {
       "id": "db-q3",
@@ -104,7 +114,12 @@
         "scrap",
         "yield_rate",
         "reporting"
-      ]
+      ],
+      "doc": {
+        "id": "db-q3",
+        "path": "/content/labs/db-q3.md",
+        "title": "质量例会：报废率最高的五张工单 · 题目文档"
+      }
     },
     {
       "id": "db-q4",
@@ -136,7 +151,12 @@
       "term_ids": [
         "reporting",
         "shift"
-      ]
+      ],
+      "doc": {
+        "id": "db-q4",
+        "path": "/content/labs/db-q4.md",
+        "title": "班次对比：白班夜班各干了多少 · 题目文档"
+      }
     },
     {
       "id": "db-q5",
@@ -183,7 +203,12 @@
         "master_data",
         "data_quality",
         "work_order"
-      ]
+      ],
+      "doc": {
+        "id": "db-q5",
+        "path": "/content/labs/db-q5.md",
+        "title": "工单状态口径体检：同一件事写了几种状态 · 题目文档"
+      }
     }
   ]
 }

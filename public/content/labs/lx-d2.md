@@ -1,0 +1,131 @@
+# MES Web 服务宕机：日志取证与内存排查
+
+- 题目编号：`lx-d2`
+- 所属模块：运维实操营 · Linux 服务器实操
+- 题目类型：运维实操（终端实操，真实服务器执行命令）
+- 难度 / 建议时长：进阶 / 15 分钟
+- 文档路径：`public/content/labs/lx-d2.md`（站内地址 `/content/labs/lx-d2.md`）
+
+> 本文同时服务两类读者：人（讲清这道题在练什么、环境要求、步骤、验收、常见错法）与站内 AI（据此生成准备与执行脚本）。AI 生成的脚本一律先预览、再由用户确认执行。
+
+> ⚠️ 本站演练会执行删除、重建、清库、杀进程、改防火墙、重启服务等破坏性操作。请只填**可破坏、演练专用**的数据库与服务器；生产环境、重要数据环境请勿填入。建议用一次性实例，或随时能从快照重建的环境。
+
+## 1. 题目目标与业务背景
+
+**目标**：取证定位宕机根因，处理内存挤占，调整配置恢复服务，并本地验证。
+
+**背景**：MES Web 应用（mes-web，Java/Tomcat）承载报工页面和接口服务，systemd 托管，JVM 堆上限 -Xmx2g。同机还跑着前任留下的 legacy-sync 同步脚本。
+
+**现象**：早班 07:10 车间反馈报工页面全部打不开，nginx 返回 502。
+
+## 2. 涉及的数据表或服务
+
+- mes-web（Java 服务，JVM 堆上限 2g，nginx 反代到它）
+- legacy-sync（旧同步脚本进程，内存占用大户）
+- nginx（对外返回 502）
+
+## 3. 需要的账号与权限
+
+- 需要 sudo：可读服务日志、可改 JVM 配置文件、可停/启 systemd 服务
+- SSH 私钥 / 口令只保存在本站服务端，不进仓库、不进文档。
+
+## 4. 环境要求（演练专用）
+
+### 4.1 规格基线
+
+- 演练服务器最低配置：2 vCPU / 2 GB 内存 / 20 GB 可用磁盘（其中日志分区 ≥ 2 GB）；Debian 12 或 Ubuntu 22.04 及以上，需 systemd
+- 演练服务器推荐配置：4 vCPU / 4–8 GB 内存 / 40 GB 可用磁盘（日志分区 ≥ 10 GB）；Debian 13 或 Ubuntu 24.04，Docker 29 可用
+- 系统版本：Debian GNU/Linux 12/13 或 Ubuntu 22.04/24.04（systemd + bash + coreutils）
+
+> 规格出处：以下数值对齐已验证过的目标机 instabox dev 实测规格（4 vCPU / 7.8 GiB 内存、根分区 16 GB + 数据盘 20 GB、Debian GNU/Linux 13，内核 6.18，Docker 29.8 可用），最低配置按其一半左右给出，保证题目脚本与路径在演练机上跑得通。
+
+### 4.2 额外要求
+
+- 预置 mes-web.service 与 legacy-sync.service，两者都能被 systemctl 管理
+- 预置 JVM 配置文件（如 /etc/mes/mes-web.conf，含 -Xmx2g），并保留 .bak 备份
+- 内存总量 ≥ 2 GB（最低配置）；4 GB 以上更贴近真实 MES 主机
+- mes-web 监听本机端口（如 8081），可 curl 自测
+
+### 4.3 破坏性提示
+
+> ⚠️ 本站演练会执行删除、重建、清库、杀进程、改防火墙、重启服务等破坏性操作。请只填**可破坏、演练专用**的数据库与服务器；生产环境、重要数据环境请勿填入。建议用一次性实例，或随时能从快照重建的环境。
+
+## 5. 标准步骤
+
+| # | 目标 | 参考动作 |
+| --- | --- | --- |
+| s1 | 确认 mes-web 服务与 Java 进程的当前状态 | systemctl status mes-web 看服务状态，或 ps -ef | grep java 看进程。 |
+| s2 | 翻服务日志，找崩溃的直接原因 | systemd 服务用 journalctl -u mes-web -n 100 看日志，或 tail 应用日志文件。 |
+| s3 | 看整机内存大盘，确认还有多少余量 | free -h 看内存总量和可用量。 |
+| s4 | 按内存占用排序，找出挤占内存的进程 | ps aux --sort=-%mem | head 按内存倒序列进程。 |
+| s5 | 与业务确认 legacy-sync 可以停后，规范地停掉它 | 确认无业务使用后 kill -15（优雅终止）进程号 1244。 |
+| s6 | 修改 JVM 配置前，先备份配置文件 | cp 原文件 原文件.bak-日期，改任何生产配置前先留退路。 |
+| s7 | 把 JVM 堆上限从 2g 调到 4g（一行式修改） | 演练终端不支持交互式编辑器，用 sed -i 's/-Xmx2g/-Xmx4g/' 一行改完。 |
+| s8 | 启动 mes-web 并确认服务状态 | systemctl start mes-web 拉起服务，再 status 确认 active。 |
+| s9 | 本机验证接口真正可用 | curl -sI http://127.0.0.1:8080/mes/health 本机探活。 |
+
+每一步的判定命令见第 6 节的验收正则。
+
+## 6. 验收标准（可机器判定）
+
+判分方式：终端实操逐条比对命令正则（任一条命中即通过该步），最终按通过步数给出评级。
+
+| # | 步骤目标 | 命中的命令正则 |
+| --- | --- | --- |
+| s1 | 确认 mes-web 服务与 Java 进程的当前状态 | `^systemctl\s+status\s+mes-web` 或 `^ps\b.*java` 或 `^pgrep\b` |
+| s2 | 翻服务日志，找崩溃的直接原因 | `^journalctl\b.*mes-web` 或 `^tail\b.*(mes|tomcat|catalina).*\.log` |
+| s3 | 看整机内存大盘，确认还有多少余量 | `^free\b` 或 `^vmstat` 或 `^top\s+-b` 或 `^cat\s+/proc/meminfo` |
+| s4 | 按内存占用排序，找出挤占内存的进程 | `^ps\s+aux.*sort.*mem` 或 `^ps\b.*--sort` 或 `^smem\b` |
+| s5 | 与业务确认 legacy-sync 可以停后，规范地停掉它 | `^systemctl\s+stop\s+legacy-sync` 或 `^kill\s+(-15\s+)?1244\b` |
+| s6 | 修改 JVM 配置前，先备份配置文件 | `^cp\b.*jvm\.options` 或 `^cp\b.*(conf|config).*\.bak` |
+| s7 | 把 JVM 堆上限从 2g 调到 4g（一行式修改） | `^sed\s+-i\b.*Xmx` |
+| s8 | 启动 mes-web 并确认服务状态 | `^systemctl\s+(restart|start)\s+mes-web` |
+| s9 | 本机验证接口真正可用 | `^curl\b.*(127\.0\.0\.1|localhost)` 或 `^wget\b.*(127\.0\.0\.1|localhost)` |
+
+## 7. 常见错误与排查提示
+
+- 确认 mes-web 服务与 Java 进程的当前状态：systemctl status mes-web 看服务状态，或 ps -ef | grep java 看进程。
+- 要点：先确认「死没死、怎么死的」。状态显示不是没启动，而是反复崩溃到 systemd 放弃——说明有持续性根因，直接 restart 大概率再崩。
+- 翻服务日志，找崩溃的直接原因：systemd 服务用 journalctl -u mes-web -n 100 看日志，或 tail 应用日志文件。
+- 要点：OutOfMemoryError: Java heap space，且栈顶是 ShiftReportService.buildLargeReport——早班交接时生成班次大报表把 2G 堆吃爆。根因方向明确了。
+- 看整机内存大盘，确认还有多少余量：free -h 看内存总量和可用量。
+- 要点：7.6G 的机器 available 只剩 300M，还没配 Swap。就算 JVM 想扩堆也没空间——先找出谁在吃内存。
+- 按内存占用排序，找出挤占内存的进程：ps aux --sort=-%mem | head 按内存倒序列进程。
+- 要点：legacy-sync.py 一个野生脚本吃了 2.8G——前任手敲启动、不在 systemd 里、没人知道它同不同意。这就是 mes-web 扩不了堆的元凶。
+- 与业务确认 legacy-sync 可以停后，规范地停掉它：确认无业务使用后 kill -15（优雅终止）进程号 1244。
+- 要点：杀野生进程前必须先确认业务归属——万一是老板小舅子在跑的对账任务呢。确认后用 -15 给它清理现场的机会，-9 是最后手段。
+- 修改 JVM 配置前，先备份配置文件：cp 原文件 原文件.bak-日期，改任何生产配置前先留退路。
+- 要点：生产配置改动必须可回滚。备份只要 1 秒，改坏了没备份就是通宵。这是运维的基本纪律。
+- 把 JVM 堆上限从 2g 调到 4g（一行式修改）：演练终端不支持交互式编辑器，用 sed -i 's/-Xmx2g/-Xmx4g/' 一行改完。
+- 要点：机器现在 available 3.1G，堆扩到 4G 有依据（不是拍脑袋）。配置里已带 HeapDumpOnOutOfMemoryError——下次再 OOM 会留下 dump 文件供分析。
+- 启动 mes-web 并确认服务状态：systemctl start mes-web 拉起服务，再 status 确认 active。
+- 要点：active (running) 只是进程活着，不代表业务可用——Java 应用启动要几十秒，端口起来才算数，所以下一步必须验证。
+- 本机验证接口真正可用：curl -sI http://127.0.0.1:8080/mes/health 本机探活。
+- 要点：健康检查 200 且 db/queue 全 UP，才算恢复完成。最后通知车间试报一笔工，闭环。遗留项：给 legacy-sync 补台账、配内存告警、评估加 Swap。
+- 直接 kill -9 掉 legacy-sync 不留痕：先用 systemctl stop 走正常停机流程
+- 改完配置不验证接口：进程起来不等于接口能用，必须 curl
+
+## 8. AI 环境准备步骤（供站内 AI 生成准备脚本）
+
+AI 应当按下面的顺序在**用户填写的演练环境**上生成准备脚本；每条命令都必须先预览、由用户确认后再执行，命中站内危险命令清单的一律二次确认。
+
+- 记录基线：free -h、ps -eo pid,rss,cmd 排序前 5、mes-web 当前堆上限配置
+- 造故障：把 legacy-sync 跑成内存大户（预置脚本持续申请内存），并把 mes-web 堆上限设为 2g
+- 确认现象：mes-web 因 OutOfMemoryError 崩溃退出，nginx 502
+- 记录回滚点：原配置文件内容与备份路径
+
+## 9. AI 执行脚本要点（供站内 AI 生成执行脚本）
+
+- 先确认服务与进程状态（systemctl status、ps），再翻日志找到崩溃直接原因
+- 用 free -h + ps 按内存排序找出挤占进程，与业务确认后再规范停掉 legacy-sync（systemctl stop）
+- 改 JVM 堆上限前先备份配置文件（cp 一份 .bak），再改 2g → 4g
+- 启动 mes-web 并用 curl 本机端口验证接口真正可用，而不是只看进程在不在
+- 验收正则覆盖：systemctl / 日志查看 / 内存查看 / 备份 / 配置修改 / 启停 / curl
+
+## 10. 安全边界与失败处理
+
+- 只在用户自己提供的演练环境上执行；不连接任何生产实例，也不改动本站服务端配置。
+- 生成的脚本一律先给出预览，用户确认后才执行；危险命令走站内既有拦截清单与二次确认。
+- 失败处理：上游模型不可用 → 明确提示「AI 暂时不可用」，并保留手工执行入口；文档缺失 → 明确提示「该题文档缺失」；命令执行失败 → 原样回显报错行并停止该步；环境不符（例如题目要求 MySQL 却连的是 PostgreSQL）→ 在执行前就提示不匹配，不静默继续。
+- 本题涉及的判分一律以第 6 节的机器判据为准，不采信模型自述的「已完成」。
+

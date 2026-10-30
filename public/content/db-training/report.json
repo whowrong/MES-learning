@@ -73,7 +73,12 @@
       "term_ids": [
         "reporting",
         "daily_report"
-      ]
+      ],
+      "doc": {
+        "id": "db-r1",
+        "path": "/content/labs/db-r1.md",
+        "title": "生产日报：按天汇总产出与报废 · 题目文档"
+      }
     },
     {
       "id": "db-r2",
@@ -110,7 +115,12 @@
       "explanation": "「明细表关联维度表再聚合」是报表 SQL 的万能句式：事实表（报工）出数字，维度表（员工→班组）出分组口径。竞赛榜单发布前记得跟车间确认口径——用合格数还是合格+报废的总投入？借调人员算谁的？排行榜动的是班组长的面子，口径含糊会引爆扯皮，实施顾问要在发榜前把规则钉死。",
       "term_ids": [
         "reporting"
-      ]
+      ],
+      "doc": {
+        "id": "db-r2",
+        "path": "/content/labs/db-r2.md",
+        "title": "班组产出对比：哪个班组最能打 · 题目文档"
+      }
     },
     {
       "id": "db-r3",
@@ -147,7 +157,12 @@
       "term_ids": [
         "inventory",
         "inventory_accuracy"
-      ]
+      ],
+      "doc": {
+        "id": "db-r3",
+        "path": "/content/labs/db-r3.md",
+        "title": "仓库健康度：每个仓的账实相符率 · 题目文档"
+      }
     },
     {
       "id": "db-r4",
@@ -193,7 +208,12 @@
       "term_ids": [
         "sales_order",
         "work_order"
-      ]
+      ],
+      "doc": {
+        "id": "db-r4",
+        "path": "/content/labs/db-r4.md",
+        "title": "交期预警：订单要延期了吗 · 题目文档"
+      }
     },
     {
       "id": "db-r5",
@@ -241,7 +261,12 @@
         "scrap",
         "sql_join",
         "slow_query"
-      ]
+      ],
+      "doc": {
+        "id": "db-r5",
+        "path": "/content/labs/db-r5.md",
+        "title": "产线不良率排名：不良率相同时按产线号定序 · 题目文档"
+      }
     }
   ]
 }

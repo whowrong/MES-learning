@@ -19,7 +19,10 @@
         {
           "id": "s1",
           "objective": "先验证源头：确认 MES 侧报工数据正常落库（划定排查边界）",
-          "accept": ["^mysql\\b.*-e", "^curl\\b.*(mes|8080)"],
+          "accept": [
+            "^mysql\\b.*-e",
+            "^curl\\b.*(mes|8080)"
+          ],
           "output": "$ mysql -h 10.0.2.11 -u ops -p -e \"SELECT COUNT(*) AS cnt FROM mes.reporting WHERE report_time >= NOW() - INTERVAL 2 DAY\"\n+------+\n| cnt  |\n| 1834 |\n+------+\n\nMES 侧两天报工 1834 条，数据完整——源头无罪，中断发生在传输或消费环节。",
           "hint": "mysql -e \"SELECT COUNT(*) FROM mes.reporting WHERE ...\" 直接查 MES 库近两天的报工条数。",
           "explain": "集成排障第一原则：先分段定界，别一上来就翻中间件。源头数据在，说明问题被夹在「MES 出口 → 队列 → ERP 入口」之间，排查范围立刻缩小三分之二。"
@@ -27,7 +30,11 @@
         {
           "id": "s2",
           "objective": "确认中间件 RabbitMQ 服务本身活着",
-          "accept": ["^systemctl\\s+status\\s+rabbitmq", "^rabbitmq-diagnostics\\s+(status|check_running)", "^rabbitmqctl\\s+status"],
+          "accept": [
+            "^systemctl\\s+status\\s+rabbitmq",
+            "^rabbitmq-diagnostics\\s+(status|check_running)",
+            "^rabbitmqctl\\s+status"
+          ],
           "output": "$ systemctl status rabbitmq-server\n● rabbitmq-server.service - RabbitMQ broker\n   Active: active (running) since Sun 2026-10-12 03:00:11 CST; 9 days ago\n   Main PID: 1102 (beam.smp)",
           "hint": "systemctl status rabbitmq-server 或 rabbitmq-diagnostics check_running。",
           "explain": "中间件进程活着。但「进程活着」不等于「链路健康」——队列积压、消费者掉线都发生在进程之下，下一步看队列内部。"
@@ -35,7 +42,10 @@
         {
           "id": "s3",
           "objective": "查 mes_to_erp 队列的积压量与消费者数量",
-          "accept": ["^rabbitmqctl\\s+list_queues", "^rabbitmq-diagnostics\\s+list_queues"],
+          "accept": [
+            "^rabbitmqctl\\s+list_queues",
+            "^rabbitmq-diagnostics\\s+list_queues"
+          ],
           "output": "$ rabbitmqctl list_queues name messages messages_ready consumers\nname              messages  messages_ready  consumers\nmes_to_erp        4521      4521            0        ← 异常\nmes_to_wms        12        12              2\nerp_to_mes        0         0               1\nwms_ack           3         3               1",
           "hint": "rabbitmqctl list_queues name messages consumers，重点看 mes_to_erp 的 messages 和 consumers 两列。",
           "explain": "铁证：mes_to_erp 积压 4521 条、消费者为 0——消息进得来、没人消费。其它队列消费者正常，进一步锁定：是 ERP 侧的桥接服务掉线了。"
@@ -43,7 +53,11 @@
         {
           "id": "s4",
           "objective": "到 ERP 应用服务器上确认 erp-bridge 服务状态",
-          "accept": ["^systemctl\\s+status\\s+erp-bridge", "^ps\\b.*erp-bridge", "^ssh\\b"],
+          "accept": [
+            "^systemctl\\s+status\\s+erp-bridge",
+            "^ps\\b.*erp-bridge",
+            "^ssh\\b"
+          ],
           "output": "（演练模拟：SSH 到 10.0.3.15 ERP 应用服务器）\n$ systemctl status erp-bridge\n● erp-bridge.service - ERP Interface Bridge\n   Active: inactive (dead) since Sun 2026-10-19 03:14:22 CST; 2 days ago\n  Process: 2214 ExecStart=/opt/erp/bridge/start.sh (code=exited, status=1)",
           "hint": "systemctl status erp-bridge——注意它跑在 ERP 应用服务器上，跨机器排查。",
           "explain": "消费者两天前就死了，和财务说的「两天没更新」严丝合缝。而且死亡时间 03:14 是凌晨——那个时段通常跑批处理，方向指向夜间作业对数据库做了什么。"
@@ -51,7 +65,10 @@
         {
           "id": "s5",
           "objective": "翻 erp-bridge 日志，找它退出的根本原因",
-          "accept": ["^journalctl\\b.*erp-bridge", "^tail\\b.*bridge"],
+          "accept": [
+            "^journalctl\\b.*erp-bridge",
+            "^tail\\b.*bridge"
+          ],
           "output": "$ journalctl -u erp-bridge -n 60 --no-pager\n10-19 03:12:40 erp-bridge[2214]: WARN  HikariPool-1 - Connection is not available, request timed out after 30000ms\n10-19 03:13:55 erp-bridge[2214]: ERROR 消费线程异常退出\njava.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available\n10-19 03:14:22 erp-bridge[2214]: FATAL 桥接服务终止（无自动重连逻辑）\n\n关联线索：ERP DBA 当晚 03:00-03:10 重启过 ERP 数据库做主数据批量升级。",
           "hint": "journalctl -u erp-bridge -n 60，把服务死亡时间前后的日志连起来读，注意连接池报错。",
           "explain": "根因链完整了：凌晨 ERP 数据库重启升级 → 桥接服务连接池耗尽 → 消费线程崩溃 → 服务没有自动重连逻辑，一死就是两天。技术根因之外还有管理根因：数据库重启没人通知接口运维，服务死亡没有告警。"
@@ -59,7 +76,9 @@
         {
           "id": "s6",
           "objective": "重启 erp-bridge，恢复消费能力",
-          "accept": ["^systemctl\\s+(restart|start)\\s+erp-bridge"],
+          "accept": [
+            "^systemctl\\s+(restart|start)\\s+erp-bridge"
+          ],
           "output": "$ systemctl restart erp-bridge\n$ systemctl status erp-bridge\n● erp-bridge.service - ERP Interface Bridge\n   Active: active (running) since Tue 2026-10-21 10:32:18 CST\n10:32:19 erp-bridge[3388]: INFO  已连接 RabbitMQ 10.0.2.20:5672\n10:32:19 erp-bridge[3388]: INFO  开始消费队列 mes_to_erp，待处理 4521 条",
           "hint": "systemctl restart erp-bridge，起来后看日志确认它连上了 MQ 并开始消费。",
           "explain": "服务起来且日志明确「开始消费 4521 条」才算恢复。积压消息会被顺序消化——这也检验了当初的架构设计：异步队列保证了 MES 侧在 ERP 挂掉期间照常生产，数据一条没丢。"
@@ -67,17 +86,33 @@
         {
           "id": "s7",
           "objective": "确认积压在消化，并抽一笔报工单在 ERP 端对账验证",
-          "accept": ["^rabbitmqctl\\s+list_queues", "^mysql\\b.*erp", "^curl\\b.*erp"],
+          "accept": [
+            "^rabbitmqctl\\s+list_queues",
+            "^mysql\\b.*erp",
+            "^curl\\b.*erp"
+          ],
           "output": "$ rabbitmqctl list_queues name messages consumers\nname         messages  consumers\nmes_to_erp   1180      1        ← 从 4521 持续下降\n\n$ mysql -h 10.0.3.16 -u ops -p -e \"SELECT wage_no, qty FROM erp.piece_wage WHERE report_no='BG-20261021-0042'\"\n+----------------+-----+\n| wage_no        | qty |\n| JJ-2026-10-881 | 120 |\n+----------------+-----+\n\n抽样报工单 BG-20261021-0042 已在 ERP 生成计件凭证，数量一致。",
           "hint": "再看一次 list_queues 确认 messages 在下降、consumers=1，然后抽一笔具体报工单号到 ERP 库查凭证。",
           "explain": "验证分两层：技术指标（积压下降）+ 业务对账（单笔单据两边一致）。只看不报错不代表数据对了——对账才是集成运维的灵魂。收尾整改：桥接服务加自动重连、加「消费者=0 持续 5 分钟」告警、数据库变更通知接口负责人进流程。"
         }
       ],
       "ambient": [
-        { "pattern": "^date\\b", "output": "Tue Oct 21 10:28:44 CST 2026" },
-        { "pattern": "^hostname(\\s|$)", "output": "mes-middleware" },
-        { "pattern": "^rabbitmqctl\\s+status", "output": "RabbitMQ 3.9.13, Erlang 24.3, 节点运行 9 天，内存使用 210MB / 上限 1.6GB，磁盘剩余告警阈值未触发" },
-        { "pattern": "^free\\b", "output": "              total        used        free\nMem:          3.7Gi       1.2Gi       1.8Gi" }
+        {
+          "pattern": "^date\\b",
+          "output": "Tue Oct 21 10:28:44 CST 2026"
+        },
+        {
+          "pattern": "^hostname(\\s|$)",
+          "output": "mes-middleware"
+        },
+        {
+          "pattern": "^rabbitmqctl\\s+status",
+          "output": "RabbitMQ 3.9.13, Erlang 24.3, 节点运行 9 天，内存使用 210MB / 上限 1.6GB，磁盘剩余告警阈值未触发"
+        },
+        {
+          "pattern": "^free\\b",
+          "output": "              total        used        free\nMem:          3.7Gi       1.2Gi       1.8Gi"
+        }
       ],
       "danger": [
         {
@@ -93,7 +128,12 @@
         "journalctl -u erp-bridge -n 60（根因取证）",
         "systemctl restart erp-bridge",
         "list_queues 看积压下降 + 抽单据到 ERP 对账 + 补自动重连与消费者告警"
-      ]
+      ],
+      "doc": {
+        "id": "int-d1",
+        "path": "/content/labs/int-d1.md",
+        "title": "ERP 计件工资没更新：消息队列积压排查 · 题目文档"
+      }
     },
     {
       "id": "int-d2",
@@ -111,7 +151,10 @@
         {
           "id": "s1",
           "objective": "先确认数据库服务活着，排除宕机",
-          "accept": ["^systemctl\\s+status\\s+mysqld", "^mysqladmin\\s+ping"],
+          "accept": [
+            "^systemctl\\s+status\\s+mysqld",
+            "^mysqladmin\\s+ping"
+          ],
           "output": "$ mysqladmin -u ops -p ping\nmysqld is alive\n\n$ systemctl status mysqld\n● mysqld.service - MySQL Server\n   Active: active (running) since Mon 2026-09-30 02:11:03 CST",
           "hint": "mysqladmin ping 是最快的存活探测。",
           "explain": "数据库活着、资源不紧张，但业务全卡——典型的「库没死，路被堵」。方向直指锁等待或长事务阻塞，下一步进数据库内部看会话。"
@@ -119,7 +162,10 @@
         {
           "id": "s2",
           "objective": "查看当前所有连接与正在执行的 SQL，找异常长查询",
-          "accept": ["^mysql\\b.*processlist", "SHOW\\s+(FULL\\s+)?PROCESSLIST"],
+          "accept": [
+            "^mysql\\b.*processlist",
+            "SHOW\\s+(FULL\\s+)?PROCESSLIST"
+          ],
           "output": "$ mysql -u ops -p -e \"SHOW FULL PROCESSLIST\"\nId     User        Host         db   Command Time State                      Info\n4213   erp_report  10.0.3.15    mes  Query   312  statistics                 SELECT ... 12表JOIN 月末成本分摊大报表\n4318   mes_app     10.0.2.11    mes  Query   118  Waiting for table metadata lock  ALTER TABLE reporting ADD INDEX...\n4319   mes_app     10.0.2.11    mes  Query   117  Waiting for table metadata lock  INSERT INTO reporting...\n4320   mes_app     10.0.2.11    mes  Query   117  Waiting for table metadata lock  INSERT INTO reporting...\n（另有 23 个会话同样处于 Waiting for table metadata lock）",
           "hint": "mysql -e \"SHOW FULL PROCESSLIST\"，重点看 Time 特别大的和 State 为 Waiting 的会话。",
           "explain": "病灶清晰：4213 号 ERP 月末大报表跑了 312 秒还没完，持有 reporting 表的元数据锁；而 MES 应用恰好在这个高峰想给 reporting 加索引（4318），被堵；后续所有报工 INSERT（4319/4320…）排队等 4318——一条报表 SQL 堵死了整条报工链路。"
@@ -127,7 +173,10 @@
         {
           "id": "s3",
           "objective": "确认阻塞链：谁堵谁、堵了多少会话",
-          "accept": ["^mysql\\b.*(innodb_trx|schema_table_lock_waits|INNODB\\s+STATUS)", "SHOW\\s+ENGINE\\s+INNODB"],
+          "accept": [
+            "^mysql\\b.*(innodb_trx|schema_table_lock_waits|INNODB\\s+STATUS)",
+            "SHOW\\s+ENGINE\\s+INNODB"
+          ],
           "output": "$ mysql -u ops -p -e \"SELECT * FROM sys.schema_table_lock_waits\\G\"\n*************************** 1. row ***************************\nobject_name: reporting\nwaiting_pid: 4318\nblocking_pid: 4213\nblocking_query: SELECT ... 月末成本分摊大报表\nsql_kill_blocking_query: KILL QUERY 4213\n\n（4213 直接或间接阻塞 26 个会话，全部集中在 reporting 表）",
           "hint": "查 sys.schema_table_lock_waits 或 performance_schema，MySQL 直接告诉你 blocking_pid 是谁。",
           "explain": "sys 视图把阻塞链摆得明明白白：blocking_pid=4213，甚至给出了处置命令。排障要靠证据链，不靠猜——这一步的截图就是后面 KILL 操作的依据。"
@@ -135,7 +184,10 @@
         {
           "id": "s4",
           "objective": "评估后终止阻塞源头（报表可重跑，业务优先）",
-          "accept": ["^mysql\\b.*KILL\\s+(QUERY\\s+)?4213", "^KILL\\s+(QUERY\\s+)?4213"],
+          "accept": [
+            "^mysql\\b.*KILL\\s+(QUERY\\s+)?4213",
+            "^KILL\\s+(QUERY\\s+)?4213"
+          ],
           "output": "（评估：4213 是 ERP 月末成本报表，属可重跑任务；车间报工是实时生产业务，优先级更高。已与 ERP 管理员电话确认。）\n$ mysql -u ops -p -e \"KILL QUERY 4213\"\nQuery OK, 0 rows affected\n\n4213 会话连接保留，其大报表查询被终止。",
           "hint": "mysql -e \"KILL QUERY 4213\"。注意用 KILL QUERY（只杀这条 SQL、保留连接），并且杀之前必须确认它是可重跑任务。",
           "explain": "KILL 前先过三关：它是什么（报表）、能不能杀（可重跑）、谁说了算（ERP 管理员确认）。KILL QUERY 只终止当前语句不断连接，比 KILL 4213 温和。生产数据库上的每一次 KILL 都应该有确认记录。"
@@ -143,7 +195,10 @@
         {
           "id": "s5",
           "objective": "验证阻塞解除：等待队列清空、报工 SQL 恢复流转",
-          "accept": ["^mysql\\b.*processlist", "SHOW\\s+(FULL\\s+)?PROCESSLIST"],
+          "accept": [
+            "^mysql\\b.*processlist",
+            "SHOW\\s+(FULL\\s+)?PROCESSLIST"
+          ],
           "output": "$ mysql -u ops -p -e \"SHOW FULL PROCESSLIST\"\nId     User     Host       db   Command Time State    Info\n4318   mes_app  10.0.2.11  mes  Query   2    altering table  ALTER TABLE reporting ADD INDEX...\n4325   mes_app  10.0.2.11  mes  Query   0    update   INSERT INTO reporting...\n4326   mes_app  10.0.2.11  mes  Sleep   1\n\nWaiting for table metadata lock 的会话已全部清空，INSERT 恢复正常毫秒级。",
           "hint": "再跑一遍 SHOW FULL PROCESSLIST，确认 Waiting 状态消失。",
           "explain": "26 个积压会话瞬间泄洪。注意 4318 的加索引操作还在跑——它也是高峰期的不当操作，索引变更应该放在维护窗口，这笔账复盘时一起算。"
@@ -151,7 +206,9 @@
         {
           "id": "s6",
           "objective": "业务侧确认报工恢复",
-          "accept": ["^curl\\b.*(mes|health|8080)"],
+          "accept": [
+            "^curl\\b.*(mes|health|8080)"
+          ],
           "output": "$ curl -s http://10.0.2.11:8080/mes/api/health\n{\"status\":\"UP\",\"db\":\"UP\",\"avgInsertMs\":4}\n\n（车间班组长电话确认：终端提交恢复正常，高峰期积压的纸质报工单正在补录）",
           "hint": "curl MES 健康接口看 db 状态和插入耗时，再让车间实际提交一笔验证。",
           "explain": "数据库指标正常 + 业务实测通过，故障才算关闭。卡死期间车间用纸质单记录的产量要盯紧补录，防止两天后对账出现空洞——故障恢复的收尾永远包含数据完整性检查。"
@@ -159,17 +216,33 @@
         {
           "id": "s7",
           "objective": "防复发：把 ERP 重报表挪出生产高峰，进凌晨调度窗口",
-          "accept": ["^crontab\\b", "^mysql\\b.*event", "^vi\\b.*cron"],
+          "accept": [
+            "^crontab\\b",
+            "^mysql\\b.*event",
+            "^vi\\b.*cron"
+          ],
           "output": "$ crontab -e\n# ERP 月末成本报表：从「月末 16:00 人工触发」改为每月 1 日凌晨 2 点自动跑\n0 2 1 * * /opt/erp/report/run_monthly_cost.sh >> /var/log/erp-report.log 2>&1\n\n（同步整改清单：MES 侧 DDL 变更一律走维护窗口；给「Waiting 会话数 > 10 持续 1 分钟」配告警）",
           "hint": "crontab -e 把报表任务挪到凌晨窗口，从机制上让重查询与生产高峰错开。",
           "explain": "这次事故是三方合谋：ERP 高峰跑大报表 + MES 高峰做 DDL + 没有阻塞告警。杀会话只是止血，调度错峰、变更窗口、监控告警三件事落地了，同类故障才会真正消失。"
         }
       ],
       "ambient": [
-        { "pattern": "^free\\b", "output": "              total        used        free      available\nMem:          15Gi        9.2Gi       1.1Gi       4.8Gi" },
-        { "pattern": "^df\\b", "output": "/dev/vdb1  500G  212G  288G  43% /data" },
-        { "pattern": "^uptime\\b", "output": " 16:48:12 up 21 days, load average: 3.11, 2.87, 2.02" },
-        { "pattern": "^date\\b", "output": "Tue Oct 21 16:48:12 CST 2026" }
+        {
+          "pattern": "^free\\b",
+          "output": "              total        used        free      available\nMem:          15Gi        9.2Gi       1.1Gi       4.8Gi"
+        },
+        {
+          "pattern": "^df\\b",
+          "output": "/dev/vdb1  500G  212G  288G  43% /data"
+        },
+        {
+          "pattern": "^uptime\\b",
+          "output": " 16:48:12 up 21 days, load average: 3.11, 2.87, 2.02"
+        },
+        {
+          "pattern": "^date\\b",
+          "output": "Tue Oct 21 16:48:12 CST 2026"
+        }
       ],
       "danger": [
         {
@@ -189,7 +262,12 @@
         "SHOW FULL PROCESSLIST 验证 Waiting 清空",
         "curl 健康接口 + 车间实测报工 + 纸质单补录核对",
         "crontab 把重报表挪到凌晨窗口 + DDL 走维护窗口 + 阻塞告警上线"
-      ]
+      ],
+      "doc": {
+        "id": "int-d2",
+        "path": "/content/labs/int-d2.md",
+        "title": "报工高峰全员卡死：数据库阻塞排查 · 题目文档"
+      }
     },
     {
       "id": "int-c1",
@@ -203,10 +281,22 @@
           "id": "int-c1-q1",
           "prompt": "ERP 反馈收不到 MES 的完工入库数据，MES 侧操作一切正常。规范的第一步排查动作是？",
           "options": [
-            { "id": "o1", "text": "分段定界：先确认 MES 侧数据已正常落库并发出，再查中间件队列/接口日志，最后查 ERP 接收端——沿数据流向逐段夹逼" },
-            { "id": "o2", "text": "重启 ERP 的接口服务，重启解决大多数问题" },
-            { "id": "o3", "text": "让 ERP 实施商过来看，这是他们的系统" },
-            { "id": "o4", "text": "重装中间件" }
+            {
+              "id": "o1",
+              "text": "分段定界：先确认 MES 侧数据已正常落库并发出，再查中间件队列/接口日志，最后查 ERP 接收端——沿数据流向逐段夹逼"
+            },
+            {
+              "id": "o2",
+              "text": "重启 ERP 的接口服务，重启解决大多数问题"
+            },
+            {
+              "id": "o3",
+              "text": "让 ERP 实施商过来看，这是他们的系统"
+            },
+            {
+              "id": "o4",
+              "text": "重装中间件"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -220,10 +310,22 @@
           "id": "int-c1-q2",
           "prompt": "接口队列积压了 4000 多条消息，消费端服务已经挂了两小时。正确的处理顺序是？",
           "options": [
-            { "id": "o1", "text": "先恢复消费端服务，让积压自然消化，同时监控消化速度；消化完成后抽样对账确认数据一致" },
-            { "id": "o2", "text": "先清空队列释放压力，再重启服务，然后让业务重推数据" },
-            { "id": "o3", "text": "直接扩容消费者到 10 个实例并发消费" },
-            { "id": "o4", "text": "等积压自己消化，队列设计出来就是为了扛积压的" }
+            {
+              "id": "o1",
+              "text": "先恢复消费端服务，让积压自然消化，同时监控消化速度；消化完成后抽样对账确认数据一致"
+            },
+            {
+              "id": "o2",
+              "text": "先清空队列释放压力，再重启服务，然后让业务重推数据"
+            },
+            {
+              "id": "o3",
+              "text": "直接扩容消费者到 10 个实例并发消费"
+            },
+            {
+              "id": "o4",
+              "text": "等积压自己消化，队列设计出来就是为了扛积压的"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -237,13 +339,28 @@
           "id": "int-c1-q3",
           "prompt": "同一根钢管，MES 里编码是 G-103、ERP 里是 MAT00387，两边接口天天因「物料不存在」报错，实施顾问每次都在接口表里加映射关系临时救火。治本方案是？",
           "options": [
-            { "id": "o1", "text": "建立主数据管理规范：编码以一方为唯一源头（通常 ERP），统一编码规则，存量数据一次性清洗映射，之后新物料走「源头创建→自动分发」流程" },
-            { "id": "o2", "text": "把映射表做得更全，报错就加一条" },
-            { "id": "o3", "text": "让两边都用各自的编码，接口层永久维护翻译" },
-            { "id": "o4", "text": "关掉物料校验，接口不再报「物料不存在」" }
+            {
+              "id": "o1",
+              "text": "建立主数据管理规范：编码以一方为唯一源头（通常 ERP），统一编码规则，存量数据一次性清洗映射，之后新物料走「源头创建→自动分发」流程"
+            },
+            {
+              "id": "o2",
+              "text": "把映射表做得更全，报错就加一条"
+            },
+            {
+              "id": "o3",
+              "text": "让两边都用各自的编码，接口层永久维护翻译"
+            },
+            {
+              "id": "o4",
+              "text": "关掉物料校验，接口不再报「物料不存在」"
+            }
           ],
           "answer": "o1",
-          "term_ids": ["one_item_two_codes", "master_data"],
+          "term_ids": [
+            "one_item_two_codes",
+            "master_data"
+          ],
           "feedback": {
             "factory": "一物两码让采购重复买、库存两头查不准，车间领料对着两个号码发懵。",
             "data": "映射表救火越救越多且永远滞后；关闭校验则让脏数据长驱直入，报表全面失真——两者都是在给未来埋雷。",
@@ -254,10 +371,22 @@
           "id": "int-c1-q4",
           "prompt": "机房计划停电检修，MES 数据库（MySQL）、RabbitMQ 中间件、MES 应用、ERP 应用、接口桥接服务都要停机再启动。规范的启动顺序是？",
           "options": [
-            { "id": "o1", "text": "数据库 → 中间件 → 后端应用（MES/ERP）→ 接口桥接服务 → 逐项验证后再放开车间终端使用" },
-            { "id": "o2", "text": "全部一起启动，谁先起来算谁的" },
-            { "id": "o3", "text": "接口桥接服务最先启动，保证数据不丢" },
-            { "id": "o4", "text": "车间终端最先通电，让工人能尽快登录" }
+            {
+              "id": "o1",
+              "text": "数据库 → 中间件 → 后端应用（MES/ERP）→ 接口桥接服务 → 逐项验证后再放开车间终端使用"
+            },
+            {
+              "id": "o2",
+              "text": "全部一起启动，谁先起来算谁的"
+            },
+            {
+              "id": "o3",
+              "text": "接口桥接服务最先启动，保证数据不丢"
+            },
+            {
+              "id": "o4",
+              "text": "车间终端最先通电，让工人能尽快登录"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -271,10 +400,22 @@
           "id": "int-c1-q5",
           "prompt": "MES 要升级到新版本，其中报工接口的字段有变化。升级前最重要的准备动作是？",
           "options": [
-            { "id": "o1", "text": "整理接口契约变更清单并通知所有对接方，在测试环境完成接口回归，准备好数据库与应用的回退方案，选定停产窗口执行" },
-            { "id": "o2", "text": "直接在生产升级，出问题再回滚" },
-            { "id": "o3", "text": "只备份数据库就够了，应用层不会坏" },
-            { "id": "o4", "text": "升级选在周一早班开始时做，人多好验证" }
+            {
+              "id": "o1",
+              "text": "整理接口契约变更清单并通知所有对接方，在测试环境完成接口回归，准备好数据库与应用的回退方案，选定停产窗口执行"
+            },
+            {
+              "id": "o2",
+              "text": "直接在生产升级，出问题再回滚"
+            },
+            {
+              "id": "o3",
+              "text": "只备份数据库就够了，应用层不会坏"
+            },
+            {
+              "id": "o4",
+              "text": "升级选在周一早班开始时做，人多好验证"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -288,10 +429,22 @@
           "id": "int-c1-q6",
           "prompt": "接口偶发超时后会自动重试，最近 ERP 侧发现同一笔报工生成了两张入库凭证。根治方案是？",
           "options": [
-            { "id": "o1", "text": "接口做幂等设计：MES 每笔业务带全局唯一单号，接收端以单号建唯一约束，重复投递直接返回已处理结果" },
-            { "id": "o2", "text": "把重试次数改成 0，宁可丢数据不要重复" },
-            { "id": "o3", "text": "财务每天人工核对，发现重复凭证就作废" },
-            { "id": "o4", "text": "把接口超时时间从 5 秒调到 60 秒，减少重试触发" }
+            {
+              "id": "o1",
+              "text": "接口做幂等设计：MES 每笔业务带全局唯一单号，接收端以单号建唯一约束，重复投递直接返回已处理结果"
+            },
+            {
+              "id": "o2",
+              "text": "把重试次数改成 0，宁可丢数据不要重复"
+            },
+            {
+              "id": "o3",
+              "text": "财务每天人工核对，发现重复凭证就作废"
+            },
+            {
+              "id": "o4",
+              "text": "把接口超时时间从 5 秒调到 60 秒，减少重试触发"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -305,10 +458,22 @@
           "id": "int-c1-q7",
           "prompt": "MES 向 WMS 下发入库指令，车间网络不稳，指令偶发丢失导致货到了仓库系统里却没有单据。工程上的兜底方案是？",
           "options": [
-            { "id": "o1", "text": "重试 + 幂等 + 定时对账三层兜底：失败自动重试，重试靠幂等防重复，每日定时任务比对两边单据数量并告警差异" },
-            { "id": "o2", "text": "把网络换成光纤，从物理层根治" },
-            { "id": "o3", "text": "仓库收到货先手工在 WMS 里补录" },
-            { "id": "o4", "text": "下发失败就在 MES 里弹窗提醒操作员手动重发" }
+            {
+              "id": "o1",
+              "text": "重试 + 幂等 + 定时对账三层兜底：失败自动重试，重试靠幂等防重复，每日定时任务比对两边单据数量并告警差异"
+            },
+            {
+              "id": "o2",
+              "text": "把网络换成光纤，从物理层根治"
+            },
+            {
+              "id": "o3",
+              "text": "仓库收到货先手工在 WMS 里补录"
+            },
+            {
+              "id": "o4",
+              "text": "下发失败就在 MES 里弹窗提醒操作员手动重发"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -322,10 +487,22 @@
           "id": "int-c1-q8",
           "prompt": "老板问：「三系统数据到底准不准，你怎么证明？」作为 MES 运维最有说服力的回答是？",
           "options": [
-            { "id": "o1", "text": "出示每日自动对账报表：报工/入库/凭证三类核心单据在 MES、WMS、ERP 两边的数量与金额比对，差异率为零或每笔差异都有归因记录" },
-            { "id": "o2", "text": "系统运行稳定，从来没宕过机" },
-            { "id": "o3", "text": "抽查过几次，数据都是对的" },
-            { "id": "o4", "text": "各系统日志里没有报错" }
+            {
+              "id": "o1",
+              "text": "出示每日自动对账报表：报工/入库/凭证三类核心单据在 MES、WMS、ERP 两边的数量与金额比对，差异率为零或每笔差异都有归因记录"
+            },
+            {
+              "id": "o2",
+              "text": "系统运行稳定，从来没宕过机"
+            },
+            {
+              "id": "o3",
+              "text": "抽查过几次，数据都是对的"
+            },
+            {
+              "id": "o4",
+              "text": "各系统日志里没有报错"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -335,7 +512,12 @@
             "consultant": "自动对账 + 差异归因是集成运维的终极交付物：每天全量比对、差异当日闭环、报表可追溯——这套机制建起来，你就从「修系统的」变成「保数据资产的」。"
           }
         }
-      ]
+      ],
+      "doc": {
+        "id": "int-c1",
+        "path": "/content/labs/int-c1.md",
+        "title": "三系统集成运维八题 · 题目文档"
+      }
     },
     {
       "id": "int-o1",
@@ -346,14 +528,47 @@
       "intro": "「ERP 里没有 MES 的数据了」——集成运维最经典的一句话报障。把全链路排查步骤排成规范顺序，先定界后处置，先恢复后复盘。",
       "maxAttempts": 2,
       "steps": [
-        { "id": "s1", "text": "确认现象与影响面：哪类单据断了、从什么时间点开始、断了多少笔、车间生产是否受影响", "note": "时间点和单据类型是排查的两条线索：时间点圈定「那时发生了什么变更」，单据类型圈定「哪条链路」。" },
-        { "id": "s2", "text": "源头验证：确认 MES 侧业务数据已正常落库、接口任务已触发发出", "note": "分段定界第一段。源头没数据是业务操作问题，源头有数据没发出是 MES 出口问题，责任段完全不同。" },
-        { "id": "s3", "text": "传输层检查：中间件队列积压量、消费者数量、接口服务日志里的报错与重试记录", "note": "队列积压+消费者为 0 指向消费端死亡；队列为空且无报错则可能消息根本没进来——回到出口段复查。" },
-        { "id": "s4", "text": "接收端检查：ERP 接口服务状态、接收日志、目标表有没有写入失败的痕迹（唯一键冲突/字段超长/权限）", "note": "消息到了但入不了库，问题在接收端的数据校验或数据库层，日志里的第一条 ERROR 就是根因。" },
-        { "id": "s5", "text": "按定位到的根因恢复：重启服务/修复配置/处理脏数据，让链路重新流转", "note": "恢复动作必须对应根因。没定位就重启，运气好碰对，运气不好把积压冲成脏数据。" },
-        { "id": "s6", "text": "消化与对账：监控积压消化进度，追平后抽样比对两边单据，中断时段的差异逐笔补录闭环", "note": "链路通了不等于账平了。中断期间丢的、重的、错的，都要靠对账逐笔找回来。" },
-        { "id": "s7", "text": "复盘输出：时间线、根因、整改项（自动重连/积压告警/对账任务/变更通知机制），更新运维手册", "note": "把「这次怎么修好的」沉淀成「下次自动发现、快速恢复」的机制，才算真正关闭这次故障。" }
-      ]
+        {
+          "id": "s1",
+          "text": "确认现象与影响面：哪类单据断了、从什么时间点开始、断了多少笔、车间生产是否受影响",
+          "note": "时间点和单据类型是排查的两条线索：时间点圈定「那时发生了什么变更」，单据类型圈定「哪条链路」。"
+        },
+        {
+          "id": "s2",
+          "text": "源头验证：确认 MES 侧业务数据已正常落库、接口任务已触发发出",
+          "note": "分段定界第一段。源头没数据是业务操作问题，源头有数据没发出是 MES 出口问题，责任段完全不同。"
+        },
+        {
+          "id": "s3",
+          "text": "传输层检查：中间件队列积压量、消费者数量、接口服务日志里的报错与重试记录",
+          "note": "队列积压+消费者为 0 指向消费端死亡；队列为空且无报错则可能消息根本没进来——回到出口段复查。"
+        },
+        {
+          "id": "s4",
+          "text": "接收端检查：ERP 接口服务状态、接收日志、目标表有没有写入失败的痕迹（唯一键冲突/字段超长/权限）",
+          "note": "消息到了但入不了库，问题在接收端的数据校验或数据库层，日志里的第一条 ERROR 就是根因。"
+        },
+        {
+          "id": "s5",
+          "text": "按定位到的根因恢复：重启服务/修复配置/处理脏数据，让链路重新流转",
+          "note": "恢复动作必须对应根因。没定位就重启，运气好碰对，运气不好把积压冲成脏数据。"
+        },
+        {
+          "id": "s6",
+          "text": "消化与对账：监控积压消化进度，追平后抽样比对两边单据，中断时段的差异逐笔补录闭环",
+          "note": "链路通了不等于账平了。中断期间丢的、重的、错的，都要靠对账逐笔找回来。"
+        },
+        {
+          "id": "s7",
+          "text": "复盘输出：时间线、根因、整改项（自动重连/积压告警/对账任务/变更通知机制），更新运维手册",
+          "note": "把「这次怎么修好的」沉淀成「下次自动发现、快速恢复」的机制，才算真正关闭这次故障。"
+        }
+      ],
+      "doc": {
+        "id": "int-o1",
+        "path": "/content/labs/int-o1.md",
+        "title": "MES-ERP 接口中断全链路排查流程 · 题目文档"
+      }
     },
     {
       "id": "int-o2",
@@ -364,15 +579,52 @@
       "intro": "MES 从 v3.2 升级到 v3.5，涉及数据库结构变更和两个接口调整，计划周日 8 小时窗口执行。排出规范的发布流程顺序。",
       "maxAttempts": 2,
       "steps": [
-        { "id": "s1", "text": "发布申请与变更评审：升级内容、影响系统清单、接口变更说明、回退标准（什么情况下必须回退）经三方确认", "note": "评审先于一切。回退标准必须在动手前定好——发布中途再讨论「要不要退」，只会错过最佳回退时机。" },
-        { "id": "s2", "text": "全量备份：数据库全备+日志备份、应用程序包、配置文件三样齐备并逐个验证可读", "note": "备份是回退的原材料。备份没验证等于没备份：发布失败时才发现备份文件损坏，才是真正的灾难。" },
-        { "id": "s3", "text": "预演环境全流程彩排：在与生产同构的测试环境完整走一遍升级+接口回归+回退，记录每步耗时", "note": "彩排暴露的问题成本是生产现场的百分之一。耗时记录用来核对正式窗口是否够用。" },
-        { "id": "s4", "text": "通知与停写：提前通知车间与对接方，窗口开始时停止采集入口与接口服务，确认无在途事务", "note": "带在途事务升级数据库，结构变更可能把事务拦腰截断。先停写、确认清空，再动刀。" },
-        { "id": "s5", "text": "按序执行升级：数据库结构变更 → 应用部署 → 配置核对 → 接口服务更新，每步完成后核对版本号与日志", "note": "顺序错了（先起应用后改库）会让新版本应用连旧结构数据库疯狂报错。每步核对是为了错误早发现早回退。" },
-        { "id": "s6", "text": "冒烟测试：核心业务逐项试单——登录、报工、工单查询、接口传 ERP、入库传 WMS，对照回归清单打勾", "note": "冒烟清单在彩排时就该定好。凭感觉点两下不叫测试，对着清单打勾才叫验证。" },
-        { "id": "s7", "text": "放开使用并进入观察期：通知车间恢复生产，48 小时重点监控错误日志、接口成功率、数据库性能", "note": "升级后头两天是问题高发期（缓存、边缘功能、月末批处理）。观察期有人盯，小问题才不会滚成大故障。" },
-        { "id": "s8", "text": "发布关闭：输出发布报告（时间线/变更项/验证结果/遗留问题），备份与旧版本包保留至观察期结束", "note": "旧版本包和发布前备份要留到观察期结束——那是你最后的回退底牌，提前删掉等于裸奔。" }
-      ]
+        {
+          "id": "s1",
+          "text": "发布申请与变更评审：升级内容、影响系统清单、接口变更说明、回退标准（什么情况下必须回退）经三方确认",
+          "note": "评审先于一切。回退标准必须在动手前定好——发布中途再讨论「要不要退」，只会错过最佳回退时机。"
+        },
+        {
+          "id": "s2",
+          "text": "全量备份：数据库全备+日志备份、应用程序包、配置文件三样齐备并逐个验证可读",
+          "note": "备份是回退的原材料。备份没验证等于没备份：发布失败时才发现备份文件损坏，才是真正的灾难。"
+        },
+        {
+          "id": "s3",
+          "text": "预演环境全流程彩排：在与生产同构的测试环境完整走一遍升级+接口回归+回退，记录每步耗时",
+          "note": "彩排暴露的问题成本是生产现场的百分之一。耗时记录用来核对正式窗口是否够用。"
+        },
+        {
+          "id": "s4",
+          "text": "通知与停写：提前通知车间与对接方，窗口开始时停止采集入口与接口服务，确认无在途事务",
+          "note": "带在途事务升级数据库，结构变更可能把事务拦腰截断。先停写、确认清空，再动刀。"
+        },
+        {
+          "id": "s5",
+          "text": "按序执行升级：数据库结构变更 → 应用部署 → 配置核对 → 接口服务更新，每步完成后核对版本号与日志",
+          "note": "顺序错了（先起应用后改库）会让新版本应用连旧结构数据库疯狂报错。每步核对是为了错误早发现早回退。"
+        },
+        {
+          "id": "s6",
+          "text": "冒烟测试：核心业务逐项试单——登录、报工、工单查询、接口传 ERP、入库传 WMS，对照回归清单打勾",
+          "note": "冒烟清单在彩排时就该定好。凭感觉点两下不叫测试，对着清单打勾才叫验证。"
+        },
+        {
+          "id": "s7",
+          "text": "放开使用并进入观察期：通知车间恢复生产，48 小时重点监控错误日志、接口成功率、数据库性能",
+          "note": "升级后头两天是问题高发期（缓存、边缘功能、月末批处理）。观察期有人盯，小问题才不会滚成大故障。"
+        },
+        {
+          "id": "s8",
+          "text": "发布关闭：输出发布报告（时间线/变更项/验证结果/遗留问题），备份与旧版本包保留至观察期结束",
+          "note": "旧版本包和发布前备份要留到观察期结束——那是你最后的回退底牌，提前删掉等于裸奔。"
+        }
+      ],
+      "doc": {
+        "id": "int-o2",
+        "path": "/content/labs/int-o2.md",
+        "title": "MES 升级发布窗口执行流程 · 题目文档"
+      }
     }
   ]
 }

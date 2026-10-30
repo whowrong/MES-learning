@@ -19,7 +19,9 @@
         {
           "id": "s1",
           "objective": "查看各分区使用情况，确认哪个分区满了",
-          "accept": ["^df\\b"],
+          "accept": [
+            "^df\\b"
+          ],
           "output": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/vda1        50G   50G     0 100% /\ntmpfs           3.9G     0  3.9G   0% /dev/shm\n/dev/vdb1       200G   62G  138G  31% /data",
           "hint": "查看磁盘分区使用量的命令，两个字母，d 开头。",
           "explain": "排障第一步永远先看全局。df 显示根分区 100%，而 /data 数据盘才 31%——问题在系统盘，先别动数据库。"
@@ -27,7 +29,9 @@
         {
           "id": "s2",
           "objective": "从根目录逐层收敛，找出占用最大的目录",
-          "accept": ["^du\\s.*(--max-depth|-s|-h|-x)"],
+          "accept": [
+            "^du\\s.*(--max-depth|-s|-h|-x)"
+          ],
           "output": "46G\t/var\n2.1G\t/opt\n1.2G\t/usr\n890M\t/home\n(其余目录合计 <500M)",
           "hint": "统计目录占用的命令是 du，配合 -h（人类可读）和 --max-depth=1（只看一层）或 -sh。",
           "explain": "du 逐层收敛范围：/var 占了 46G。日志、缓存、临时文件都在 /var 下，这是最常见的磁盘杀手。"
@@ -35,7 +39,10 @@
         {
           "id": "s3",
           "objective": "深入 /var，确认具体是哪个子目录",
-          "accept": ["^du\\b.*/var", "^ls\\b.*/var/log"],
+          "accept": [
+            "^du\\b.*/var",
+            "^ls\\b.*/var/log"
+          ],
           "output": "38G\t/var/log\n6.2G\t/var/lib\n1.1G\t/var/cache\n\n其中 /var/log 下：\n35G\tmes-collector.log\n2.6G\tmes-collector.log.1\n300M\tmessages",
           "hint": "继续用 du 或 ls 深入 /var 的子目录，重点看 /var/log。",
           "explain": "定位到 mes-collector.log 单文件 35G——采集服务的日志没有任何轮转策略，两年写了 35G。这就是根因。"
@@ -43,7 +50,11 @@
         {
           "id": "s4",
           "objective": "安全清空正在被进程写入的大日志（不能直接删）",
-          "accept": ["^truncate\\s+-s\\s*0\\b.*mes-collector", "^cat\\s+/dev/null\\s*>.*mes-collector", "^>\\s*/var/log/mes-collector"],
+          "accept": [
+            "^truncate\\s+-s\\s*0\\b.*mes-collector",
+            "^cat\\s+/dev/null\\s*>.*mes-collector",
+            "^>\\s*/var/log/mes-collector"
+          ],
           "output": "$ truncate -s 0 /var/log/mes-collector.log\n$ ls -lh /var/log/mes-collector.log\n-rw-r--r-- 1 mes mes 0 Oct 21 09:52 /var/log/mes-collector.log",
           "hint": "对正在被写入的日志文件，用 truncate -s 0 或重定向清空，而不是 rm。",
           "explain": "进程正持有日志文件句柄时用 rm 删除，磁盘块不会释放，df 依然显示满——必须重启进程才生效。truncate 原地清空才是正解。"
@@ -51,7 +62,9 @@
         {
           "id": "s5",
           "objective": "确认空间已释放",
-          "accept": ["^df\\b"],
+          "accept": [
+            "^df\\b"
+          ],
           "output": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/vda1        50G   15G   35G  30% /\n/dev/vdb1       200G   62G  138G  31% /data",
           "hint": "清理完再跑一遍第 1 步的命令，确认 Use% 降下来了。",
           "explain": "根分区从 100% 降到 30%。清理后必须验证，不能清完就走——万一清错了地方，这一步能立刻发现。"
@@ -59,20 +72,43 @@
         {
           "id": "s6",
           "objective": "恢复采集服务并确认运行状态",
-          "accept": ["^systemctl\\s+(restart|start)\\s+mes-collector"],
+          "accept": [
+            "^systemctl\\s+(restart|start)\\s+mes-collector"
+          ],
           "output": "$ systemctl restart mes-collector\n$ systemctl status mes-collector\n● mes-collector.service - MES Data Collector\n   Active: active (running) since Tue 2026-10-21 09:54:11 CST\n   Main PID: 9127 (java)",
           "hint": "systemd 管理的服务用 systemctl restart 重启，服务名 mes-collector。",
           "explain": "磁盘满时服务已异常停止，空间释放后重启拉起。status 显示 active (running) 才算恢复，光 restart 不确认等于没修。"
         }
       ],
       "ambient": [
-        { "pattern": "^pwd$", "output": "/home/ops" },
-        { "pattern": "^whoami$", "output": "ops" },
-        { "pattern": "^hostname(\\s|$)", "output": "mes-app-01" },
-        { "pattern": "^date\\b", "output": "Tue Oct 21 09:52:03 CST 2026" },
-        { "pattern": "^ls(\\s|$)", "output": "bin  notes.txt  restore-drill.sh" },
-        { "pattern": "^systemctl\\s+status\\s+mes-collector", "output": "● mes-collector.service - MES Data Collector\n   Active: failed (Result: exit-code) since Tue 2026-10-21 09:40:02 CST\n  Process: 8231 ExecStart=/opt/mes/collector/start.sh (code=exited, status=1)" },
-        { "pattern": "^tail\\b.*mes-collector\\.log", "output": "09:39:58 ERROR [ReportWriter] 写库失败\njava.io.IOException: No space left on device\n09:40:02 FATAL [Collector] 存储不可用，服务退出" }
+        {
+          "pattern": "^pwd$",
+          "output": "/home/ops"
+        },
+        {
+          "pattern": "^whoami$",
+          "output": "ops"
+        },
+        {
+          "pattern": "^hostname(\\s|$)",
+          "output": "mes-app-01"
+        },
+        {
+          "pattern": "^date\\b",
+          "output": "Tue Oct 21 09:52:03 CST 2026"
+        },
+        {
+          "pattern": "^ls(\\s|$)",
+          "output": "bin  notes.txt  restore-drill.sh"
+        },
+        {
+          "pattern": "^systemctl\\s+status\\s+mes-collector",
+          "output": "● mes-collector.service - MES Data Collector\n   Active: failed (Result: exit-code) since Tue 2026-10-21 09:40:02 CST\n  Process: 8231 ExecStart=/opt/mes/collector/start.sh (code=exited, status=1)"
+        },
+        {
+          "pattern": "^tail\\b.*mes-collector\\.log",
+          "output": "09:39:58 ERROR [ReportWriter] 写库失败\njava.io.IOException: No space left on device\n09:40:02 FATAL [Collector] 存储不可用，服务退出"
+        }
       ],
       "danger": [
         {
@@ -92,7 +128,12 @@
         "df -h",
         "systemctl restart mes-collector",
         "systemctl status mes-collector"
-      ]
+      ],
+      "doc": {
+        "id": "lx-d1",
+        "path": "/content/labs/lx-d1.md",
+        "title": "磁盘打满：MES 采集服务停止写库 · 题目文档"
+      }
     },
     {
       "id": "lx-d2",
@@ -110,7 +151,11 @@
         {
           "id": "s1",
           "objective": "确认 mes-web 服务与 Java 进程的当前状态",
-          "accept": ["^systemctl\\s+status\\s+mes-web", "^ps\\b.*java", "^pgrep\\b"],
+          "accept": [
+            "^systemctl\\s+status\\s+mes-web",
+            "^ps\\b.*java",
+            "^pgrep\\b"
+          ],
           "output": "● mes-web.service - MES Web Application\n   Active: failed (Result: exit-code) since Tue 2026-10-21 07:08:44 CST\n  进程列表里没有任何 java 进程。\n  备注：StartLimitBurst=5，服务在 5 分钟内连续崩溃 5 次后被 systemd 放弃拉起。",
           "hint": "systemctl status mes-web 看服务状态，或 ps -ef | grep java 看进程。",
           "explain": "先确认「死没死、怎么死的」。状态显示不是没启动，而是反复崩溃到 systemd 放弃——说明有持续性根因，直接 restart 大概率再崩。"
@@ -118,7 +163,10 @@
         {
           "id": "s2",
           "objective": "翻服务日志，找崩溃的直接原因",
-          "accept": ["^journalctl\\b.*mes-web", "^tail\\b.*(mes|tomcat|catalina).*\\.log"],
+          "accept": [
+            "^journalctl\\b.*mes-web",
+            "^tail\\b.*(mes|tomcat|catalina).*\\.log"
+          ],
           "output": "-- Logs for mes-web.service --\n07:03:12 mes-web[7788]: java.lang.OutOfMemoryError: Java heap space\n07:03:12 mes-web[7788]: \tat com.mes.report.ShiftReportService.buildLargeReport(...)\n07:05:40 mes-web[7901]: java.lang.OutOfMemoryError: Java heap space\n07:08:44 systemd[1]: mes-web.service: Failed with result 'exit-code'.\n07:08:44 systemd[1]: Failed to start MES Web Application.",
           "hint": "systemd 服务用 journalctl -u mes-web -n 100 看日志，或 tail 应用日志文件。",
           "explain": "OutOfMemoryError: Java heap space，且栈顶是 ShiftReportService.buildLargeReport——早班交接时生成班次大报表把 2G 堆吃爆。根因方向明确了。"
@@ -126,7 +174,12 @@
         {
           "id": "s3",
           "objective": "看整机内存大盘，确认还有多少余量",
-          "accept": ["^free\\b", "^vmstat", "^top\\s+-b", "^cat\\s+/proc/meminfo"],
+          "accept": [
+            "^free\\b",
+            "^vmstat",
+            "^top\\s+-b",
+            "^cat\\s+/proc/meminfo"
+          ],
           "output": "              total        used        free      shared  buff/cache   available\nMem:          7.6Gi       6.9Gi       0.1Gi       0.2Gi       0.6Gi       0.3Gi\nSwap:            0B          0B          0B",
           "hint": "free -h 看内存总量和可用量。",
           "explain": "7.6G 的机器 available 只剩 300M，还没配 Swap。就算 JVM 想扩堆也没空间——先找出谁在吃内存。"
@@ -134,7 +187,11 @@
         {
           "id": "s4",
           "objective": "按内存占用排序，找出挤占内存的进程",
-          "accept": ["^ps\\s+aux.*sort.*mem", "^ps\\b.*--sort", "^smem\\b"],
+          "accept": [
+            "^ps\\s+aux.*sort.*mem",
+            "^ps\\b.*--sort",
+            "^smem\\b"
+          ],
           "output": "USER   PID  %MEM    RSS COMMAND\nroot  1244  36.8  2.8G  python3 /opt/legacy/legacy-sync.py\ndms    902  12.1  0.9G  /usr/sbin/mysqld\nroot  2210   4.2  0.3G  nginx",
           "hint": "ps aux --sort=-%mem | head 按内存倒序列进程。",
           "explain": "legacy-sync.py 一个野生脚本吃了 2.8G——前任手敲启动、不在 systemd 里、没人知道它同不同意。这就是 mes-web 扩不了堆的元凶。"
@@ -142,7 +199,10 @@
         {
           "id": "s5",
           "objective": "与业务确认 legacy-sync 可以停后，规范地停掉它",
-          "accept": ["^systemctl\\s+stop\\s+legacy-sync", "^kill\\s+(-15\\s+)?1244\\b"],
+          "accept": [
+            "^systemctl\\s+stop\\s+legacy-sync",
+            "^kill\\s+(-15\\s+)?1244\\b"
+          ],
           "output": "（演练模拟：你已在群里和车间确认该脚本是废弃的旧同步任务）\n$ kill -15 1244\n$ ps -fp 1244\n（无此进程）\n内存 available 回升到 3.1G。",
           "hint": "确认无业务使用后 kill -15（优雅终止）进程号 1244。",
           "explain": "杀野生进程前必须先确认业务归属——万一是老板小舅子在跑的对账任务呢。确认后用 -15 给它清理现场的机会，-9 是最后手段。"
@@ -150,7 +210,10 @@
         {
           "id": "s6",
           "objective": "修改 JVM 配置前，先备份配置文件",
-          "accept": ["^cp\\b.*jvm\\.options", "^cp\\b.*(conf|config).*\\.bak"],
+          "accept": [
+            "^cp\\b.*jvm\\.options",
+            "^cp\\b.*(conf|config).*\\.bak"
+          ],
           "output": "$ cp /opt/mes/web/conf/jvm.options /opt/mes/web/conf/jvm.options.bak-20261021\n$ ls -l /opt/mes/web/conf/\njvm.options  jvm.options.bak-20261021  server.xml",
           "hint": "cp 原文件 原文件.bak-日期，改任何生产配置前先留退路。",
           "explain": "生产配置改动必须可回滚。备份只要 1 秒，改坏了没备份就是通宵。这是运维的基本纪律。"
@@ -158,7 +221,9 @@
         {
           "id": "s7",
           "objective": "把 JVM 堆上限从 2g 调到 4g（一行式修改）",
-          "accept": ["^sed\\s+-i\\b.*Xmx"],
+          "accept": [
+            "^sed\\s+-i\\b.*Xmx"
+          ],
           "output": "$ sed -i 's/-Xmx2g/-Xmx4g/' /opt/mes/web/conf/jvm.options\n$ grep Xmx /opt/mes/web/conf/jvm.options\n-Xms1g -Xmx4g -XX:+HeapDumpOnOutOfMemoryError",
           "hint": "演练终端不支持交互式编辑器，用 sed -i 's/-Xmx2g/-Xmx4g/' 一行改完。",
           "explain": "机器现在 available 3.1G，堆扩到 4G 有依据（不是拍脑袋）。配置里已带 HeapDumpOnOutOfMemoryError——下次再 OOM 会留下 dump 文件供分析。"
@@ -166,7 +231,9 @@
         {
           "id": "s8",
           "objective": "启动 mes-web 并确认服务状态",
-          "accept": ["^systemctl\\s+(restart|start)\\s+mes-web"],
+          "accept": [
+            "^systemctl\\s+(restart|start)\\s+mes-web"
+          ],
           "output": "$ systemctl start mes-web\n$ systemctl status mes-web\n● mes-web.service - MES Web Application\n   Active: active (running) since Tue 2026-10-21 07:31:20 CST\n   Main PID: 3382 (java)",
           "hint": "systemctl start mes-web 拉起服务，再 status 确认 active。",
           "explain": "active (running) 只是进程活着，不代表业务可用——Java 应用启动要几十秒，端口起来才算数，所以下一步必须验证。"
@@ -174,19 +241,40 @@
         {
           "id": "s9",
           "objective": "本机验证接口真正可用",
-          "accept": ["^curl\\b.*(127\\.0\\.0\\.1|localhost)", "^wget\\b.*(127\\.0\\.0\\.1|localhost)"],
+          "accept": [
+            "^curl\\b.*(127\\.0\\.0\\.1|localhost)",
+            "^wget\\b.*(127\\.0\\.0\\.1|localhost)"
+          ],
           "output": "$ curl -sI http://127.0.0.1:8080/mes/health\nHTTP/1.1 200 OK\nContent-Type: application/json\n\n{\"status\":\"UP\",\"db\":\"UP\",\"queue\":\"UP\"}",
           "hint": "curl -sI http://127.0.0.1:8080/mes/health 本机探活。",
           "explain": "健康检查 200 且 db/queue 全 UP，才算恢复完成。最后通知车间试报一笔工，闭环。遗留项：给 legacy-sync 补台账、配内存告警、评估加 Swap。"
         }
       ],
       "ambient": [
-        { "pattern": "^vim?\\b|^nano\\b", "output": "演练终端不支持交互式编辑器。请用 sed -i 's/旧值/新值/' 文件路径 一行式修改（改前先 cp 备份）。" },
-        { "pattern": "^date\\b", "output": "Tue Oct 21 07:28:41 CST 2026" },
-        { "pattern": "^uptime\\b", "output": " 07:28:41 up 214 days,  3:12,  2 users,  load average: 4.82, 3.91, 2.44" },
-        { "pattern": "^nginx\\s+-t|^/usr/sbin/nginx\\s+-t", "output": "nginx: configuration file /etc/nginx/nginx.conf test is successful" },
-        { "pattern": "^ls(\\s|$)", "output": "bin  notes.txt  restore-drill.sh" },
-        { "pattern": "^hostname(\\s|$)", "output": "mes-app-01" }
+        {
+          "pattern": "^vim?\\b|^nano\\b",
+          "output": "演练终端不支持交互式编辑器。请用 sed -i 's/旧值/新值/' 文件路径 一行式修改（改前先 cp 备份）。"
+        },
+        {
+          "pattern": "^date\\b",
+          "output": "Tue Oct 21 07:28:41 CST 2026"
+        },
+        {
+          "pattern": "^uptime\\b",
+          "output": " 07:28:41 up 214 days,  3:12,  2 users,  load average: 4.82, 3.91, 2.44"
+        },
+        {
+          "pattern": "^nginx\\s+-t|^/usr/sbin/nginx\\s+-t",
+          "output": "nginx: configuration file /etc/nginx/nginx.conf test is successful"
+        },
+        {
+          "pattern": "^ls(\\s|$)",
+          "output": "bin  notes.txt  restore-drill.sh"
+        },
+        {
+          "pattern": "^hostname(\\s|$)",
+          "output": "mes-app-01"
+        }
       ],
       "danger": [
         {
@@ -204,7 +292,12 @@
         "sed -i 's/-Xmx2g/-Xmx4g/' jvm.options",
         "systemctl start mes-web && systemctl status mes-web",
         "curl -sI http://127.0.0.1:8080/mes/health"
-      ]
+      ],
+      "doc": {
+        "id": "lx-d2",
+        "path": "/content/labs/lx-d2.md",
+        "title": "MES Web 服务宕机：日志取证与内存排查 · 题目文档"
+      }
     },
     {
       "id": "lx-d3",
@@ -222,7 +315,11 @@
         {
           "id": "s1",
           "objective": "查 9100 端口被哪个进程占用",
-          "accept": ["^ss\\b", "^netstat\\b", "^lsof\\b"],
+          "accept": [
+            "^ss\\b",
+            "^netstat\\b",
+            "^lsof\\b"
+          ],
           "output": "$ ss -lntp | grep 9100\nLISTEN 0  128  0.0.0.0:9100  0.0.0.0:*  users:((\"python3\",pid=4321,fd=6))",
           "hint": "ss -lntp 或 netstat -tlnp 列出监听端口和进程，grep 9100 过滤。",
           "explain": "Address already in use 的排查铁三角：谁在监听（ss/netstat/lsof 任选其一）。占用者是 pid 4321 的一个 python3 进程。"
@@ -230,7 +327,11 @@
         {
           "id": "s2",
           "objective": "查清这个进程的身份：是什么、谁启动的",
-          "accept": ["^ps\\s+-?f?p?\\s*.*4321", "^ls\\b/proc/4321", "^cat\\s+/proc/4321/cmdline"],
+          "accept": [
+            "^ps\\s+-?f?p?\\s*.*4321",
+            "^ls\\b/proc/4321",
+            "^cat\\s+/proc/4321/cmdline"
+          ],
           "output": "$ ps -fp 4321\nUID    PID  PPID  C STIME TTY      TIME CMD\nroot  4321     1  0 2024  ?    00:41:07 python3 /opt/legacy/erp-sync-9100.py\n\n启动时间 2024 年，父进程 1（脱离终端的孤儿进程），systemd 里没有它的单元。",
           "hint": "ps -fp 4321 查看进程详情，注意启动时间和命令行。",
           "explain": "两年前前任手敲 nohup 启动的旧同步脚本，没有文档、不在服务列表。这种「幽灵进程」是小厂服务器的常态——先搞清楚它干什么，再决定去留。"
@@ -238,7 +339,10 @@
         {
           "id": "s3",
           "objective": "与相关方确认该脚本已废弃后，优雅终止它",
-          "accept": ["^kill\\b.*4321", "^systemctl\\s+stop\\s+legacy"],
+          "accept": [
+            "^kill\\b.*4321",
+            "^systemctl\\s+stop\\s+legacy"
+          ],
           "output": "（演练模拟：你翻出交接文档并与 ERP 管理员确认，该脚本的职能已由新桥接服务替代）\n$ kill -15 4321\n$ ps -fp 4321\n（无此进程）",
           "hint": "kill -15 4321 发送优雅终止信号，给它机会写完手头的数据。",
           "explain": "默认 -15（SIGTERM）让进程自己收尾；-9（SIGKILL）是内核直接抹掉，临时文件和未发送的数据全丢。先礼后兵，-9 只留给杀不死的。"
@@ -246,7 +350,9 @@
         {
           "id": "s4",
           "objective": "启动新的桥接服务",
-          "accept": ["^systemctl\\s+(start|restart)\\s+mes-erp-bridge"],
+          "accept": [
+            "^systemctl\\s+(start|restart)\\s+mes-erp-bridge"
+          ],
           "output": "$ systemctl start mes-erp-bridge\n$ systemctl status mes-erp-bridge\n● mes-erp-bridge.service - MES-ERP Interface Bridge\n   Active: active (running) since Tue 2026-10-21 10:12:33 CST\n   Main PID: 8811 (java)",
           "hint": "systemctl start mes-erp-bridge。",
           "explain": "端口腾出来后一次启动成功。对比之前反复 BindException——绑定失败的排查关键从来不在新服务本身，而在占用者。"
@@ -254,17 +360,34 @@
         {
           "id": "s5",
           "objective": "验证 9100 已由新服务接管并正常监听",
-          "accept": ["^ss\\b.*9100", "^netstat\\b.*9100", "^curl\\b.*9100", "^lsof\\b.*9100"],
+          "accept": [
+            "^ss\\b.*9100",
+            "^netstat\\b.*9100",
+            "^curl\\b.*9100",
+            "^lsof\\b.*9100"
+          ],
           "output": "$ ss -lntp | grep 9100\nLISTEN 0  100  *:9100  *:*  users:((\"java\",pid=8811,fd=48))\n\n$ curl -s http://127.0.0.1:9100/actuator/health\n{\"status\":\"UP\"}",
           "hint": "再跑一遍 ss -lntp | grep 9100，确认监听者已经换成 java(8811)。",
           "explain": "同一个端口，占用者从 python3(4321) 换成 java(8811)，健康检查 UP——端口交接完成。上线动作永远以「验证」收尾，不以「启动」收尾。"
         }
       ],
       "ambient": [
-        { "pattern": "^hostname(\\s|$)", "output": "mes-app-01" },
-        { "pattern": "^date\\b", "output": "Tue Oct 21 10:08:17 CST 2026" },
-        { "pattern": "^systemctl\\s+list-units\\b.*bridge", "output": "  UNIT                  LOAD   ACTIVE SUB\n● mes-erp-bridge.service loaded failed failed" },
-        { "pattern": "^journalctl\\b.*erp-bridge", "output": "10:05:02 mes-erp-bridge[8640]: Caused by: java.net.BindException: Address already in use\n10:05:02 systemd[1]: mes-erp-bridge.service: Failed with result 'exit-code'." }
+        {
+          "pattern": "^hostname(\\s|$)",
+          "output": "mes-app-01"
+        },
+        {
+          "pattern": "^date\\b",
+          "output": "Tue Oct 21 10:08:17 CST 2026"
+        },
+        {
+          "pattern": "^systemctl\\s+list-units\\b.*bridge",
+          "output": "  UNIT                  LOAD   ACTIVE SUB\n● mes-erp-bridge.service loaded failed failed"
+        },
+        {
+          "pattern": "^journalctl\\b.*erp-bridge",
+          "output": "10:05:02 mes-erp-bridge[8640]: Caused by: java.net.BindException: Address already in use\n10:05:02 systemd[1]: mes-erp-bridge.service: Failed with result 'exit-code'."
+        }
       ],
       "danger": [],
       "sop": [
@@ -273,7 +396,12 @@
         "kill -15 <占用PID>（先确认业务归属）",
         "systemctl start mes-erp-bridge",
         "ss -lntp | grep 9100 && curl -s http://127.0.0.1:9100/actuator/health"
-      ]
+      ],
+      "doc": {
+        "id": "lx-d3",
+        "path": "/content/labs/lx-d3.md",
+        "title": "端口被占：MES-ERP 接口服务起不来 · 题目文档"
+      }
     },
     {
       "id": "lx-c1",
@@ -287,10 +415,22 @@
           "id": "lx-c1-q1",
           "prompt": "白天报工高峰，MES 应用服务器整体变卡，车间报工页面频繁超时。你的第一步动作是？",
           "options": [
-            { "id": "o1", "text": "top / free / iostat 看 CPU、内存、IO 全局画像，再按占用排序定位到进程" },
-            { "id": "o2", "text": "立即 systemctl restart 重启 MES 应用服务，先恢复再说" },
-            { "id": "o3", "text": "echo 3 > /proc/sys/vm/drop_caches 清一下系统缓存" },
-            { "id": "o4", "text": "通知大家先别报工，等它自己缓过来" }
+            {
+              "id": "o1",
+              "text": "top / free / iostat 看 CPU、内存、IO 全局画像，再按占用排序定位到进程"
+            },
+            {
+              "id": "o2",
+              "text": "立即 systemctl restart 重启 MES 应用服务，先恢复再说"
+            },
+            {
+              "id": "o3",
+              "text": "echo 3 > /proc/sys/vm/drop_caches 清一下系统缓存"
+            },
+            {
+              "id": "o4",
+              "text": "通知大家先别报工，等它自己缓过来"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -304,10 +444,22 @@
           "id": "lx-c1-q2",
           "prompt": "MES 应用日志每天涨 500M，磁盘两个月就会满一次，每次都要人工上去清。一劳永逸的做法是？",
           "options": [
-            { "id": "o1", "text": "给应用日志配置轮转策略（logrotate 或应用自带 rolling），按大小切割 + 压缩 + 保留 N 天" },
-            { "id": "o2", "text": "写个 crontab 每天凌晨 rm 掉超过 7 天的日志文件" },
-            { "id": "o3", "text": "把日志级别调到 OFF，不产生日志就不会满" },
-            { "id": "o4", "text": "申请把系统盘从 50G 扩容到 500G" }
+            {
+              "id": "o1",
+              "text": "给应用日志配置轮转策略（logrotate 或应用自带 rolling），按大小切割 + 压缩 + 保留 N 天"
+            },
+            {
+              "id": "o2",
+              "text": "写个 crontab 每天凌晨 rm 掉超过 7 天的日志文件"
+            },
+            {
+              "id": "o3",
+              "text": "把日志级别调到 OFF，不产生日志就不会满"
+            },
+            {
+              "id": "o4",
+              "text": "申请把系统盘从 50G 扩容到 500G"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -321,10 +473,22 @@
           "id": "lx-c1-q3",
           "prompt": "新装的 MES 采集服务已经能 systemctl start 正常跑，但服务器一重启它就不见了。缺了哪一步？",
           "options": [
-            { "id": "o1", "text": "systemctl enable mes-collector，把服务注册为开机自启" },
-            { "id": "o2", "text": "把启动命令写进 /etc/rc.local" },
-            { "id": "o3", "text": "重装一遍服务" },
-            { "id": "o4", "text": "在 crontab 里加 @reboot 启动脚本" }
+            {
+              "id": "o1",
+              "text": "systemctl enable mes-collector，把服务注册为开机自启"
+            },
+            {
+              "id": "o2",
+              "text": "把启动命令写进 /etc/rc.local"
+            },
+            {
+              "id": "o3",
+              "text": "重装一遍服务"
+            },
+            {
+              "id": "o4",
+              "text": "在 crontab 里加 @reboot 启动脚本"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -338,10 +502,22 @@
           "id": "lx-c1-q4",
           "prompt": "运维交接文档里写着「每天凌晨 2 点自动备份 MES 数据库」，但你发现最近一周备份文件没有更新。第一步查什么？",
           "options": [
-            { "id": "o1", "text": "确认 crond 服务本身在跑，再 journalctl -u crond 或 grep CRON /var/log/cron 看任务有没有被触发、报了什么错" },
-            { "id": "o2", "text": "手动跑一遍备份脚本，能成功就说明没事" },
-            { "id": "o3", "text": "把备份任务删了重建一遍" },
-            { "id": "o4", "text": "先看备份磁盘有没有坏道" }
+            {
+              "id": "o1",
+              "text": "确认 crond 服务本身在跑，再 journalctl -u crond 或 grep CRON /var/log/cron 看任务有没有被触发、报了什么错"
+            },
+            {
+              "id": "o2",
+              "text": "手动跑一遍备份脚本，能成功就说明没事"
+            },
+            {
+              "id": "o3",
+              "text": "把备份任务删了重建一遍"
+            },
+            {
+              "id": "o4",
+              "text": "先看备份磁盘有没有坏道"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -355,10 +531,22 @@
           "id": "lx-c1-q5",
           "prompt": "车间终端 ping 得通 MES 服务器，但访问 8080 端口超时。服务器上应用日志显示服务正常监听。下一步查？",
           "options": [
-            { "id": "o1", "text": "查服务器防火墙：firewall-cmd --list-all 或 iptables -L -n 看 8080 是否放行" },
-            { "id": "o2", "text": "重启应用服务" },
-            { "id": "o3", "text": "让车间换一台终端试试" },
-            { "id": "o4", "text": "重装网卡驱动" }
+            {
+              "id": "o1",
+              "text": "查服务器防火墙：firewall-cmd --list-all 或 iptables -L -n 看 8080 是否放行"
+            },
+            {
+              "id": "o2",
+              "text": "重启应用服务"
+            },
+            {
+              "id": "o3",
+              "text": "让车间换一台终端试试"
+            },
+            {
+              "id": "o4",
+              "text": "重装网卡驱动"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -372,10 +560,22 @@
           "id": "lx-c1-q6",
           "prompt": "同事部署的 MES 巡检脚本 scp 过来后运行报 Permission denied。最规范的处理是？",
           "options": [
-            { "id": "o1", "text": "ls -l 查看权限位确认缺执行权限，然后 chmod +x 脚本，必要时 chown 修正属主" },
-            { "id": "o2", "text": "chmod 777 脚本，一步到位省得再报错" },
-            { "id": "o3", "text": "用 root 身份跑，root 不受权限限制" },
-            { "id": "o4", "text": "把脚本内容复制到新文件里" }
+            {
+              "id": "o1",
+              "text": "ls -l 查看权限位确认缺执行权限，然后 chmod +x 脚本，必要时 chown 修正属主"
+            },
+            {
+              "id": "o2",
+              "text": "chmod 777 脚本，一步到位省得再报错"
+            },
+            {
+              "id": "o3",
+              "text": "用 root 身份跑，root 不受权限限制"
+            },
+            {
+              "id": "o4",
+              "text": "把脚本内容复制到新文件里"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -389,10 +589,22 @@
           "id": "lx-c1-q7",
           "prompt": "要给生产 MySQL 里的 MES 库做一份逻辑备份，要求备份期间不锁表、数据一致。用哪个命令？",
           "options": [
-            { "id": "o1", "text": "mysqldump --single-transaction --databases mes > mes_backup.sql" },
-            { "id": "o2", "text": "mysqldump --lock-all-tables --databases mes > mes_backup.sql" },
-            { "id": "o3", "text": "直接 cp 数据库数据目录到备份盘" },
-            { "id": "o4", "text": "ALTER TABLE 逐个导出" }
+            {
+              "id": "o1",
+              "text": "mysqldump --single-transaction --databases mes > mes_backup.sql"
+            },
+            {
+              "id": "o2",
+              "text": "mysqldump --lock-all-tables --databases mes > mes_backup.sql"
+            },
+            {
+              "id": "o3",
+              "text": "直接 cp 数据库数据目录到备份盘"
+            },
+            {
+              "id": "o4",
+              "text": "ALTER TABLE 逐个导出"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -406,10 +618,22 @@
           "id": "lx-c1-q8",
           "prompt": "领导要求：MES 服务日志里一出现 ERROR 关键字就实时通知运维群。在服务器侧最直接的实现是？",
           "options": [
-            { "id": "o1", "text": "journalctl -u mes-web -f 或 tail -F 日志文件，管道接 grep --line-buffered ERROR，再对接群机器人 webhook 脚本，用 systemd 托管常驻" },
-            { "id": "o2", "text": "每天上班先手动 grep 一遍昨天的 ERROR" },
-            { "id": "o3", "text": "把日志级别调到 ERROR 以上，减少日志量" },
-            { "id": "o4", "text": "让开发在代码里每处 catch 都发一条群消息" }
+            {
+              "id": "o1",
+              "text": "journalctl -u mes-web -f 或 tail -F 日志文件，管道接 grep --line-buffered ERROR，再对接群机器人 webhook 脚本，用 systemd 托管常驻"
+            },
+            {
+              "id": "o2",
+              "text": "每天上班先手动 grep 一遍昨天的 ERROR"
+            },
+            {
+              "id": "o3",
+              "text": "把日志级别调到 ERROR 以上，减少日志量"
+            },
+            {
+              "id": "o4",
+              "text": "让开发在代码里每处 catch 都发一条群消息"
+            }
           ],
           "answer": "o1",
           "term_ids": [],
@@ -419,7 +643,12 @@
             "consultant": "管道流式监控适合小厂快速落地；再进一步就是 promtail+Loki 或 ELK 做集中日志，告警规则统一管理。"
           }
         }
-      ]
+      ],
+      "doc": {
+        "id": "lx-c1",
+        "path": "/content/labs/lx-c1.md",
+        "title": "Linux 巡检与应急处置八题 · 题目文档"
+      }
     },
     {
       "id": "lx-o1",
@@ -430,14 +659,47 @@
       "intro": "监控发出「MES 服务器根分区使用率 92%」告警。把处置步骤排成正确顺序——顺序错了，轻则白干，重则丢数据。",
       "maxAttempts": 2,
       "steps": [
-        { "id": "s1", "text": "确认告警对象与影响面：df 看哪个分区、剩多少，判断会不会已经影响业务写入", "note": "先看全局再动手。不确认影响面就冲进去清理，可能清错分区、也可能低估紧急程度。" },
-        { "id": "s2", "text": "逐层定位异常增长的目录（du 按大小排序收敛范围）", "note": "知道「哪个分区满」之后才轮到「哪个目录在吃」。跳步去猜文件是赌博。" },
-        { "id": "s3", "text": "找到具体大文件，确认归属：是业务日志、备份文件还是数据文件", "note": "删之前必须知道文件是谁的、还在不在被写入——归属不明的文件一律先问再动。" },
-        { "id": "s4", "text": "按保留策略安全清理：在写入中的日志用 truncate 清空，过期备份先归档再删除", "note": "清理方式取决于文件状态。对在用文件直接 rm 不释放空间，还可能毁掉唯一备份。" },
-        { "id": "s5", "text": "验证空间释放，检查应用写入恢复正常（df + 应用日志 + 业务试单）", "note": "清理动作本身不产生「已恢复」的结论，验证才产生。" },
-        { "id": "s6", "text": "通知业务方告警解除，确认告警时间段内没有单据丢失", "note": "运维闭环的最后是业务确认，不是技术自嗨。告警期间丢没丢单，要业务侧对一遍。" },
-        { "id": "s7", "text": "复盘：补日志轮转/归档策略，调整告警阈值，评估是否需要扩容", "note": "处置让这次不疼，复盘让下次不来。没有复盘的告警处置等于把闹钟按掉继续睡。" }
-      ]
+        {
+          "id": "s1",
+          "text": "确认告警对象与影响面：df 看哪个分区、剩多少，判断会不会已经影响业务写入",
+          "note": "先看全局再动手。不确认影响面就冲进去清理，可能清错分区、也可能低估紧急程度。"
+        },
+        {
+          "id": "s2",
+          "text": "逐层定位异常增长的目录（du 按大小排序收敛范围）",
+          "note": "知道「哪个分区满」之后才轮到「哪个目录在吃」。跳步去猜文件是赌博。"
+        },
+        {
+          "id": "s3",
+          "text": "找到具体大文件，确认归属：是业务日志、备份文件还是数据文件",
+          "note": "删之前必须知道文件是谁的、还在不在被写入——归属不明的文件一律先问再动。"
+        },
+        {
+          "id": "s4",
+          "text": "按保留策略安全清理：在写入中的日志用 truncate 清空，过期备份先归档再删除",
+          "note": "清理方式取决于文件状态。对在用文件直接 rm 不释放空间，还可能毁掉唯一备份。"
+        },
+        {
+          "id": "s5",
+          "text": "验证空间释放，检查应用写入恢复正常（df + 应用日志 + 业务试单）",
+          "note": "清理动作本身不产生「已恢复」的结论，验证才产生。"
+        },
+        {
+          "id": "s6",
+          "text": "通知业务方告警解除，确认告警时间段内没有单据丢失",
+          "note": "运维闭环的最后是业务确认，不是技术自嗨。告警期间丢没丢单，要业务侧对一遍。"
+        },
+        {
+          "id": "s7",
+          "text": "复盘：补日志轮转/归档策略，调整告警阈值，评估是否需要扩容",
+          "note": "处置让这次不疼，复盘让下次不来。没有复盘的告警处置等于把闹钟按掉继续睡。"
+        }
+      ],
+      "doc": {
+        "id": "lx-o1",
+        "path": "/content/labs/lx-o1.md",
+        "title": "磁盘告警处置全流程 · 题目文档"
+      }
     },
     {
       "id": "lx-o2",
@@ -448,13 +710,42 @@
       "intro": "需要重启生产环境的 MES 应用服务（打补丁）。重启本身是一条命令，但「规范地重启」是一套流程。排出正确顺序。",
       "maxAttempts": 2,
       "steps": [
-        { "id": "s1", "text": "提变更申请：写清重启原因、影响范围、计划窗口、回退方案", "note": "生产变更先有单据再动手。出了争议时，变更单就是你的操作依据。" },
-        { "id": "s2", "text": "通知车间与业务方，把窗口避开报工高峰与交接班", "note": "重启窗口选在中午或换班间隙，车间提前知道就不会在停机瞬间疯狂提交。" },
-        { "id": "s3", "text": "先停写入口：停采集服务/接口消费者，让在途请求落袋", "note": "直接杀主服务会把在途请求拦腰截断。先关水龙头，再动水管。" },
-        { "id": "s4", "text": "按依赖顺序停止应用，更新后按反向顺序启动（数据库→中间件→应用）", "note": "依赖关系决定启停顺序：停从上层往下，起从底层往上，否则应用起来连不上依赖又是一轮报错。" },
-        { "id": "s5", "text": "逐项验证：进程、端口、日志无异常，业务试报一笔工", "note": "服务 active 不等于业务可用，一定要用真实业务动作收口验证。" },
-        { "id": "s6", "text": "记录变更单：实际时间线、执行的操作、验证结果、遗留问题", "note": "记录是给下一次变更和交接同事的资产，也是故障复盘的第一手材料。" }
-      ]
+        {
+          "id": "s1",
+          "text": "提变更申请：写清重启原因、影响范围、计划窗口、回退方案",
+          "note": "生产变更先有单据再动手。出了争议时，变更单就是你的操作依据。"
+        },
+        {
+          "id": "s2",
+          "text": "通知车间与业务方，把窗口避开报工高峰与交接班",
+          "note": "重启窗口选在中午或换班间隙，车间提前知道就不会在停机瞬间疯狂提交。"
+        },
+        {
+          "id": "s3",
+          "text": "先停写入口：停采集服务/接口消费者，让在途请求落袋",
+          "note": "直接杀主服务会把在途请求拦腰截断。先关水龙头，再动水管。"
+        },
+        {
+          "id": "s4",
+          "text": "按依赖顺序停止应用，更新后按反向顺序启动（数据库→中间件→应用）",
+          "note": "依赖关系决定启停顺序：停从上层往下，起从底层往上，否则应用起来连不上依赖又是一轮报错。"
+        },
+        {
+          "id": "s5",
+          "text": "逐项验证：进程、端口、日志无异常，业务试报一笔工",
+          "note": "服务 active 不等于业务可用，一定要用真实业务动作收口验证。"
+        },
+        {
+          "id": "s6",
+          "text": "记录变更单：实际时间线、执行的操作、验证结果、遗留问题",
+          "note": "记录是给下一次变更和交接同事的资产，也是故障复盘的第一手材料。"
+        }
+      ],
+      "doc": {
+        "id": "lx-o2",
+        "path": "/content/labs/lx-o2.md",
+        "title": "生产 MES 服务重启规范流程 · 题目文档"
+      }
     }
   ]
 }

@@ -27,7 +27,12 @@
         "unit_mixed",
         "master_data",
         "data_quality"
-      ]
+      ],
+      "doc": {
+        "id": "db-c1",
+        "path": "/content/labs/db-c1.md",
+        "title": "单位大一统：PCS、pcs 全部归一成「个」 · 题目文档"
+      }
     },
     {
       "id": "db-c2",
@@ -51,7 +56,12 @@
       "explanation": "用 '[' || item_name || ']' 把字段包起来看，是让不可见字符现形的调试技巧（|| 是 SQLite/PG 的字符串拼接，MySQL 用 CONCAT）。RTRIM/LTRIM/TRIM 对干净数据是无操作，所以这条 UPDATE 可以不带 WHERE 全表跑。真实项目里导入环节就该做 TRIM，别把清洗债留到上线后。",
       "term_ids": [
         "data_quality"
-      ]
+      ],
+      "doc": {
+        "id": "db-c2",
+        "path": "/content/labs/db-c2.md",
+        "title": "看不见的敌人：清掉物料名称的尾部空格 · 题目文档"
+      }
     },
     {
       "id": "db-c3",
@@ -76,7 +86,12 @@
       "term_ids": [
         "work_order",
         "data_quality"
-      ]
+      ],
+      "doc": {
+        "id": "db-c3",
+        "path": "/content/labs/db-c3.md",
+        "title": "状态口径归一：已完成、完成，统统写成 Completed · 题目文档"
+      }
     },
     {
       "id": "db-c4",
@@ -113,7 +128,12 @@
         "inventory",
         "inventory_accuracy",
         "data_quality"
-      ]
+      ],
+      "doc": {
+        "id": "db-c4",
+        "path": "/content/labs/db-c4.md",
+        "title": "盘点前哨：列出所有账实不符的库存 · 题目文档"
+      }
     },
     {
       "id": "db-c5",
@@ -141,7 +161,12 @@
         "data_cleaning",
         "data_migration",
         "master_data"
-      ]
+      ],
+      "doc": {
+        "id": "db-c5",
+        "path": "/content/labs/db-c5.md",
+        "title": "一物两码合并：带尾随空格的重复物料码归并到标准码 · 题目文档"
+      }
     }
   ]
 }

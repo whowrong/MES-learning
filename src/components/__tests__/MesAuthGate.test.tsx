@@ -4,9 +4,13 @@
 // 背景：登录入口原来是 fixed right-3 top-3，和 sticky 顶栏（h-16）同高，
 // 手机上直接压住顶栏右上角的「术语卡库 / 自由沙盘」按钮，点不到。
 // 修复后：窄屏（<sm）入口落到顶栏下方（top-16）并收成图标，宽屏（>=sm）保持原位置与外观。
-import { describe, expect, it } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, render, screen } from "@testing-library/react"
 import { MesAuthGate } from "@/components/MesAuthGate"
+
+afterEach(() => {
+  cleanup()
+})
 
 describe("站内登录入口的响应式定位", () => {
   it("窄屏落在顶栏下方，宽屏保持原来的右上角位置", () => {

@@ -59,7 +59,12 @@
       "term_ids": [
         "work_order",
         "master_data"
-      ]
+      ],
+      "doc": {
+        "id": "db-j1",
+        "path": "/content/labs/db-j1.md",
+        "title": "在制工单明细：只有编码没人看得懂 · 题目文档"
+      }
     },
     {
       "id": "db-j2",
@@ -113,7 +118,12 @@
       "explanation": "关联 + 分组聚合的组合拳。一个方言坑值得记住：GROUP BY r.employee_no 却 SELECT e.emp_name，SQLite 宽容放行，MySQL 开了 ONLY_FULL_GROUP_BY（5.7+ 默认）会直接报错，SQL Server 也要求 SELECT 的非聚合列都进 GROUP BY。写客户环境的 SQL 前先确认数据库方言，「在我机器上能跑」是实施现场最经典的翻车。",
       "term_ids": [
         "reporting"
-      ]
+      ],
+      "doc": {
+        "id": "db-j2",
+        "path": "/content/labs/db-j2.md",
+        "title": "报工明星榜：谁干得最多 · 题目文档"
+      }
     },
     {
       "id": "db-j3",
@@ -156,7 +166,12 @@
         "bom",
         "sales_order",
         "mrp"
-      ]
+      ],
+      "doc": {
+        "id": "db-j3",
+        "path": "/content/labs/db-j3.md",
+        "title": "订单展 BOM：这张订单要备多少料 · 题目文档"
+      }
     },
     {
       "id": "db-j4",
@@ -203,7 +218,12 @@
         "work_order",
         "reporting",
         "data_quality"
-      ]
+      ],
+      "doc": {
+        "id": "db-j4",
+        "path": "/content/labs/db-j4.md",
+        "title": "数据断链：开工了却一条报工都没有的工单 · 题目文档"
+      }
     },
     {
       "id": "db-j5",
@@ -371,7 +391,12 @@
         "reporting",
         "sql_join",
         "scrap"
-      ]
+      ],
+      "doc": {
+        "id": "db-j5",
+        "path": "/content/labs/db-j5.md",
+        "title": "三表关联：工单 × 物料 × 报工，算每张工单的合格与报废 · 题目文档"
+      }
     }
   ]
 }
