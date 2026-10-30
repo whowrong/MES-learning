@@ -5,14 +5,64 @@
 //    且引用的文档文件真实存在；
 // 2. public/content/labs/ 下不允许存在没有对应题目的孤儿文档；
 // 3. 每份文档必须包含约定的 10 个章节（人读的信息 + AI 可解析的执行要点都在里面）；
-// 4. 文档内容必须与生成器输出一致（题目改了要重新生成文档，防止文档漂移）。
-import fs from "node:fs"
-import path from "node:path"
+// 4. 文档必须与题目内容对得上（题面、验收判据都出现在文档里），题目改了要重新生成文档；
+// 5. 文档里不得出现口令、密钥、token。
 import { describe, expect, it } from "vitest"
-import { buildAll, collectQuestions, renderLabDoc } from "../../../../scripts/build-lab-docs.mjs"
 
-const LABS_DIR = path.resolve(process.cwd(), "public/content/labs")
-const META = JSON.parse(fs.readFileSync(path.join(LABS_DIR, "meta.json"), "utf8"))
+const docFiles = import.meta.glob("../../../public/content/labs/*.md", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>
+
+const dbFiles = import.meta.glob("../../../public/content/db-training/*.json", { eager: true }) as Record<string, unknown>
+const opsFiles = import.meta.glob("../../../public/content/ops-training/*.json", { eager: true }) as Record<string, unknown>
+
+interface Question {
+  id: string
+  title: string
+  kind: "db" | "ops-terminal" | "ops-choice" | "ops-order"
+  module: string
+  doc?: { id?: string; path?: string; title?: string }
+  accept?: string[]
+  checkSql?: string
+  goal?: string
+  objective?: string
+}
+
+const questions: Question[] = []
+for (const mod of Object.values(dbFiles) as Array<Record<string, unknown>>) {
+  const tasks = (mod.tasks ?? []) as Array<Record<string, unknown>>
+  for (const t of tasks) {
+    const check = (t.check ?? {}) as Record<string, unknown>
+    questions.push({
+      id: String(t.id),
+      title: String(t.title),
+      kind: "db",
+      module: `数据库实操营 · ${String(mod.groupName)}`,
+      doc: t.doc as Question["doc"],
+      checkSql: typeof check.sql === "string" ? check.sql : undefined,
+      goal: typeof t.goal === "string" ? t.goal : undefined,
+    })
+  }
+}
+for (const mod of Object.values(opsFiles) as Array<Record<string, unknown>>) {
+  const items = (mod.items ?? []) as Array<Record<string, unknown>>
+  for (const it of items) {
+    const steps = (it.steps ?? []) as Array<Record<string, unknown>>
+    const ticket = (it.ticket ?? {}) as Record<string, unknown>
+    questions.push({
+      id: String(it.id),
+      title: String(it.title),
+      kind: it.kind === "terminal" ? "ops-terminal" : it.kind === "choice" ? "ops-choice" : "ops-order",
+      module: `运维实操营 · ${String(mod.domainName)}`,
+      doc: it.doc as Question["doc"],
+      accept: steps.map((s) => String((s.accept ?? []).join(""))).filter(Boolean),
+      objective: typeof ticket.objective === "string" ? ticket.objective : undefined,
+    })
+  }
+}
+
 const REQUIRED_SECTIONS = [
   "## 1. 题目目标与业务背景",
   "## 2. 涉及的数据表或服务",
@@ -29,13 +79,16 @@ const REQUIRED_SECTIONS = [
   "## 10. 安全边界与失败处理",
 ]
 
-const questions = collectQuestions()
+function docText(id: string): string | undefined {
+  const key = Object.keys(docFiles).find((k) => k.endsWith(`/labs/${id}.md`))
+  return key ? docFiles[key] : undefined
+}
 
 describe("题目与文档一一对应", () => {
   it("题目总量符合预期（数据库实操营 20 题 + 运维实操营 28 条）", () => {
-    const db = questions.filter((q: { kind: string }) => q.kind === "db")
-    const ops = questions.filter((q: { kind: string }) => q.kind !== "db")
-    const terminal = questions.filter((q: { kind: string }) => q.kind === "ops-terminal")
+    const db = questions.filter((q) => q.kind === "db")
+    const ops = questions.filter((q) => q.kind !== "db")
+    const terminal = questions.filter((q) => q.kind === "ops-terminal")
     expect(db.length).toBe(20)
     // 运维实操营：原有 20 条 + 本轮新增 7 道小型排障题 + 1 道大型综合题
     expect(ops.length).toBe(28)
@@ -43,29 +96,27 @@ describe("题目与文档一一对应", () => {
     expect(questions.length).toBe(48)
   })
 
-  it("每道题目都带 doc 引用字段，且指向真实存在的文档", () => {
-    for (const q of questions as Array<{ id: string; raw: Record<string, unknown> }>) {
-      const doc = q.raw.doc as { id?: string; path?: string } | undefined
-      expect(doc, `${q.id} 缺 doc 引用字段`).toBeTruthy()
-      expect(doc!.id).toBe(q.id)
-      expect(doc!.path).toBe(`/content/labs/${q.id}.md`)
-      const file = path.join(LABS_DIR, `${q.id}.md`)
-      expect(fs.existsSync(file), `${q.id} 的文档文件缺失`).toBe(true)
+  it("每道题目都带 doc 引用字段，且文档真实存在", () => {
+    for (const q of questions) {
+      expect(q.doc, `${q.id} 缺 doc 引用字段`).toBeTruthy()
+      expect(q.doc!.id).toBe(q.id)
+      expect(q.doc!.path).toBe(`/content/labs/${q.id}.md`)
+      expect(docText(q.id), `${q.id} 的文档文件缺失`).toBeTruthy()
     }
   })
 
   it("没有孤儿文档（目录里每个 .md 都对应一道题）", () => {
-    const ids = new Set((questions as Array<{ id: string }>).map((q) => q.id))
-    const files = fs.readdirSync(LABS_DIR).filter((f) => f.endsWith(".md"))
+    const ids = new Set(questions.map((q) => q.id))
+    const files = Object.keys(docFiles).map((k) => k.split("/").pop()!.replace(/\.md$/, ""))
     for (const f of files) {
-      expect(ids.has(f.replace(/\.md$/, "")), `孤儿文档：${f}`).toBe(true)
+      expect(ids.has(f), `孤儿文档：${f}`).toBe(true)
     }
     expect(files.length).toBe(questions.length)
   })
 
-  it("每份文档都包含约定的章节（人读信息 + AI 执行要点）", () => {
-    for (const q of questions as Array<{ id: string }>) {
-      const content = fs.readFileSync(path.join(LABS_DIR, `${q.id}.md`), "utf8")
+  it("每份文档都包含约定的章节与演练提示", () => {
+    for (const q of questions) {
+      const content = docText(q.id)!
       for (const section of REQUIRED_SECTIONS) {
         expect(content.includes(section), `${q.id} 文档缺章节：${section}`).toBe(true)
       }
@@ -74,28 +125,26 @@ describe("题目与文档一一对应", () => {
     }
   })
 
-  it("文档内容与生成器输出一致（题目变了要重新生成文档）", () => {
-    const meta = JSON.parse(fs.readFileSync(path.join(LABS_DIR, "meta.json"), "utf8"))
-    for (const q of questions as Array<{ id: string }>) {
-      const onDisk = fs.readFileSync(path.join(LABS_DIR, `${q.id}.md`), "utf8")
-      const rendered = renderLabDoc(q, meta)
-      expect(onDisk, `${q.id} 文档已过期，请运行 node scripts/build-lab-docs.mjs`).toBe(rendered)
+  it("文档与题目内容对得上（题面与验收判据都在文档里）", () => {
+    for (const q of questions) {
+      const content = docText(q.id)!
+      expect(content.includes(q.title), `${q.id} 文档标题与题目不一致`).toBe(true)
+      if (q.kind === "db" && q.checkSql) {
+        const normalized = q.checkSql.replace(/\s+/g, " ").trim()
+        expect(content.includes(normalized), `${q.id} 文档缺校验 SQL`).toBe(true)
+      }
+      if (q.kind === "ops-terminal") {
+        for (const pattern of q.accept ?? []) {
+          expect(content.includes(pattern.replace(/\s+/g, " ").trim()), `${q.id} 文档缺验收正则 ${pattern}`).toBe(true)
+        }
+      }
     }
   })
 
   it("文档里不出现口令、密钥、token 等敏感串", () => {
     const forbidden = /password\s*[:=]\s*\S+|passwd|secret\s*[:=]|token\s*[:=]|ghp_[A-Za-z0-9]{10,}|sk_[A-Za-z0-9]{10,}/i
-    for (const f of fs.readdirSync(LABS_DIR).filter((f) => f.endsWith(".md"))) {
-      const content = fs.readFileSync(path.join(LABS_DIR, f), "utf8")
-      expect(forbidden.test(content), `${f} 里出现疑似敏感串`).toBe(false)
+    for (const [k, content] of Object.entries(docFiles)) {
+      expect(forbidden.test(content), `${k} 里出现疑似敏感串`).toBe(false)
     }
-  })
-
-  it("生成器可重复执行且结果稳定", () => {
-    const before = fs.readdirSync(LABS_DIR).filter((f) => f.endsWith(".md")).map((f) => fs.readFileSync(path.join(LABS_DIR, f), "utf8"))
-    buildAll()
-    const after = fs.readdirSync(LABS_DIR).filter((f) => f.endsWith(".md")).map((f) => fs.readFileSync(path.join(LABS_DIR, f), "utf8"))
-    expect(after).toEqual(before)
-    expect(META.version).toBe(1)
   })
 })

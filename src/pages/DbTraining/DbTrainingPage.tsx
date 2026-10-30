@@ -65,6 +65,16 @@ export function DbTrainingPage(p: ReturnType<typeof useDbTraining>) {
               viewAnswerNow={p.viewAnswerNow}
               nextTask={p.nextTask}
               onExit={p.backToHome}
+              labConnectionId={p.workbenchView.wbConnId}
+              labConnection={{
+                kind: "db",
+                type: p.workbenchView.activeConn?.type,
+                host: p.workbenchView.activeConn?.host,
+                port: p.workbenchView.activeConn?.port,
+                database: p.workbenchView.activeConn?.database,
+                username: p.workbenchView.activeConn?.username,
+              }}
+              labReadOnly={p.workbenchView.readOnlyGuard}
             />
           )}
 

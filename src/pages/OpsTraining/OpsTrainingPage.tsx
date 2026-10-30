@@ -90,6 +90,13 @@ export function OpsTrainingPage(p: ReturnType<typeof useOpsTraining>) {
           onFinish={p.finishDrill}
           onRetry={p.retryCurrent}
           onExit={p.backToList}
+          labConnectionId={p.realServerView.activeConnId}
+          labConnection={{
+            kind: "server",
+            host: p.realServerView.activeConn?.host,
+            port: p.realServerView.activeConn?.port,
+            username: p.realServerView.activeConn?.username,
+          }}
         />
       )}
 

@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react"
 import { Database, PlugZap, Save, X, Loader2, ShieldCheck } from "lucide-react"
+import { DrillEnvironmentNotice } from "@/components/lab/DrillEnvironmentNotice"
+import { looksLikeProduction as looksLikeProductionHost } from "@/game/labScripts"
 import { DB_TYPE_META, type DbConnectionView } from "@/content/dbTraining"
 import type { ConnForm } from "@/pages/DbTraining/useDbTraining"
 
@@ -22,6 +25,11 @@ export function ConnDialog({
 }) {
   const isEdit = Boolean(form.id)
   const typeKeys = ["mysql", "sqlserver", "postgres"] as const
+  // 疑似生产主机名时要用户二次确认；换了主机就重新确认
+  const [prodAck, setProdAck] = useState(false)
+  useEffect(() => {
+    setProdAck(false)
+  }, [form.host])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="数据库连接登记">
@@ -38,6 +46,7 @@ export function ConnDialog({
           <ShieldCheck className="mr-1 inline h-3 w-3 text-primary" />
           凭据只保存在本站服务端（不出现在页面代码与公开仓库），列表与回显一律脱敏。建议填<b className="text-foreground">演练专用账号</b>并只给必要权限，别把重要的生产库挂上来。数据库需要允许从外网访问（内网库连不上）。
         </p>
+        <DrillEnvironmentNotice host={form.host} confirmed={prodAck} onConfirmChange={setProdAck} target="db" />
 
         {/* 类型选择 */}
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -142,6 +151,7 @@ export function ConnDialog({
           <button
             type="button"
             onClick={onSave}
+            disabled={Boolean(form.host) && looksLikeProductionHost(form.host) && !prodAck}
             disabled={busy}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-40 focus-visible:shadow-[var(--focus-ring)]"
           >

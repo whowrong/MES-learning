@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ClipboardList, Lightbulb, Send, FileCheck2, RotateCcw, CircleAlert, Copy, Check } from "lucide-react"
+import { LabScriptPanel } from "@/components/lab/LabScriptPanel"
+import type { LabConnection } from "@/game/labScripts"
 import type { OpsTerminalDrill } from "@/content/opsTraining"
 import type { TerminalRun } from "@/game/opsTerminal"
 
@@ -41,6 +43,8 @@ export function TerminalDrill({
   onFinish,
   onRetry,
   onExit,
+  labConnectionId,
+  labConnection,
 }: {
   view: TerminalView
   onCommand: (cmd: string) => void
@@ -48,6 +52,9 @@ export function TerminalDrill({
   onFinish: () => void
   onRetry: () => void
   onExit: () => void
+  /** 真实服务器连接（AI 生成脚本用；没有连接时不出这个面板） */
+  labConnectionId?: string
+  labConnection?: LabConnection
 }) {
   const [input, setInput] = useState("")
   const [ticketOpen, setTicketOpen] = useState(true)
@@ -263,6 +270,19 @@ export function TerminalDrill({
           退出，返回训练清单
         </button>
       </div>
+
+      {/* AI 演练助手：读本题文档 + 你填的服务器连接，生成准备与执行脚本 */}
+      {labConnectionId && labConnection && (
+        <div className="mt-4">
+          <LabScriptPanel
+            questionId={view.drill.id}
+            title={view.drill.title}
+            kind="server"
+            connectionId={labConnectionId}
+            connection={labConnection}
+          />
+        </div>
+      )}
     </section>
   )
 }

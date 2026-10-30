@@ -3,6 +3,8 @@ import {
   Server, Plus, TerminalSquare, Copy, Check, LogOut, Pencil, Trash2, TriangleAlert,
   FileText, UploadCloud, Rocket, Bot, Download, ChevronRight, X, Loader2, ShieldAlert,
 } from "lucide-react"
+import { DrillEnvironmentNotice } from "@/components/lab/DrillEnvironmentNotice"
+import { looksLikeProduction as looksLikeProductionHost } from "@/game/labScripts"
 import type { useOpsTraining } from "./useOpsTraining"
 import type { DeployDocTemplate } from "./useRealServer"
 
@@ -496,6 +498,11 @@ function DocActionPanel({ p, copied, setCopied }: { p: P; copied: boolean; setCo
 
 /** 服务器连接登记弹窗 */
 function SrvConnDialog({ p }: { p: P }) {
+  // 疑似生产主机名要二次确认；换主机重新确认
+  const [srvProdAck, setSrvProdAck] = useState(false)
+  useEffect(() => {
+    setSrvProdAck(false)
+  }, [p.realServerView.srvForm.host])
   const v = p.realServerView
   const f = v.srvForm
   return (
@@ -511,6 +518,7 @@ function SrvConnDialog({ p }: { p: P }) {
         <p className="mt-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           凭据只保存在本站服务端，列表与回显一律脱敏。建议建一个演练专用的 Linux 账号（sudo 白名单），别直接挂 root。服务器需允许 SSH 从外网访问。
         </p>
+        <DrillEnvironmentNotice host={f.host} confirmed={srvProdAck} onConfirmChange={setSrvProdAck} target="server" />
         <div className="mt-3 space-y-2.5">
           <label className="block">
             <span className="text-[11px] font-semibold text-muted-foreground">服务器名称</span>
@@ -560,7 +568,7 @@ function SrvConnDialog({ p }: { p: P }) {
             {v.srvBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
             测试连接
           </button>
-          <button type="button" onClick={p.saveSrvForm} disabled={v.srvBusy} className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-40 focus-visible:shadow-[var(--focus-ring)]">
+          <button type="button" onClick={p.saveSrvForm} disabled={v.srvBusy || (Boolean(f.host) && looksLikeProductionHost(f.host) && !srvProdAck)} className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-40 focus-visible:shadow-[var(--focus-ring)]">
             保存连接
           </button>
         </div>

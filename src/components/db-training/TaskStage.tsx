@@ -1,6 +1,8 @@
 import { ClipboardList, Lightbulb, Play, FileCheck2, Eye, ArrowRight, LogOut, CheckCircle2, XCircle } from "lucide-react"
 import type { useDbTraining } from "@/pages/DbTraining/useDbTraining"
 import { SqlResultTable } from "./SqlResultTable"
+import { LabScriptPanel } from "@/components/lab/LabScriptPanel"
+import type { LabConnection } from "@/game/labScripts"
 
 type P = ReturnType<typeof useDbTraining>
 
@@ -14,8 +16,14 @@ export function TaskStage({
   viewAnswerNow,
   nextTask,
   onExit,
+  labConnectionId,
+  labConnection,
+  labReadOnly,
 }: {
   view: NonNullable<P["taskView"]>
+  labConnectionId?: string
+  labConnection?: LabConnection
+  labReadOnly?: boolean
   setSqlText: (v: string) => void
   runSql: () => void
   submitCheck: () => void
@@ -184,6 +192,20 @@ export function TaskStage({
             {view.isLast ? "完成本组，出报告" : "下一个任务"}
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* AI 演练助手：读本题文档 + 你填的数据库连接，生成准备与执行脚本 */}
+      {labConnectionId && labConnection && (
+        <div className="mt-4">
+          <LabScriptPanel
+            questionId={task.id}
+            title={task.title}
+            kind="db"
+            connectionId={labConnectionId}
+            connection={labConnection}
+            readOnly={labReadOnly}
+          />
         </div>
       )}
     </section>
