@@ -147,6 +147,52 @@ function portReachable(port, timeoutMs = 8000) {
   })
 }
 
+/**
+ * 把内置练习库灌进一次性数据库容器。
+ *
+ * 数据库实操营的题目都跑在站内练习库的那 8 张表上；模式 B 的容器是空的，
+ * 不灌同一份确定性数据的话题目脚本会直接报表不存在，判分口径也对不上。
+ */
+async function seedDatabase(engine, connection) {
+  if (engine !== "mysql" && engine !== "postgres") return 0
+  const { exportPracticeSql } = await import("./seed-practice-db.mjs")
+  const { ddl, inserts } = exportPracticeSql(engine === "postgres" ? "postgres" : "mysql")
+  if (engine === "mysql") {
+    const mysql = (await import("mysql2/promise")).default
+    const conn = await mysql.createConnection({
+      host: connection.host,
+      port: connection.port,
+      user: connection.username,
+      password: connection.password,
+      database: connection.database,
+      charset: "utf8mb4",
+    })
+    try {
+      for (const stmt of ddl) await conn.query(stmt)
+      for (const stmt of inserts) await conn.query(stmt)
+    } finally {
+      await conn.end().catch(() => {})
+    }
+    return inserts.length
+  }
+  const { Client } = await import("pg")
+  const client = new Client({
+    host: connection.host,
+    port: connection.port,
+    user: connection.username,
+    password: connection.password,
+    database: connection.database,
+  })
+  await client.connect()
+  try {
+    for (const stmt of ddl) await client.query(stmt)
+    for (const stmt of inserts) await client.query(stmt)
+  } finally {
+    await client.end().catch(() => {})
+  }
+  return inserts.length
+}
+
 async function createDbEnv(dbType) {
   const engine = ["mysql", "postgres", "sqlserver"].includes(dbType) ? dbType : "mysql"
   const port = await pickPort(DB_PORT_RANGE)
@@ -184,12 +230,20 @@ async function createDbEnv(dbType) {
     removeContainer(name)
     return fail("容器内服务已就绪，但端口连不上，已自动销毁，可重试")
   }
+  let seededRows = 0
+  try {
+    seededRows = await seedDatabase(engine, connection)
+  } catch (e) {
+    removeContainer(name)
+    return fail("一次性数据库容器灌入练习库数据失败，已自动销毁，可重试", e?.message || e)
+  }
   return out({
     ok: true,
     env: {
       id, kind: "db", engine, status: "ready",
       host: "127.0.0.1", port, container: name,
       createdAt: new Date().toISOString(),
+      seededRows,
       connection,
     },
   })

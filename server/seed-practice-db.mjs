@@ -5,6 +5,7 @@
 import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
+import os from "node:os"
 
 // 固定种子 LCG（确定性，不用 Math.random）
 function lcg(seed) {
@@ -157,4 +158,64 @@ if (process.argv[1] && process.argv[1].endsWith("seed-practice-db.mjs")) {
   const target = process.argv[2] || "/workspace/pocketbase-bin/lab-data/practice.db"
   seedPracticeDb(target)
   console.log("seeded:", target)
+}
+
+
+/**
+ * 把内置练习库导出成 MySQL / PostgreSQL 可执行的建表 + 插入语句。
+ *
+ * 模式 B（站点一次性 Docker 演练环境）里的数据库容器是空的，
+ * 而数据库实操营的题目都跑在这套练习库的表上——所以容器就绪后要先把
+ * 同一份确定性数据灌进去，题目脚本才能原样跑通、判分口径才对得上。
+ *
+ * @param {"mysql"|"postgres"} dialect
+ * @returns {{ ddl: string[], inserts: string[] }}
+ */
+export function exportPracticeSql(dialect) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mes-practice-"))
+  const dbPath = path.join(tmpDir, "practice.db")
+  try {
+    seedPracticeDb(dbPath)
+    const db = new DatabaseSync(dbPath)
+    const tables = db
+      .prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+      .all()
+    const ddl = []
+    const inserts = []
+    for (const t of tables) {
+      ddl.push(translateDdl(t.sql, dialect))
+      const cols = db.prepare(`PRAGMA table_info(${t.name})`).all().map((c) => c.name)
+      const rows = db.prepare(`SELECT * FROM ${t.name}`).all()
+      for (const row of rows) {
+        const values = cols.map((c) => sqlLiteral(row[c], dialect))
+        inserts.push(`INSERT INTO ${t.name} (${cols.join(", ")}) VALUES (${values.join(", ")});`)
+      }
+      db.exec("SELECT 1")
+    }
+    db.close()
+    return { ddl, inserts }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
+/** SQLite 的建表语句转成目标方言 */
+function translateDdl(sql, dialect) {
+  let s = String(sql).trim()
+  s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, dialect === "postgres" ? "SERIAL PRIMARY KEY" : "INT AUTO_INCREMENT PRIMARY KEY")
+  s = s.replace(/REAL/gi, dialect === "postgres" ? "DOUBLE PRECISION" : "REAL")
+  if (dialect === "postgres") return s
+  // MySQL: TEXT 列不能直接做主键，需要换成带长度的 VARCHAR
+  s = s.replace(/TEXT PRIMARY KEY/gi, "VARCHAR(191) PRIMARY KEY")
+  s = s.replace(/\bTEXT\b/gi, "VARCHAR(255)")
+  return s
+}
+
+/** 值转成 SQL 字面量（NULL / 数字 / 字符串） */
+function sqlLiteral(v, dialect) {
+  if (v === null || v === undefined) return "NULL"
+  if (typeof v === "number" && Number.isFinite(v)) return String(v)
+  if (typeof v === "bigint") return String(v)
+  const s = String(v).replace(/'/g, "''")
+  return `'${s}'`
 }
