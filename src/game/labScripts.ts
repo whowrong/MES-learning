@@ -74,6 +74,18 @@ export function buildLabScriptPrompt(opts: {
           "（SSH 口令/私钥不会、也不需要写进脚本）",
         ]
   const kindWord = connection.kind === "db" ? "数据库" : "服务器"
+  const kindRules =
+    connection.kind === "db"
+      ? [
+          "6. 数据库题的 command 必须是**纯 SQL 语句**（一条一步，可直接交给数据库执行）：",
+          "   不要写 mysql/psql 命令行，不要写 shell 管道，不要把 SQL 包在引号或 -e 参数里。",
+          "7. 查询类题目只做只读查询：除非文档明确要求，不要 INSERT/UPDATE/DELETE/DROP/TRUNCATE 题目涉及的表。",
+          "8. 需要多条 SQL 时按依赖顺序拆成多步，前一步的结果要在下一步里用得上。",
+        ]
+      : [
+          "6. 服务器题的 command 必须是**单条 shell 命令**（可直接在 SSH 上执行），不要写交互式脚本块或多行 heredoc。",
+          "7. 不要把口令、密钥、token 写进命令；需要凭据时用占位符并提示用户自行提供。",
+        ]
   return [
     "你是 MES 实操营的演练环境助手。请依据下面这份题目文档，为用户在**演练专用**环境上生成可执行的环境准备脚本与执行脚本。",
     "",
@@ -124,6 +136,7 @@ export function buildLabScriptPrompt(opts: {
     "3. 脚本里不得出现口令、密钥、token 等敏感信息；需要凭据时写成占位符并让用户自行提供。",
     "4. 删除、重建、清库、杀进程、改防火墙、重启服务等操作必须标 danger=true，并在 dangerNote 里写清后果。",
     "5. 顺序必须是：先只读检查（env_check），再准备（prep_steps），最后正式执行（exec_steps）。",
+    ...kindRules,
   ].join("\n")
 }
 
