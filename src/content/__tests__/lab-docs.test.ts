@@ -57,7 +57,7 @@ for (const mod of Object.values(opsFiles) as Array<Record<string, unknown>>) {
       kind: it.kind === "terminal" ? "ops-terminal" : it.kind === "choice" ? "ops-choice" : "ops-order",
       module: `运维实操营 · ${String(mod.domainName)}`,
       doc: it.doc as Question["doc"],
-      accept: steps.map((s) => String((s.accept ?? []).join(""))).filter(Boolean),
+      accept: steps.flatMap((s) => ((s.accept ?? []) as unknown[]).map((a) => String(a))).filter(Boolean),
       objective: typeof ticket.objective === "string" ? ticket.objective : undefined,
     })
   }

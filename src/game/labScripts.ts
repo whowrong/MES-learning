@@ -212,7 +212,8 @@ export function detectLabDanger(command: string): { danger: boolean; note: strin
       // 正则本身坏了就跳过，不影响其它规则
     }
   }
-  const destructive = /\b(rm\s+-rf|mkfs|dd\s+if=|:\(\)\{|shutdown|reboot|drop\s+(database|table)|truncate\s+table|delete\s+from)\b/i
+  const destructive =
+    /\b(rm\s+-rf|mkfs|dd\s+if=|:\(\)\{|shutdown|reboot|kill\s+-9|drop\s+(database|table)|truncate\s+table|delete\s+from|chmod\s+-R\s+777|iptables\b|firewall-cmd\b|systemctl\s+(stop|restart|disable))\b/i
   if (destructive.test(cmd)) {
     return {
       danger: true,

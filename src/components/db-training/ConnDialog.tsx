@@ -151,8 +151,7 @@ export function ConnDialog({
           <button
             type="button"
             onClick={onSave}
-            disabled={Boolean(form.host) && looksLikeProductionHost(form.host) && !prodAck}
-            disabled={busy}
+            disabled={busy || (Boolean(form.host) && looksLikeProductionHost(form.host) && !prodAck)}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-40 focus-visible:shadow-[var(--focus-ring)]"
           >
             <Save className="h-3.5 w-3.5" />
