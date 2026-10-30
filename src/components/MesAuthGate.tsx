@@ -37,13 +37,14 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
     <>
       {children}
       {/*
-        窄屏不能让登录入口压住顶栏：顶栏是 sticky top-0 h-16，右上角有「术语卡库 / 自由沙盘」两个按钮，
-        登录入口原来固定在 right-3 top-3（和顶栏同高），手机上直接盖住这两个按钮，点不到。
-        现在：窄屏（<sm）把入口挪到顶栏下方（top-16）并收成图标按钮，宽屏（>=sm）保持原来的位置与外观。
+        登录入口不能压住顶栏：顶栏是 sticky top-0 h-16，右上角有「术语卡库 / 自由沙盘」两个按钮。
+        原实现固定在 right-3 top-3（与顶栏同高），展开后直接盖住这两个按钮，点不到。
+        现在：所有宽度一律锚到顶栏正下方（top-16），窄屏（<sm）收成 40x40 图标按钮，
+        宽屏（>=sm）保留文字按钮外观；两种宽度下都不再覆盖顶栏的原有可交互元素。
       */}
       <details
         data-testid="mes-auth-entry"
-        className="fixed right-2 top-16 z-50 max-w-[calc(100vw-1.5rem)] rounded-lg border bg-card/95 p-2 text-sm shadow-lg backdrop-blur sm:right-3 sm:top-3"
+        className="fixed right-2 top-16 z-50 max-w-[calc(100vw-1.5rem)] rounded-lg border bg-card/95 p-2 text-sm shadow-lg backdrop-blur sm:right-3"
       >
         <summary
           data-testid="mes-auth-summary"

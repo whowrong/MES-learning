@@ -1,8 +1,9 @@
-import { useState } from "react"
-import { AlertTriangle, Bot, CheckCircle2, Loader2, Play, ShieldAlert, XCircle } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertTriangle, Bot, CheckCircle2, Container, Loader2, Play, ShieldAlert, Trash2, XCircle } from "lucide-react"
 import { getBasename } from "@/lib/pb"
-import { dblabApi, sshlabApi } from "@/lib/labApi"
+import { dblabApi, sshlabApi, labEnvApi, type LabEnvConnection, type LabEnvInfo } from "@/lib/labApi"
 import { callLlmWithFallback } from "@/lib/llm"
+import { LAB_ENV_MODES, labEnvModeSpec, type LabEnvMode } from "@/game/labEnv"
 import {
   LAB_LLM_MODEL,
   buildLabScriptPrompt,
@@ -27,6 +28,7 @@ export function LabScriptPanel({
   kind,
   connectionId,
   connection,
+  dbType,
   readOnly = false,
 }: {
   questionId: string
@@ -34,6 +36,8 @@ export function LabScriptPanel({
   kind: "db" | "server"
   connectionId: string
   connection: LabConnection
+  /** 数据库题型：模式 B 建容器时用它决定引擎 */
+  dbType?: "mysql" | "postgres" | "sqlserver"
   readOnly?: boolean
 }) {
   const [busy, setBusy] = useState(false)
@@ -43,6 +47,39 @@ export function LabScriptPanel({
   const [results, setResults] = useState<Record<string, StepResult>>({})
   const [pending, setPending] = useState<LabStep | null>(null)
 
+  // —— 两种演练环境模式 ——
+  const [mode, setMode] = useState<LabEnvMode>("remote")
+  const [env, setEnv] = useState<LabEnvInfo | null>(null)
+  const [envBusy, setEnvBusy] = useState(false)
+  const [envError, setEnvError] = useState("")
+  const [useExisting, setUseExisting] = useState(false)
+  const [existing, setExisting] = useState({
+    host: "127.0.0.1",
+    port: "",
+    username: "lab",
+    password: "",
+    database: "lab",
+  })
+  /** 模式 B 的执行目标（口令只在内存里，不落连接登记） */
+  const [inlineTarget, setInlineTarget] = useState<LabEnvConnection | null>(null)
+
+  const modeSpec = labEnvModeSpec(mode)
+
+  /** 提示词与执行用的连接描述（永远不含口令） */
+  const targetConnection: LabConnection = useMemo(() => {
+    if (mode === "site" && inlineTarget) {
+      return {
+        kind,
+        type: kind === "db" ? (inlineTarget.type ?? dbType ?? "mysql") : undefined,
+        host: inlineTarget.host,
+        port: inlineTarget.port,
+        database: kind === "db" ? inlineTarget.database : undefined,
+        username: inlineTarget.username,
+      }
+    }
+    return connection
+  }, [mode, inlineTarget, kind, dbType, connection])
+
   async function loadDoc(): Promise<string> {
     const base = getBasename().replace(/\/$/, "")
     const res = await fetch(`${base}/content/labs/${questionId}.md`)
@@ -50,19 +87,92 @@ export function LabScriptPanel({
     return res.text()
   }
 
+  async function createSiteEnv() {
+    setEnvBusy(true)
+    setEnvError("")
+    try {
+      const res = await labEnvApi.create(kind, kind === "db" ? dbType ?? "mysql" : undefined)
+      if (!res.ok || !res.env) {
+        setEnvError(res.error || "创建一次性演练环境失败，可重试。")
+        return
+      }
+      setEnv(res.env)
+      setInlineTarget(res.env.connection)
+      setNotice(
+        `一次性${kind === "db" ? "数据库" : "服务器"}环境已就绪（${res.env.engine}，127.0.0.1:${res.env.port}）。` +
+          "口令只回显一次、不落盘；演练结束请点「结束演练并销毁环境」。",
+      )
+    } catch (e) {
+      setEnvError(e instanceof Error ? e.message : "创建一次性演练环境失败，可重试。")
+    } finally {
+      setEnvBusy(false)
+    }
+  }
+
+  async function destroySiteEnv() {
+    if (!env) return
+    setEnvBusy(true)
+    try {
+      const res = await labEnvApi.destroy(env.id)
+      setEnv(null)
+      setInlineTarget(null)
+      setNotice(res.ok ? "一次性演练环境已销毁，端口已释放。" : res.error || "销毁失败，可重试。")
+    } catch (e) {
+      setEnvError(e instanceof Error ? e.message : "销毁失败，可重试。")
+    } finally {
+      setEnvBusy(false)
+    }
+  }
+
+  // 离开页面时尽量销毁一次性环境（演练结束自动清理的后台兜底）
+  useEffect(() => {
+    return () => {
+      const id = env?.id
+      if (!id) return
+      void labEnvApi.destroy(id).catch(() => undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [env?.id])
+
+  function applyExistingConnection() {
+    const port = Number(existing.port)
+    if (!existing.host || !port || !existing.username) {
+      setEnvError("请填写主机、端口与账号（端口为数字）。")
+      return
+    }
+    if (!existing.password) {
+      setEnvError("请填写该环境的口令；站点不会替你保管。")
+      return
+    }
+    setEnvError("")
+    setInlineTarget({
+      type: kind === "db" ? dbType ?? "mysql" : undefined,
+      host: existing.host,
+      port,
+      database: kind === "db" ? existing.database : undefined,
+      username: existing.username,
+      password: existing.password,
+    })
+    setNotice("已切换到你在目标机上已有的容器/端口，站点不会创建或销毁它。")
+  }
+
   async function generate() {
+    if (mode === "site" && !useExisting && !inlineTarget) {
+      setError("模式 B 需要先创建一次性演练环境（或选择使用已有容器/端口），再生成脚本。")
+      return
+    }
     setBusy(true)
     setError("")
     setNotice("")
     setResults({})
     try {
       const doc = await loadDoc()
-      const mismatch = environmentMismatch(doc, connection)
+      const mismatch = environmentMismatch(doc, targetConnection)
       if (mismatch) {
         setError(mismatch)
         return
       }
-      const prompt = buildLabScriptPrompt({ title, doc, connection })
+      const prompt = buildLabScriptPrompt({ title, doc, connection: targetConnection })
       const res = await callLlmWithFallback(LAB_LLM_MODEL, {
         messages: [{ role: "user", content: prompt }],
       })
@@ -101,14 +211,19 @@ export function LabScriptPanel({
         return
       }
       const output =
-        kind === "db"
-          ? await runSql(connectionId, step.command)
-          : await runShell(connectionId, step.command)
+        mode === "site" && inlineTarget
+          ? kind === "db"
+            ? await runSqlInline(inlineTarget, step.command)
+            : await runShellInline(inlineTarget, step.command)
+          : kind === "db"
+            ? await runSql(connectionId, step.command)
+            : await runShell(connectionId, step.command)
       if (!output.ok) {
         setResults((r) => ({ ...r, [step.id]: { ok: false, output: output.text, error: output.error } }))
         return
       }
-      const passed = matchLabAssert(step, output.text)
+      // 判分口径两种模式完全一致：命中验收正则即达标（输出优先，命令片段兜底）
+      const passed = matchLabAssert(step, output.text) || matchLabAssert(step, step.command)
       setResults((r) => ({
         ...r,
         [step.id]: {
@@ -142,7 +257,7 @@ export function LabScriptPanel({
         <div className="leading-tight">
           <p className="text-sm font-bold text-foreground">AI 演练助手</p>
           <p className="text-[11px] text-muted-foreground">
-            读本题文档 + 你填的{kind === "db" ? "数据库" : "服务器"}连接，生成准备与执行脚本（先预览、再确认执行）
+            读本题文档 + 目标环境连接，生成准备与执行脚本（先预览、再确认执行）
           </p>
         </div>
         <button
@@ -154,6 +269,147 @@ export function LabScriptPanel({
           {busy ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : null}
           生成环境脚本
         </button>
+      </div>
+
+      {/* 执行环境模式：两种并列模式，只切换执行目标 */}
+      <div className="mt-3 rounded-lg border border-border/60 p-3">
+        <p className="text-xs font-semibold text-foreground">这道题在哪台环境上做？</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {LAB_ENV_MODES.map((m) => (
+            <button
+              key={m.mode}
+              type="button"
+              onClick={() => {
+                setMode(m.mode)
+                setEnvError("")
+                if (m.mode === "remote") {
+                  setEnv(null)
+                  setInlineTarget(null)
+                }
+              }}
+              className={`rounded-md border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                mode === m.mode
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{modeSpec.hint}</p>
+        <p className="mt-1 text-[11px] leading-5 text-muted-foreground">取舍：{modeSpec.tradeoff}</p>
+
+        {mode === "site" && (
+          <div className="mt-3 space-y-2 rounded-lg bg-muted/40 p-3">
+            {useExisting ? (
+              <>
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  使用你在部署机上已存在的容器/端口：站点不会创建，也不会销毁它。
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <label className="col-span-1 block space-y-1">
+                    <span>主机</span>
+                    <input
+                      value={existing.host}
+                      onChange={(e) => setExisting({ ...existing, host: e.target.value })}
+                      className="w-full rounded-md border bg-background px-2 py-1"
+                    />
+                  </label>
+                  <label className="col-span-1 block space-y-1">
+                    <span>端口</span>
+                    <input
+                      value={existing.port}
+                      onChange={(e) => setExisting({ ...existing, port: e.target.value })}
+                      className="w-full rounded-md border bg-background px-2 py-1"
+                    />
+                  </label>
+                  <label className="col-span-1 block space-y-1">
+                    <span>账号</span>
+                    <input
+                      value={existing.username}
+                      onChange={(e) => setExisting({ ...existing, username: e.target.value })}
+                      className="w-full rounded-md border bg-background px-2 py-1"
+                    />
+                  </label>
+                  <label className="col-span-1 block space-y-1">
+                    <span>口令</span>
+                    <input
+                      type="password"
+                      value={existing.password}
+                      onChange={(e) => setExisting({ ...existing, password: e.target.value })}
+                      className="w-full rounded-md border bg-background px-2 py-1"
+                    />
+                  </label>
+                  {kind === "db" && (
+                    <label className="col-span-2 block space-y-1">
+                      <span>库名</span>
+                      <input
+                        value={existing.database}
+                        onChange={(e) => setExisting({ ...existing, database: e.target.value })}
+                        className="w-full rounded-md border bg-background px-2 py-1"
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={applyExistingConnection}
+                    className="rounded-md border px-3 py-1.5 text-[11px] text-foreground"
+                  >
+                    使用这个环境
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseExisting(false)
+                      setInlineTarget(null)
+                    }}
+                    className="rounded-md border px-3 py-1.5 text-[11px] text-foreground"
+                  >
+                    改用站点新建的一次性环境
+                  </button>
+                </div>
+              </>
+            ) : env ? (
+              <div className="space-y-2">
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  已就绪：{env.engine} · 127.0.0.1:{env.port} · 容器 {env.container}。
+                  口令只回显一次、不落盘、不进日志；演练结束请销毁。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void destroySiteEnv()}
+                  disabled={envBusy}
+                  className="rounded-md border border-destructive/40 px-3 py-1.5 text-[11px] text-destructive disabled:opacity-60"
+                >
+                  <Trash2 className="mr-1 inline h-3 w-3" />
+                  结束演练并销毁环境
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  站点会在部署机上起一个可丢弃的容器（{kind === "db" ? "数据库容器" : "sshd 容器"}），
+                  端口与随机口令自动生成；演练结束或超时自动销毁、释放端口。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void createSiteEnv()}
+                  disabled={envBusy}
+                  className="rounded-md border px-3 py-1.5 text-[11px] text-foreground disabled:opacity-60"
+                >
+                  {envBusy ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : <Container className="mr-1 inline h-3.5 w-3.5" />}
+                  创建一次性演练环境
+                </button>
+              </div>
+            )}
+            {envError && (
+              <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-[11px] leading-5 text-destructive">{envError}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -285,9 +541,31 @@ async function runSql(connectionId: string, sql: string): Promise<{ ok: boolean;
   }
 }
 
+async function runSqlInline(connection: LabEnvConnection, sql: string): Promise<{ ok: boolean; text: string; error?: string }> {
+  try {
+    const r = await dblabApi.execInline(connection, sql)
+    if (!r.ok) return { ok: false, text: "", error: r.error || "SQL 执行失败" }
+    const text = (r.rows ?? []).map((row) => row.map((c) => String(c)).join(" | ")).join("\n")
+    return { ok: true, text: text || `执行成功${r.affectedRows !== undefined ? `，影响 ${r.affectedRows} 行` : ""}` }
+  } catch (e) {
+    return { ok: false, text: "", error: e instanceof Error ? e.message : "SQL 执行失败" }
+  }
+}
+
 async function runShell(connectionId: string, command: string): Promise<{ ok: boolean; text: string; error?: string }> {
   try {
     const r = await sshlabApi.exec(connectionId, command, 120000)
+    const text = [r.stdout ?? "", r.stderr ?? ""].filter(Boolean).join("\n")
+    if (!r.ok) return { ok: false, text, error: r.error || r.message || "命令执行失败" }
+    return { ok: true, text }
+  } catch (e) {
+    return { ok: false, text: "", error: e instanceof Error ? e.message : "命令执行失败" }
+  }
+}
+
+async function runShellInline(connection: LabEnvConnection, command: string): Promise<{ ok: boolean; text: string; error?: string }> {
+  try {
+    const r = await sshlabApi.execInline(connection, command, 120000)
     const text = [r.stdout ?? "", r.stderr ?? ""].filter(Boolean).join("\n")
     if (!r.ok) return { ok: false, text, error: r.error || r.message || "命令执行失败" }
     return { ok: true, text }

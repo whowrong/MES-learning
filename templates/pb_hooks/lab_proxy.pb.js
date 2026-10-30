@@ -310,7 +310,8 @@ routerAdd("POST", "/api/dblab/exec", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("dblab.mjs", { action: "exec", connectionId: body.connectionId, sql: body.sql }))
+    // connection 走 inline 时是一次性演练环境（模式 B）：不落连接登记文件，口令只在本进程内存里
+    return e.json(200, runLab("dblab.mjs", { action: "exec", connectionId: body.connectionId, connection: body.connection, sql: body.sql }))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
@@ -714,3 +715,141 @@ routerAdd("POST", "/api/sshlab/webhook", function (e) {
     return e.json(200, { ok: false, error: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
+
+// ---------------------------------------------------------------------------
+// labenv：模式 B 一次性 Docker 演练环境（创建：数据库题起一次性数据库容器，服务器题起一次性 sshd 容器）
+// ---------------------------------------------------------------------------
+routerAdd("POST", "/api/labenv/create", function (e) {
+  function decodeUtf8Bytes(bytes) {
+    var out = ""
+    var i = 0
+    var len = bytes.length
+    while (i < len) {
+      var b = bytes[i++] & 0xff
+      if (b < 0x80) { out += String.fromCharCode(b); continue }
+      if (b >= 0xc0 && b < 0xe0 && i < len) {
+        out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f)); continue
+      }
+      if (b >= 0xe0 && b < 0xf0 && i + 1 < len) {
+        var b1 = bytes[i++] & 0x3f, b2 = bytes[i++] & 0x3f
+        out += String.fromCharCode(((b & 0x0f) << 12) | (b1 << 6) | b2); continue
+      }
+      if (b >= 0xf0 && i + 2 < len) {
+        var c1 = bytes[i++] & 0x3f, c2 = bytes[i++] & 0x3f, c3 = bytes[i++] & 0x3f
+        var cp = ((b & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3
+        cp -= 0x10000
+        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)); continue
+      }
+      out += "\ufffd"
+    }
+    return out
+  }
+  function runLab(script, payload) {
+    var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
+    var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
+    var text = decodeUtf8Bytes(out)
+    return JSON.parse(text)
+  }
+  var body = e.requestInfo().body || {}
+  return e.json(200, runLab("labenv.mjs", { action: "create", kind: body.kind, dbType: body.dbType }))
+})
+
+// ---------------------------------------------------------------------------
+// labenv：模式 B 一次性 Docker 演练环境（销毁：删除容器、释放端口）
+// ---------------------------------------------------------------------------
+routerAdd("POST", "/api/labenv/destroy", function (e) {
+  function decodeUtf8Bytes(bytes) {
+    var out = ""
+    var i = 0
+    var len = bytes.length
+    while (i < len) {
+      var b = bytes[i++] & 0xff
+      if (b < 0x80) { out += String.fromCharCode(b); continue }
+      if (b >= 0xc0 && b < 0xe0 && i < len) {
+        out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f)); continue
+      }
+      if (b >= 0xe0 && b < 0xf0 && i + 1 < len) {
+        var b1 = bytes[i++] & 0x3f, b2 = bytes[i++] & 0x3f
+        out += String.fromCharCode(((b & 0x0f) << 12) | (b1 << 6) | b2); continue
+      }
+      if (b >= 0xf0 && i + 2 < len) {
+        var c1 = bytes[i++] & 0x3f, c2 = bytes[i++] & 0x3f, c3 = bytes[i++] & 0x3f
+        var cp = ((b & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3
+        cp -= 0x10000
+        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)); continue
+      }
+      out += "\ufffd"
+    }
+    return out
+  }
+  function runLab(script, payload) {
+    var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
+    var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
+    var text = decodeUtf8Bytes(out)
+    return JSON.parse(text)
+  }
+  var body = e.requestInfo().body || {}
+  return e.json(200, runLab("labenv.mjs", { action: "destroy", id: body.id }))
+})
+
+// ---------------------------------------------------------------------------
+// labenv：模式 B 一次性 Docker 演练环境（状态：列出当前一次性环境并扫掉超时的）
+// ---------------------------------------------------------------------------
+routerAdd("POST", "/api/labenv/status", function (e) {
+  function decodeUtf8Bytes(bytes) {
+    var out = ""
+    var i = 0
+    var len = bytes.length
+    while (i < len) {
+      var b = bytes[i++] & 0xff
+      if (b < 0x80) { out += String.fromCharCode(b); continue }
+      if (b >= 0xc0 && b < 0xe0 && i < len) {
+        out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f)); continue
+      }
+      if (b >= 0xe0 && b < 0xf0 && i + 1 < len) {
+        var b1 = bytes[i++] & 0x3f, b2 = bytes[i++] & 0x3f
+        out += String.fromCharCode(((b & 0x0f) << 12) | (b1 << 6) | b2); continue
+      }
+      if (b >= 0xf0 && i + 2 < len) {
+        var c1 = bytes[i++] & 0x3f, c2 = bytes[i++] & 0x3f, c3 = bytes[i++] & 0x3f
+        var cp = ((b & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3
+        cp -= 0x10000
+        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)); continue
+      }
+      out += "\ufffd"
+    }
+    return out
+  }
+  function runLab(script, payload) {
+    var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
+    var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
+    var command = $os.cmd(nodeBin, serverDir + "/" + script, JSON.stringify(payload))
+    var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
+    var childHome = $os.getenv("HOME") || ""
+    var childTmp = $os.getenv("TMPDIR") || ""
+    if (childHome) childEnv.push("HOME=" + childHome)
+    if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    command.env = childEnv
+    var out = command.output()
+    var text = decodeUtf8Bytes(out)
+    return JSON.parse(text)
+  }
+  var body = e.requestInfo().body || {}
+  return e.json(200, runLab("labenv.mjs", { action: "status" }))
+})

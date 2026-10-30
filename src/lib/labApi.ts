@@ -62,6 +62,9 @@ export const dblabApi = {
   test: (connectionId?: string, connection?: NewDbConnection) =>
     post<SqlExecResult>("/api/dblab/test", { connectionId, connection }),
   exec: (connectionId: string, sql: string) => post<SqlExecResult>("/api/dblab/exec", { connectionId, sql }),
+  /** 模式 B：一次性环境的连接不落连接登记文件，口令只在这次请求里经过 */
+  execInline: (connection: LabEnvConnection, sql: string) =>
+    post<SqlExecResult>("/api/dblab/exec", { connection, sql }),
   resetBuiltin: () => post<SqlExecResult>("/api/dblab/reset-builtin", {}),
 }
 
@@ -108,11 +111,57 @@ export const sshlabApi = {
     post<SshExecResult>("/api/sshlab/test", { connectionId, connection }),
   exec: (connectionId: string, command: string, timeoutMs?: number) =>
     post<SshExecResult>("/api/sshlab/exec", { connectionId, command, timeoutMs }),
+  /** 模式 B：一次性 sshd 环境的连接不落连接登记文件 */
+  execInline: (connection: LabEnvConnection, command: string, timeoutMs?: number) =>
+    post<SshExecResult>("/api/sshlab/exec", { connection, command, timeoutMs }),
   upload: (connectionId: string, remotePath: string, content: string) =>
     post<SshExecResult>("/api/sshlab/upload", { connectionId, remotePath, content }),
   /** 把部署任务包 POST 到用户自己的 AI agent 接收端（服务端转发避免跨域） */
   webhook: (url: string, payload: unknown) =>
     post<{ ok: boolean; statusCode?: number; response?: string; error?: string }>("/api/sshlab/webhook", { url, payload }),
+}
+
+// ---------- 模式 B：站点自带的一次性 Docker 演练环境 ----------
+
+/** 一次性环境的连接描述（口令只存在于浏览器内存与本次请求里） */
+export interface LabEnvConnection {
+  type?: "mysql" | "postgres" | "sqlserver"
+  host: string
+  port: number
+  database?: string
+  username: string
+  password?: string
+}
+
+export interface LabEnvInfo {
+  id: string
+  kind: "db" | "server"
+  engine: string
+  status: string
+  host: string
+  port: number
+  container: string
+  createdAt: string
+  connection: LabEnvConnection
+}
+
+export interface LabEnvStatusEntry {
+  id: string
+  container: string
+  state: string
+  status: string
+  detail: string
+  createdAt: string
+  expired: boolean
+}
+
+export const labEnvApi = {
+  create: (kind: "db" | "server", dbType?: "mysql" | "postgres" | "sqlserver") =>
+    post<{ ok: boolean; env?: LabEnvInfo; error?: string; native?: string }>("/api/labenv/create", { kind, dbType }),
+  destroy: (id: string) =>
+    post<{ ok: boolean; status?: string; existed?: boolean; error?: string }>("/api/labenv/destroy", { id }),
+  status: () =>
+    post<{ ok: boolean; envs?: LabEnvStatusEntry[]; swept?: string[]; error?: string }>("/api/labenv/status", {}),
 }
 
 // ---------- 部署文档库（MCP collection deploy_docs 的自定义 REST 路由） ----------
