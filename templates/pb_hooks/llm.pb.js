@@ -46,6 +46,17 @@ var LLM_APP_CODE = "vibex"
 //   MES_LLM_SUPPORTS_TEMPERATURE  是否透传 temperature（默认 false，很多模型不接受该参数）
 // 这几个变量没配时，行为与平台部署保持一致（用渲染/注入进来的清单与 RunningHub 上游）。
 
+// 本文件自带的登录校验（与 aigc.pb.js / lab_proxy.pb.js 同一套写法）：
+// 不依赖其它 hook 文件的加载顺序 —— PocketBase 加载多个 hook 文件的顺序不保证，
+// 早先本文件靠引用别处的 requireMesUser，顺序一变整个文件的路由就整体不注册。
+function requireMesUser(e) {
+  if (!e.auth) throw new UnauthorizedError("Authentication required")
+  if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") {
+    throw new ForbiddenError("MES app account required")
+  }
+  return e.next()
+}
+
 routerAdd("GET", "/api/llm/models", function (e) {
   try {
     // 每个 routerAdd 处理器是独立作用域, 看不到顶层函数(同本文件 readKey 的写法)
