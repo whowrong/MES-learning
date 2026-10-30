@@ -401,6 +401,251 @@
         "无需改动演练环境；如需配合实操，可用同域的终端实操题环境做验证。",
         "把题面给出的业务背景与现象读一遍，先自己判断再对照解析。"
       ]
+    },
+    "lx-d4": {
+      "services": [
+        "logrotate（轮转调度）",
+        "mes-collector（日志写入方，持续持有日志句柄）",
+        "/etc/logrotate.d（轮转配置目录）"
+      ],
+      "permissions": "需要 sudo：可读写 /etc/logrotate.d/mes-collector、可执行 logrotate、可查 mes-collector 服务状态",
+      "env_extra": [
+        "预置 mes-collector.service（运行中，持续写 /var/log/mes-collector.log）",
+        "预置 /etc/logrotate.d/mes-collector，其中同一个日志路径声明了两次（duplicate 根因）",
+        "轮转脚本用 copytruncate 语义（采集服务不重新打开句柄）",
+        "磁盘剩余空间 ≥ 2 GB，避免与磁盘类题目混淆"
+      ],
+      "prep": [
+        "记录基线：ls -lh /var/log/mes-collector.log* 与 df -h",
+        "造故障：在配置里写入第二个同名配置块，并把 create 权限项去掉",
+        "确认现象：logrotate -d 报 duplicate log entry，日志不切分",
+        "记录回滚点：配置文件的 .bak 副本路径"
+      ],
+      "exec": [
+        "logrotate -d 读出 duplicate log entry 原文",
+        "cp 备份配置后合并重复块，补齐 create 0640 mes mes 与 copytruncate",
+        "logrotate -d 通过后再 logrotate -f 强制轮转一次",
+        "ls 确认生成 .1 且 systemctl is-active mes-collector 仍为 active"
+      ],
+      "mistakes": [
+        "用 rm 删除大日志释放空间：进程仍持有句柄，空间不释放，必须 truncate -s 0",
+        "直接 logrotate -f 不先 -d 校验：配置有错时可能半途失败"
+      ]
+    },
+    "lx-d5": {
+      "services": [
+        "mes-archiver（报工归档服务）",
+        "/data/archive（按天分目录的小文件归档区）",
+        "文件系统 inode 表"
+      ],
+      "permissions": "需要 sudo：可读写 /data/archive、可执行 find/rm、可查 mes-archiver 服务状态",
+      "env_extra": [
+        "预置 /data/archive/2026-10-xx 若干目录，每个目录放数千个小文件（模拟快照），把 inode 用量顶到 95% 以上",
+        "磁盘字节用量保持在 40% 左右（关键：空间没满，inode 满了）",
+        "归档目录按天分层，清理策略为保留 14 天"
+      ],
+      "prep": [
+        "记录基线：df -h /data 与 df -i /data 两组数据（对比着看差异）",
+        "造故障：批量 touch 大量小文件直到 IUse% ≥ 95%",
+        "确认现象：写入报 No space left on device，但 df -h 显示还有大量可用空间",
+        "记录回滚点：待清理目录清单与保留策略（14 天）"
+      ],
+      "exec": [
+        "df -h 与 df -i 对比，确认是 inode 耗尽而不是空间耗尽",
+        "du --inodes -x -d2 /data 定位吃 inode 的目录",
+        "find /data/archive -type d -mtime +14 -exec rm -rf {} + 精确清理过期归档",
+        "df -i 复测 + touch 测试文件验证写入恢复"
+      ],
+      "mistakes": [
+        "只跑 df -h 就下结论：必须 df -i 才能看出 inode 耗尽",
+        "rm -rf /data/archive/* 整目录清空：会把当天数据一起删掉，必须带 -mtime 限定"
+      ]
+    },
+    "lx-d6": {
+      "services": [
+        "nginx（TLS 终止）",
+        "公司 CA（签发证书）",
+        "续期脚本 /opt/mes/renew-cert.sh 与其 cron"
+      ],
+      "permissions": "需要 sudo：可读写 /etc/nginx/certs、可 reload nginx、可查 crontab 与 cron 日志",
+      "env_extra": [
+        "预置 nginx 站点 https://mes.factory.internal，证书已过期（notAfter 早于当前日期）",
+        "预置续期脚本与 cron，但脚本因 CA 配置路径失效而失败",
+        "预置 CA 私钥/证书与待签发 CSR，供演练重新签发",
+        "客户端测试用 curl（不带 -k）验证证书链可信"
+      ],
+      "prep": [
+        "记录基线：curl -k 确认应用层 200、openssl 读证书有效期、nginx 配置中的证书路径",
+        "造故障：把服务端证书有效期设为过去日期，并让续期任务失败一次（写进日志）",
+        "记录回滚点：旧证书 .bak 副本、nginx 配置 .bak 副本"
+      ],
+      "exec": [
+        "curl -k 验证应用层正常，先把范围收敛到 TLS 层",
+        "openssl s_client | openssl x509 -noout -dates 确认证书过期",
+        "grep ssl_certificate 定位证书文件，查 crontab 与续期日志找失败原因",
+        "cp 备份旧证书 → 重新签发 → nginx -t → systemctl reload nginx",
+        "复测：有效期在未来 + 不带 -k 的 curl 返回 200"
+      ],
+      "mistakes": [
+        "不备份就覆盖证书：出问题无法回退",
+        "只 reload 不 nginx -t：语法错误会把整站反代打挂"
+      ]
+    },
+    "lx-d7": {
+      "services": [
+        "cron（调度器）",
+        "/opt/mes/scripts/archive-report.sh（归档脚本）",
+        "/data/backup/mes-report（归档产物目录）"
+      ],
+      "permissions": "需要 sudo 或该用户自身的 crontab 权限：可 crontab -l/-e、可改脚本权限、可查 cron 日志",
+      "env_extra": [
+        "预置 cron 服务（active）与一条 02:00 的归档任务",
+        "脚本文件为 DOS 换行符（^M）且没有可执行权限——两道经典坑同时存在",
+        "预置 /data/backup/mes-report 目录（产物应落在这里）"
+      ],
+      "prep": [
+        "记录基线：crontab -l、systemctl is-active cron、/data/backup/mes-report 现有产物",
+        "造故障：脚本写成 CRLF 换行 + chmod 644，确认 02:00 后目录没有新文件",
+        "记录回滚点：脚本 .bak 副本与 crontab 原文"
+      ],
+      "exec": [
+        "crontab -l 确认任务在，systemctl is-active cron 确认调度器活着",
+        "journalctl -u cron / /var/log/cron 确认任务是否被触发",
+        "ls -l + file + cat -A 看出 ^M 与缺少执行权限",
+        "sed 去掉 ^M、chmod +x，手动执行一次补跑并 tail 日志",
+        "ls 确认产物生成 + crontab -l 确认调度仍在"
+      ],
+      "mistakes": [
+        "crontab -r 清空全部任务：只能 crontab -e 精确改单条",
+        "手动跑通就认为 cron 问题解决了：补跑验证的是脚本，不是调度链路"
+      ]
+    },
+    "lx-d8": {
+      "services": [
+        "mes-report.service（报表服务，运行用户 report）",
+        "/data/mes/report（数据目录，属主错配）",
+        "systemd（服务托管）"
+      ],
+      "permissions": "需要 sudo：可改 /data/mes/report 属主、可管理 mes-report.service",
+      "env_extra": [
+        "预置 mes-report.service（Unit 文件里 User=report）",
+        "预置 /data/mes/report 目录属主为 root 且其它用户无写权限（故障根因）",
+        "预置服务健康检查端口（如 8092）与日志目录",
+        "另有一个正常服务用于确认改动没有波及其它服务"
+      ],
+      "prep": [
+        "记录基线：systemctl status、journalctl -u 日志原文、ls -ld 目录、id report",
+        "造故障：把数据目录属主改成 root 并收紧权限，停止服务",
+        "记录回滚点：单元文件 .bak 与目录权限原文（ls -ld 输出留档）"
+      ],
+      "exec": [
+        "journalctl -u mes-report 拿到被拒路径原文",
+        "ls -ld + id 确认属主与运行用户矛盾",
+        "备份单元文件后 chown -R report:report 到数据目录",
+        "systemctl daemon-reload + restart + is-active",
+        "curl 健康检查确认接口 200"
+      ],
+      "mistakes": [
+        "chmod -R 777 一把梭：把目录对所有人开放，属于安全事故源，站内危险清单会拦截",
+        "只改目录不改属主就重启：进程仍拿不到权限，必须 chown 到服务用户"
+      ]
+    },
+    "lx-d9": {
+      "services": [
+        "backup-db.sh（备份脚本）",
+        "MySQL（业务库 mes_prod）",
+        "/data/backup/db（备份产物目录）"
+      ],
+      "permissions": "需要 sudo 或备份账号：可读脚本与日志、可写 /data/backup/db、可执行 mysqldump",
+      "env_extra": [
+        "预置备份脚本使用 > 直接重定向到目标文件（失败即产生 0 字节文件）",
+        "预置 /data/backup/db 中若干正常历史备份与一份 0 字节的最新备份",
+        "磁盘 /data 使用率顶到 100%（备份目录占大头）",
+        "演练 MySQL 账号可用（本机 127.0.0.1:3306 或独立演练实例）"
+      ],
+      "prep": [
+        "记录基线：ls -lh 备份目录、df -h /data、tail 备份日志、du --max-depth=1 /data",
+        "造故障：把磁盘占满并手动跑一次脚本产生 0 字节文件",
+        "记录回滚点：脚本 .bak 副本、待清理的过期备份清单"
+      ],
+      "exec": [
+        "ls -lh + find -size 0 定位空备份",
+        "cat 脚本 + tail 日志确认根因（磁盘满 + > 覆盖）",
+        "df -h + du 定位占用目录",
+        "find -mtime +14 精确清理过期备份释放空间",
+        "改脚本为「临时文件 + 非空校验 + 原子改名」并补跑",
+        "ls 非空 + head 校验内容像 dump"
+      ],
+      "mistakes": [
+        "rm -rf 整个备份目录释放空间：会毁掉历史可用备份",
+        "只看脚本退出码就判定备份成功：必须校验文件非空且内容像 dump"
+      ]
+    },
+    "lx-d10": {
+      "services": [
+        "mes-report-api（报工接口，HikariCP 连接池上限 20）",
+        "MySQL 8.0（业务库）",
+        "ERP 重报表长查询（占用连接的源头）"
+      ],
+      "permissions": "需要 sudo 管理应用服务；数据库演练账号需 PROCESS 与 KILL 会话权限（不要给超级管理员）",
+      "env_extra": [
+        "预置一条长时间运行的重报表查询（持有未提交事务）",
+        "连接池上限预置为 20，模拟被打满",
+        "预置报工接口端口（如 8093）与健康检查",
+        "数据库连接数上限设为 100 以上，便于观察连接回落"
+      ],
+      "prep": [
+        "记录基线：journalctl -u 应用日志、SHOW FULL PROCESSLIST、Threads_connected",
+        "造故障：开启长事务并让应用并发请求把连接池打满",
+        "记录回滚点：被杀会话的 id 与 SQL 文本、配置文件 .bak 副本"
+      ],
+      "exec": [
+        "journalctl -u 确认连接池耗尽错误",
+        "SHOW FULL PROCESSLIST 与 innodb_trx 定位长事务与其 thread id",
+        "KILL 该会话精准止血（不重启 mysqld）",
+        "备份并调大 maximum-pool-size，重启应用",
+        "验证：Threads_connected 回落 + 报工接口 200 + 日志无连接池错误"
+      ],
+      "mistakes": [
+        "用 systemctl restart mysqld 解阻塞：会把 MES 业务一起打断，站内危险清单会拦截",
+        "kill 错会话：先确认阻塞链再动手"
+      ]
+    },
+    "lx-d11": {
+      "services": [
+        "MySQL 8.0 演练实例（容器 mes-mysql，端口 3307）",
+        "mes-board（离线部署的小型 Web 服务，systemd 托管）",
+        "nginx（反向代理，监听 8099）",
+        "health-check.sh 与 backup-db.sh（监控与备份脚本 + cron）"
+      ],
+      "permissions": "需要 sudo：可管理 systemd 服务、可写 /etc/nginx 与 /opt/mes、可操作 docker、可排 crontab",
+      "env_extra": [
+        "演练机需具备 Docker（用于一次性数据库实例）与 systemd；推荐 4 vCPU / 4–8 GB 内存 / 40 GB 磁盘",
+        "预置离线部署包 /opt/mes/dist/mes-board-1.0.0.tar.gz 与上一版本目录（供回滚演练）",
+        "预置 nginx、docker、python3、mysqldump 客户端",
+        "演练数据库与宿主既有服务端口隔离（容器映射到 3307）",
+        "监控与备份脚本通过 cron 调度，产物目录 /data/backup/db"
+      ],
+      "prep": [
+        "阶段一：nproc / free -h / df -h / ss -lntp 记录规格与端口占用",
+        "阶段二：docker run 独立 MySQL 实例（3307）+ 建 work_report 表 + 插入基线数据",
+        "阶段三：解包到 /opt/mes/app + 建 mesapp 专用用户 + systemd 托管",
+        "阶段四：写 nginx 站点（8099，/health 健康检查）+ nginx -t + reload",
+        "阶段五：写 health-check.sh 与 backup-db.sh（临时文件 + 非空校验 + 原子改名）+ 排 cron",
+        "阶段六：按注入的故障类型准备证据（磁盘满 / 证书过期 / 连接池耗尽 / 权限不足 / 备份为空）",
+        "记录回滚点：所有被改配置先 cp 一份 .bak-20261030"
+      ],
+      "exec": [
+        "阶段六：先用现象取证（df/du、journalctl、openssl、show processlist），再动手修",
+        "阶段七：先备份再修复（truncate -s 0 / find -mtime -delete / chown / 改配置并备份），修完立刻 is-active 验证",
+        "阶段八：四层端到端验收：/health 200 + 业务接口 200 + 数据条数核对 + 三个服务 active",
+        "阶段九：真实回滚演练（stop → 回退 .bak/上一版本 → start → curl 验证 200）",
+        "阶段十：输出十项验收清单文件 /opt/mes/delivery/acceptance.md"
+      ],
+      "mistakes": [
+        "跳过阶段一直接部署：规格与端口冲突会变成后面的「故障」",
+        "没有演练过回滚就宣称有回滚方案：回滚必须真实跑过一次并验证"
+      ]
     }
   }
 }

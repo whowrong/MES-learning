@@ -746,6 +746,916 @@
         "path": "/content/labs/lx-o2.md",
         "title": "生产 MES 服务重启规范流程 · 题目文档"
       }
+    },
+    {
+      "id": "lx-d4",
+      "kind": "terminal",
+      "title": "日志轮转没生效：logrotate 配置重复把服务写崩",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "ticket": {
+        "background": "MES 采集服务 mes-collector 的日志交给 logrotate 管理，配置放在 /etc/logrotate.d/mes-collector，要求每天切分、保留 7 份、压缩并给 mes 用户读权限。",
+        "symptom": "运维同学发现 mes-collector.log 已经涨到 20G 都没切分，手动跑 logrotate -f 直接报错 \"duplicate log entry\"，磁盘告警同时盯着这块盘。",
+        "objective": "找出轮转没生效的根因（配置重复 + 权限/指令写错），修正配置让日志按天切分，且不重启采集服务、不丢日志。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "查看轮转配置与配置目录，确认重复条目",
+          "accept": [
+            "^cat\\b.*/etc/logrotate\\.d/mes-collector",
+            "^ls\\b.*/etc/logrotate\\.d",
+            "^grep\\b.*mes-collector"
+          ],
+          "output": "$ cat /etc/logrotate.d/mes-collector\n/var/log/mes-collector.log {\n    daily\n    rotate 7\n    compress\n    missingok\n    notifempty\n    create 0640 mes mes\n}\n/var/log/mes-collector.log {\n    daily\n    rotate 30\n    copytruncate\n}\n$ ls /etc/logrotate.d",
+          "hint": "轮转配置在 /etc/logrotate.d 下，cat 出来看；同名路径出现两次就是 duplicate 的来源。",
+          "explain": "同一个日志路径被两个配置块声明，logrotate 会直接判定为重复并拒绝执行整个文件——这就是「一个都没切」的根因。"
+        },
+        {
+          "id": "s2",
+          "objective": "用 logrotate 调试模式确认为什么不执行",
+          "accept": [
+            "^logrotate\\b.*(-d|--debug)",
+            "^logrotate\\b.*(-f|--force)"
+          ],
+          "output": "$ logrotate -d /etc/logrotate.d/mes-collector\nerror: duplicate log entry for /var/log/mes-collector.log\nerror: error processing /etc/logrotate.d/mes-collector",
+          "hint": "logrotate -d 是 dry-run，只检查不执行，用来把报错原文看全。",
+          "explain": "-d 不会改任何文件，是排查配置类问题的第一选择；看到 duplicate log entry 就说明配置块冲突。"
+        },
+        {
+          "id": "s3",
+          "objective": "备份配置文件",
+          "accept": [
+            "^cp\\b.*logrotate",
+            "^tar\\b.*logrotate"
+          ],
+          "output": "$ cp /etc/logrotate.d/mes-collector /etc/logrotate.d/mes-collector.bak-20261030",
+          "hint": "改配置前先 cp 一份 .bak，出问题能立刻回退。",
+          "explain": "改系统配置永远先备份，这是上生产的基本动作，也是回滚能力的来源。"
+        },
+        {
+          "id": "s4",
+          "objective": "修正配置：合并重复块并补齐关键指令",
+          "accept": [
+            "^sed\\b.*logrotate\\.d",
+            "^vi\\b.*logrotate\\.d",
+            "^cat\\b.*>.*logrotate\\.d",
+            "^python3?\\b.*logrotate"
+          ],
+          "output": "$ sed -i '0,/^}$/{/^}$/d}' /etc/logrotate.d/mes-collector\n$ cat /etc/logrotate.d/mes-collector\n/var/log/mes-collector.log {\n    daily\n    rotate 7\n    compress\n    missingok\n    notifempty\n    copytruncate\n    create 0640 mes mes\n}",
+          "hint": "删掉重复的那个配置块，只保留一个；因为采集服务自己持有日志句柄，轮转方式要用 copytruncate。",
+          "explain": "两块合并成一块；用 copytruncate 而不是 rename + postrotate，是因为采集服务不会重新打开日志句柄，rename 之后新日志写不进新文件。"
+        },
+        {
+          "id": "s5",
+          "objective": "语法校验并强制轮转一次",
+          "accept": [
+            "^logrotate\\b.*(-d|--debug)",
+            "^logrotate\\b.*(-f|--force)"
+          ],
+          "output": "$ logrotate -d /etc/logrotate.d/mes-collector\n$ logrotate -f /etc/logrotate.d/mes-collector\n$ ls -lh /var/log/mes-collector.log*",
+          "hint": "先 -d 确认不报错，再 -f 强制执行一次。",
+          "explain": "-d 通过再 -f，避免用一次强制执行去试错；执行后应该能看到新的 .1 文件。"
+        },
+        {
+          "id": "s6",
+          "objective": "确认切分结果且采集服务未受影响",
+          "accept": [
+            "^ls\\b.*mes-collector",
+            "^systemctl\\s+(status|is-active)",
+            "^journalctl\\b.*mes-collector"
+          ],
+          "output": "$ ls -lh /var/log/mes-collector.log*\n-rw-r----- 1 mes mes 0 Oct 30 09:14 mes-collector.log\n-rw-r----- 1 mes mes 20G Oct 30 09:14 mes-collector.log.1\n$ systemctl is-active mes-collector\nactive",
+          "hint": "ls 看有没有生成 .1 文件，systemctl 确认服务还在跑。",
+          "explain": "轮转不能以停服务为代价：copytruncate 的价值就是原地截断，服务无感。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^rm\\b.*mes-collector\\.log",
+          "output": "⚠️ 危险操作被拦截：直接删除正在写入的日志不会释放磁盘空间（进程仍持有句柄），且会丢掉现场证据。演练正确做法是 truncate -s 0 或修好 logrotate 配置。"
+        }
+      ],
+      "sop": [
+        "cat /etc/logrotate.d/mes-collector 与 ls /etc/logrotate.d，确认配置块与重复条目",
+        "logrotate -d /etc/logrotate.d/mes-collector 读出 duplicate log entry 的确切报错",
+        "cp 配置为 .bak-20261030 作为回滚点",
+        "合并重复块、保留 copytruncate 与 create 权限项",
+        "logrotate -d 校验通过后 logrotate -f 强制轮转一次",
+        "ls 确认生成 .1 且 systemctl is-active mes-collector 仍为 active"
+      ],
+      "doc": {
+        "id": "lx-d4",
+        "path": "/content/labs/lx-d4.md",
+        "title": "日志轮转没生效：logrotate 配置重复把服务写崩 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d5",
+      "kind": "terminal",
+      "title": "磁盘还有 40G 却写不进去：inode 被小文件吃光",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "ticket": {
+        "background": "MES 归档服务把每条报工快照落成一个小文件到 /data/archive，按天分目录。数据盘 /data 是 200G 的数据盘，平时用量很轻。",
+        "symptom": "今天报工写入开始报 \"No space left on device\"，但 df -h 显示 /data 还有 40G 空闲，运维一脸困惑。",
+        "objective": "识别这是 inode 耗尽而不是空间耗尽，定位吃 inode 的目录，安全清理小文件并验证写入恢复。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "先看 df -h：空间确实没满",
+          "accept": [
+            "^df\\s+-h",
+            "^df\\b"
+          ],
+          "output": "$ df -h\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/vda1        50G   15G   35G  30% /\n/dev/vdb1       200G   62G  138G  31% /data",
+          "hint": "df -h 看各分区空间用量。",
+          "explain": "第一步永远是看全局：空间没满却报 No space left，说明问题不在字节数上。"
+        },
+        {
+          "id": "s2",
+          "objective": "改看 inode 使用率",
+          "accept": [
+            "^df\\s+-i",
+            "^df\\b.*-i"
+          ],
+          "output": "$ df -i\nFilesystem      Inodes  IUsed IFree IUse% Mounted on\n/dev/vdb1     1310720 1310200    520  100% /data",
+          "hint": "df -i 看 inode 使用率，这是 inode 耗尽的确认命令。",
+          "explain": "df -i 一眼看穿：IUse% 100%，而字节数还有 138G 可用——典型的 inode 耗尽。"
+        },
+        {
+          "id": "s3",
+          "objective": "定位吃 inode 的目录（按 inode 数排序）",
+          "accept": [
+            "^du\\b.*--inodes",
+            "^find\\b.*-type\\s+f",
+            "^du\\b.*-x"
+          ],
+          "output": "$ du --inodes -x -d2 /data 2>/dev/null | sort -n | tail -5\n412000 /data/archive/2026-10-29\n380000 /data/archive/2026-10-28\n$ find /data/archive -type f | wc -l\n1310200",
+          "hint": "用 du --inodes 按 inode 数排序，或 find 数文件个数。",
+          "explain": "inode 是「小文件杀手」：每个文件至少占一个 inode，几百万个小文件能把 inode 表吃光而字节数几乎不动。"
+        },
+        {
+          "id": "s4",
+          "objective": "清理过期归档（只删归档目录、只删过期日期）",
+          "accept": [
+            "^find\\b.*-mtime",
+            "^rm\\b.*archive",
+            "^find\\b.*-delete"
+          ],
+          "output": "$ find /data/archive -type d -mtime +14 -print | head\n/data/archive/2026-10-15\n$ find /data/archive -type d -mtime +14 -exec rm -rf {} +\n$ df -i /data",
+          "hint": "只清理 14 天以前的归档目录，用 find -mtime +14 精确圈定，不要 rm -rf /data/archive/*。",
+          "explain": "清理必须带时间与路径双重限定：find -mtime +14 只动过期目录，路径写死，避免误删当天数据。"
+        },
+        {
+          "id": "s5",
+          "objective": "验证 inode 已释放",
+          "accept": [
+            "^df\\s+-i",
+            "^df\\b.*-i"
+          ],
+          "output": "$ df -i /data\nFilesystem      Inodes  IUsed IFree IUse% Mounted on\n/dev/vdb1     1310720  920400  390320   70% /data",
+          "hint": "再跑一次 df -i 确认 IUse% 降下来。",
+          "explain": "清理后必须复测，否则无法证明问题真的解决了。"
+        },
+        {
+          "id": "s6",
+          "objective": "验证归档写入恢复",
+          "accept": [
+            "^touch\\b",
+            "^echo\\b.*>.*archive",
+            "^systemctl\\s+(status|is-active)"
+          ],
+          "output": "$ touch /data/archive/.write-test && echo ok > /data/archive/.write-test && rm /data/archive/.write-test\nok\n$ systemctl is-active mes-archiver\nactive",
+          "hint": "写一个测试文件再删掉，确认能写。",
+          "explain": "写入恢复才是最终验收：df 好看不等于系统能写。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^rm\\s+-rf\\s+/data(\\s|$)",
+          "output": "⚠️ 危险操作被拦截：整目录删除会连当天数据一起抹掉。演练正确做法是 find -mtime +14 精确圈定过期归档再删。"
+        }
+      ],
+      "sop": [
+        "df -h 确认空间没满",
+        "df -i 确认 inode 用满",
+        "du --inodes -x -d2 /data 按 inode 数定位目录",
+        "find /data/archive -type d -mtime +14 -exec rm -rf {} + 精确清理",
+        "df -i 复测 inode 使用率",
+        "touch 测试文件验证写入恢复"
+      ],
+      "doc": {
+        "id": "lx-d5",
+        "path": "/content/labs/lx-d5.md",
+        "title": "磁盘还有 40G 却写不进去：inode 被小文件吃光 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d6",
+      "kind": "terminal",
+      "title": "证书过期：MES 内网 HTTPS 握手失败",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "ticket": {
+        "background": "MES 内网访问地址 https://mes.factory.internal 由 nginx 终止 TLS，证书由公司 CA 签发，有效期 1 年，续期脚本每月 1 号跑一次。",
+        "symptom": "今天 08:00 全厂浏览器访问 MES 报「ERR_CERT_DATE_INVALID」，服务端日志却一切正常，业务同事以为 MES 挂了。",
+        "objective": "确认是证书过期而不是服务故障，找到证书文件与续期链路，续签并重新加载服务，恢复 HTTPS 访问。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "确认服务本身是活的（先排应用层）",
+          "accept": [
+            "^systemctl\\s+(status|is-active)\\s+nginx",
+            "^curl\\s.*(-k|--insecure)",
+            "^ss\\s+-lntp"
+          ],
+          "output": "$ systemctl is-active nginx\nactive\n$ curl -k -s -o /dev/null -w '%{http_code}\\n' https://mes.factory.internal\n200\n$ ss -lntp | grep :443\nLISTEN 0 511 0.0.0.0:443 users:((\"nginx\",pid=812,fd=6))",
+          "hint": "先看服务状态，再 curl -k 绕过证书校验看 HTTP 是否通。",
+          "explain": "curl -k 返回 200 说明应用与反代都活着，故障在 TLS 层——这一步能省掉大量无用排查。"
+        },
+        {
+          "id": "s2",
+          "objective": "读证书有效期，确认是否过期",
+          "accept": [
+            "^openssl\\s+x509",
+            "^echo\\b.*\\|\\s*openssl",
+            "^openssl\\s+s_client"
+          ],
+          "output": "$ echo | openssl s_client -connect mes.factory.internal:443 -servername mes.factory.internal 2>/dev/null | openssl x509 -noout -dates\nnotBefore=Oct 21 2025 09:00:00 GMT\nnotAfter=Oct 21 2026 09:00:00 GMT\n$ date\nFri Oct 30 09:12:00 CST 2026",
+          "hint": "openssl x509 -noout -dates 读证书有效期。",
+          "explain": "notAfter 已经早于当前日期——证书过期是硬事实，浏览器报错准确，不是客户端问题。"
+        },
+        {
+          "id": "s3",
+          "objective": "定位服务器上的证书文件与 nginx 引用",
+          "accept": [
+            "^grep\\b.*ssl_certificate",
+            "^ls\\b.*\\.crt",
+            "^ls\\b.*\\.pem",
+            "^find\\b.*\\.(crt|pem)"
+          ],
+          "output": "$ grep -r ssl_certificate /etc/nginx/\n/etc/nginx/conf.d/mes.conf:    ssl_certificate     /etc/nginx/certs/mes.factory.internal.crt;\n/etc/nginx/certs/mes.factory.internal.crt\n/etc/nginx/certs/mes.factory.internal.key",
+          "hint": "从 nginx 配置里找 ssl_certificate 路径，再 ls 证书文件。",
+          "explain": "证书路径写在 nginx 配置里，先定位文件再谈续期，别在错误的位置折腾。"
+        },
+        {
+          "id": "s4",
+          "objective": "查续期任务为什么没换证书",
+          "accept": [
+            "^crontab\\s+-l",
+            "^ls\\b.*/etc/cron",
+            "^journalctl\\b.*cron|^cat\\b.*/var/log/cron",
+            "^systemctl\\s+status\\s+cron"
+          ],
+          "output": "$ crontab -l\n0 3 1 * * /opt/mes/renew-cert.sh >> /var/log/mes-cert-renew.log 2>&1\n$ tail -5 /var/log/mes-cert-renew.log\n2026-10-01 03:00:01 renew start\n2026-10-01 03:00:04 renew failed: openssl ca: unable to load CA config\n$ ls -l /etc/nginx/certs/mes.factory.internal.crt\n-rw-r--r-- 1 root root 2168 Oct  1 2025 mes.factory.internal.crt",
+          "hint": "看续期 cron 与它的日志，确认是「任务没跑」还是「跑了但失败」。",
+          "explain": "cron 每月 1 号跑，日志显示 10-01 跑了但 failed——证书从没被换过，因为 CA 配置路径失效。"
+        },
+        {
+          "id": "s5",
+          "objective": "修复续期链路并重新签发（先备份旧证书）",
+          "accept": [
+            "^cp\\b.*crt",
+            "^openssl\\s+.*(req|x509)",
+            "^cat\\b.*>.*\\.crt|^cat\\b.*>.*\\.pem",
+            "^systemctl\\s+reload\\s+nginx"
+          ],
+          "output": "$ cp /etc/nginx/certs/mes.factory.internal.crt /etc/nginx/certs/mes.factory.internal.crt.bak-20261030\n$ openssl x509 -req -days 365 -in /etc/nginx/certs/mes.factory.internal.csr -CA /etc/nginx/certs/ca.crt -CAkey /etc/nginx/certs/ca.key -out /etc/nginx/certs/mes.factory.internal.crt\n$ nginx -t && systemctl reload nginx",
+          "hint": "备份旧证书 → 重新签发 → nginx -t 校验后 reload。",
+          "explain": "换证书必须先备份旧证书，reload 前先 nginx -t；这样即使新证书有问题也能立刻回退。"
+        },
+        {
+          "id": "s6",
+          "objective": "验证证书有效期与客户端访问都恢复",
+          "accept": [
+            "^openssl\\s+x509",
+            "^curl\\s.*https://",
+            "^systemctl\\s+status\\s+nginx"
+          ],
+          "output": "$ openssl x509 -in /etc/nginx/certs/mes.factory.internal.crt -noout -dates\nnotAfter=Oct 30 2027 09:14:00 GMT\n$ curl -s -o /dev/null -w '%{http_code}\\n' https://mes.factory.internal\n200",
+          "hint": "再读一次有效期，并用不带 -k 的 curl 验证证书链可信。",
+          "explain": "最终验收要两条都过：有效期在未来 + 不加 -k 也能访问成功。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^rm\\b.*\\.(crt|pem|key)",
+          "output": "⚠️ 危险操作被拦截：删除证书/私钥会让整站 TLS 直接失效且无法回退。演练正确做法是先 cp 备份再替换。"
+        }
+      ],
+      "sop": [
+        "systemctl is-active nginx + curl -k 确认应用层正常",
+        "openssl s_client | openssl x509 -noout -dates 确认证书确实过期",
+        "grep ssl_certificate /etc/nginx 定位证书文件",
+        "crontab -l 与续期日志确认续期任务失败原因",
+        "cp 备份旧证书 → 重新签发 → nginx -t → systemctl reload nginx",
+        "复测有效期 + 不带 -k 的 curl 访问"
+      ],
+      "doc": {
+        "id": "lx-d6",
+        "path": "/content/labs/lx-d6.md",
+        "title": "证书过期：MES 内网 HTTPS 握手失败 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d7",
+      "kind": "terminal",
+      "title": "定时任务没跑：02:00 的归档脚本从未执行",
+      "difficulty": "入门",
+      "minutes": 8,
+      "ticket": {
+        "background": "MES 数据归档任务写在一台应用服务器的 root crontab 里，每天 02:00 把前一天的报工数据打包到 /data/backup/mes-report/。",
+        "symptom": "运维例行检查发现 /data/backup/mes-report 里最新文件还停在 3 天前，cron 任务像是从来没执行过。",
+        "objective": "确认定时任务是否在调度、是否执行、在哪一步失败，修好之后手动补跑一次并验证产物。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "查看定时任务清单",
+          "accept": [
+            "^crontab\\s+-l",
+            "^cat\\b.*/etc/crontab",
+            "^ls\\b.*/etc/cron"
+          ],
+          "output": "$ crontab -l\n# 每日报工归档\n0 2 * * * /opt/mes/scripts/archive-report.sh >> /var/log/mes-archive.log 2>&1\n$ ls /etc/cron.d",
+          "hint": "crontab -l 看当前用户的定时任务，ls /etc/cron.d 看系统级任务。",
+          "explain": "先确认任务「在不在」：很多「没执行」其实是任务压根没配。"
+        },
+        {
+          "id": "s2",
+          "objective": "确认 cron 服务在跑",
+          "accept": [
+            "^systemctl\\s+(status|is-active)\\s+cron",
+            "^systemctl\\s+(status|is-active)\\s+crond"
+          ],
+          "output": "$ systemctl is-active cron\nactive",
+          "hint": "systemctl is-active cron 确认调度器本身活着。",
+          "explain": "任务配了不代表会跑：cron 服务停了，所有定时任务都在睡觉。"
+        },
+        {
+          "id": "s3",
+          "objective": "看 cron 日志，确认任务有没有被触发",
+          "accept": [
+            "^journalctl\\b.*cron",
+            "^cat\\b.*/var/log/cron|^tail\\b.*/var/log/cron",
+            "^grep\\b.*archive.*cron"
+          ],
+          "output": "$ journalctl -u cron --since '2026-10-27' --no-pager | grep archive\n-- No entries --\n$ tail -20 /var/log/cron",
+          "hint": "journalctl -u cron 或 /var/log/cron 里看有没有触发记录。",
+          "explain": "日志里没有触发记录，说明任务没被调度器取走，要往「调度链路」而不是「脚本内部」找原因。"
+        },
+        {
+          "id": "s4",
+          "objective": "检查脚本本身（换行符、可执行权限、路径）",
+          "accept": [
+            "^ls\\b.*archive-report",
+            "^file\\b.*archive-report|^cat\\b.*-A.*archive-report|^sed\\b.*-\\$.*archive-report",
+            "^head\\b.*archive-report"
+          ],
+          "output": "$ ls -l /opt/mes/scripts/archive-report.sh\n-rw-r--r-- 1 root root 812 Oct 12 09:20 archive-report.sh\n$ file /opt/mes/scripts/archive-report.sh\n... with CRLF line terminators\n$ head -1 /opt/mes/scripts/archive-report.sh | cat -A\n#!/bin/bash^M$",
+          "hint": "ls 看权限，file / cat -A 看是不是 DOS 换行符（^M）。",
+          "explain": "两个经典坑：脚本没有可执行权限、脚本是 Windows 换行符（^M）——后者在 Linux 上会报 not found。"
+        },
+        {
+          "id": "s5",
+          "objective": "修好脚本并手动补跑一次",
+          "accept": [
+            "^chmod\\b",
+            "^sed\\b.*archive-report",
+            "^dos2unix\\b",
+            "^/opt/mes/scripts/archive-report\\.sh|^bash\\b.*archive-report",
+            "^sh\\b.*archive-report"
+          ],
+          "output": "$ sed -i 's/\\r$//' /opt/mes/scripts/archive-report.sh\n$ chmod +x /opt/mes/scripts/archive-report.sh\n$ /opt/mes/scripts/archive-report.sh\n$ tail -5 /var/log/mes-archive.log\n[2026-10-30 09:20:11] archive done: 3 files, 128MB",
+          "hint": "去掉 ^M、加执行权限，然后手动跑一次看日志。",
+          "explain": "手动补跑一次是最快的验证：脚本能跑通，cron 的问题自然就清楚了。"
+        },
+        {
+          "id": "s6",
+          "objective": "确认产物落盘并确认任务已重新排上",
+          "accept": [
+            "^ls\\b.*mes-report",
+            "^crontab\\s+-l",
+            "^systemctl\\s+status\\s+cron"
+          ],
+          "output": "$ ls -lh /data/backup/mes-report/\ntotal 128M\n-rw-r--r-- 1 root root  42M Oct 30 09:20 mes-report-2026-10-29.tar.gz\n$ crontab -l | grep archive",
+          "hint": "ls 看产物、crontab -l 看任务仍在。",
+          "explain": "产物与调度两件事都要确认：补跑成功不代表明晚 02:00 会自动跑。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^crontab\\s+-r",
+          "output": "⚠️ 危险操作被拦截：crontab -r 会清空当前用户的全部定时任务。演练正确做法是 crontab -e 精确修改单条任务。"
+        }
+      ],
+      "sop": [
+        "crontab -l 与 ls /etc/cron.d 确认任务存在",
+        "systemctl is-active cron 确认调度器活着",
+        "journalctl -u cron / /var/log/cron 确认是否被触发",
+        "ls -l + file + cat -A 检查脚本权限与换行符",
+        "sed 去 ^M、chmod +x，手动执行一次补跑",
+        "ls 验证产物 + crontab -l 确认调度仍在"
+      ],
+      "doc": {
+        "id": "lx-d7",
+        "path": "/content/labs/lx-d7.md",
+        "title": "定时任务没跑：02:00 的归档脚本从未执行 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d8",
+      "kind": "terminal",
+      "title": "权限不足：服务重启后起不来",
+      "difficulty": "入门",
+      "minutes": 8,
+      "ticket": {
+        "background": "MES 报表服务 mes-report 以专用用户 report 运行，数据目录 /data/mes/report 由部署脚本创建。昨晚升级后服务被重启，今天起不来。",
+        "symptom": "systemctl status mes-report 显示 Failed，日志里是 Permission denied，业务报表页面打不开。",
+        "objective": "从日志确认被拒的具体路径，修正属主/权限，让服务正常启动并验证。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "确认服务状态与失败原因",
+          "accept": [
+            "^systemctl\\s+(status|is-active)\\s+mes-report",
+            "^journalctl\\b.*-u\\s+mes-report",
+            "^cat\\b.*mes-report.*\\.log"
+          ],
+          "output": "$ systemctl status mes-report\n● mes-report.service - MES 报表服务\n   Loaded: loaded (/etc/systemd/system/mes-report.service; enabled)\n   Active: failed (Result: exit-code)\n$ journalctl -u mes-report -n 20 --no-pager\nmes-report[2211]: java.io.IOException: Permission denied: /data/mes/report/output",
+          "hint": "systemctl status 看状态，journalctl -u 看日志原文。",
+          "explain": "先拿到「哪条路径被拒」的原文，再动手改权限——直接 chmod -R 777 是事故的开始。"
+        },
+        {
+          "id": "s2",
+          "objective": "查看被拒路径及其属主权限",
+          "accept": [
+            "^ls\\b.*-ld",
+            "^ls\\b.*-l",
+            "^stat\\b"
+          ],
+          "output": "$ ls -ld /data/mes/report /data/mes/report/output\ndrwxr-x--- 2 root   root  4096 Oct 12 09:22 /data/mes/report\ndrwxr-xr-x 2 root   root  4096 Oct 29 03:10 /data/mes/report/output\n$ id report\nuid=1204(report) gid=1204(report) groups=1204(report)",
+          "hint": "ls -ld 看目录属主与权限位，id 看服务跑在哪个用户下。",
+          "explain": "服务用户是 report，目录属主是 root 且其它用户没有写权限——矛盾点就在这里。"
+        },
+        {
+          "id": "s3",
+          "objective": "备份现状后修正属主",
+          "accept": [
+            "^cp\\b",
+            "^ls\\b.*>.*\\.bak|^chown\\b.*-R",
+            "^chown\\b"
+          ],
+          "output": "$ cp -a /etc/systemd/system/mes-report.service /etc/systemd/system/mes-report.service.bak-20261030\n$ chown -R report:report /data/mes/report\n$ ls -ld /data/mes/report\ndrwxr-x--- 2 report report 4096 Oct 30 09:26 /data/mes/report",
+          "hint": "备份单元文件后用 chown 把目录属主还给服务用户。",
+          "explain": "用 chown 精确归还属主，而不是 chmod 777 放开所有人——最小权限原则在运维现场同样适用。"
+        },
+        {
+          "id": "s4",
+          "objective": "重载并启动服务",
+          "accept": [
+            "^systemctl\\s+daemon-reload",
+            "^systemctl\\s+restart\\s+mes-report",
+            "^systemctl\\s+start\\s+mes-report"
+          ],
+          "output": "$ systemctl daemon-reload\n$ systemctl restart mes-report\n$ systemctl is-active mes-report\nactive",
+          "hint": "daemon-reload 之后 restart 服务。",
+          "explain": "改完属主要重启进程才能拿到新权限：已经运行的进程仍然持有旧的凭据。"
+        },
+        {
+          "id": "s5",
+          "objective": "验证服务真正可用",
+          "accept": [
+            "^journalctl\\b.*-u\\s+mes-report",
+            "^curl\\s",
+            "^ss\\s+-lntp"
+          ],
+          "output": "$ journalctl -u mes-report -n 5 --no-pager\nmes-report[2240]: started, listening on 0.0.0.0:8092\n$ curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8092/health\n200",
+          "hint": "看日志确认监听，再用 curl 打健康检查。",
+          "explain": "active 只说明进程活着，接口 200 才说明业务可用。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^chmod\\s+-R\\s+777",
+          "output": "⚠️ 危险操作被拦截：chmod -R 777 会把整棵目录树对所有人开放，属于典型的安全事故源。演练正确做法是 chown 到服务用户并保留最小权限位。"
+        }
+      ],
+      "sop": [
+        "systemctl status + journalctl -u 拿到被拒路径原文",
+        "ls -ld 目录 + id 服务用户，确认属主矛盾",
+        "备份单元文件",
+        "chown -R 到服务用户（不用 chmod 777）",
+        "systemctl daemon-reload + restart + is-active",
+        "curl 健康检查确认接口真正可用"
+      ],
+      "doc": {
+        "id": "lx-d8",
+        "path": "/content/labs/lx-d8.md",
+        "title": "权限不足：服务重启后起不来 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d9",
+      "kind": "terminal",
+      "title": "备份文件是 0 字节：昨晚的库备份没成",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "ticket": {
+        "background": "MES 业务库每天 01:30 由 /opt/mes/scripts/backup-db.sh 备份到 /data/backup/db/，保留 14 天，脚本把标准输出重定向到目标文件。",
+        "symptom": "今早例行检查发现 db-2026-10-29.sql 是 0 字节，而前几天的备份都正常有几 GB。",
+        "objective": "查明备份变空的原因（磁盘满 + 重定向覆盖），恢复可用备份，并加上「失败不覆盖旧文件」的保护。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "看备份目录，确认哪些文件是空的",
+          "accept": [
+            "^ls\\b.*-l",
+            "^find\\b.*-size\\s*0"
+          ],
+          "output": "$ ls -lh /data/backup/db/\n-rw-r----- 1 mes mes 3.1G Oct 28 01:31 db-2026-10-27.sql\n-rw-r----- 1 mes mes 3.0G Oct 29 01:31 db-2026-10-28.sql\n-rw-r----- 1 mes mes    0 Oct 30 01:30 db-2026-10-29.sql\n$ find /data/backup/db -name '*.sql' -size 0",
+          "hint": "ls -lh 看大小，find -size 0 精确找出空文件。",
+          "explain": "先量化问题：只有最新那份是 0 字节，说明脚本还在跑，但产出为空。"
+        },
+        {
+          "id": "s2",
+          "objective": "查备份脚本与它的日志",
+          "accept": [
+            "^cat\\b.*backup-db",
+            "^ls\\b.*backup.*\\.log|^tail\\b.*backup.*\\.log",
+            "^grep\\b.*backup"
+          ],
+          "output": "$ cat /opt/mes/scripts/backup-db.sh\n#!/bin/bash\nmysqldump -u mes --password=*** mes_prod > /data/backup/db/db-$(date +%F).sql 2>> /var/log/mes-backup.log\n$ tail -20 /var/log/mes-backup.log\nmysqldump: Got error: 28: No space left on device when writing to '/data/backup/db/db-2026-10-29.sql'",
+          "hint": "看脚本怎么写的、日志里报了什么。",
+          "explain": "根因有两个叠加：磁盘满 + 脚本用 > 直接重定向到目标文件——命令失败后目标文件已经被创建并清空，看起来像「备份成功但是空的」。"
+        },
+        {
+          "id": "s3",
+          "objective": "确认磁盘满的真实原因",
+          "accept": [
+            "^df\\b",
+            "^du\\b.*--max-depth",
+            "^du\\b.*-h"
+          ],
+          "output": "$ df -h /data\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/vdb1       200G  200G     0 100% /data\n$ du -h --max-depth=1 /data | sort -h | tail -3\n118G /data/backup\n62G /data/archive",
+          "hint": "df -h 确认满了，再 du 看是哪块占的。",
+          "explain": "磁盘 100% 是表象：118G 全在备份目录里，是备份从来没清理过旧文件。"
+        },
+        {
+          "id": "s4",
+          "objective": "清理过期备份（只删 14 天以前的）",
+          "accept": [
+            "^find\\b.*-mtime",
+            "^rm\\b.*backup",
+            "^find\\b.*-delete"
+          ],
+          "output": "$ find /data/backup/db -type f -name '*.sql' -mtime +14 -print\n/data/backup/db/db-2026-10-10.sql\n$ find /data/backup/db -type f -name '*.sql' -mtime +14 -delete\n$ df -h /data",
+          "hint": "find -mtime +14 精确圈定过期备份再删。",
+          "explain": "保留策略要落到命令上：只删超过保留期的文件，绝不 rm -rf 整个目录。"
+        },
+        {
+          "id": "s5",
+          "objective": "修脚本：先写临时文件、成功后再改名",
+          "accept": [
+            "^cat\\b.*>.*\\.tmp|^cp\\b",
+            "^sed\\b.*backup-db",
+            "^vi\\b.*backup-db",
+            "^python3?\\b.*backup"
+          ],
+          "output": "$ cp /opt/mes/scripts/backup-db.sh /opt/mes/scripts/backup-db.sh.bak-20261030\n$ cat > /opt/mes/scripts/backup-db.sh <<'EOF'\n#!/bin/bash\nset -euo pipefail\nOUT=/data/backup/db/db-$(date +%F).sql\nTMP=$OUT.tmp\nmysqldump -u mes --password=*** mes_prod > $TMP\n[ -s $TMP ] || { echo \"backup empty, abort\" >&2; exit 1; }\nmv $TMP $OUT\nEOF",
+          "hint": "改成先写 .tmp、校验非空后再 mv 成正式文件。",
+          "explain": "「写临时文件 + 非空校验 + 原子改名」是备份脚本的标准写法：失败时旧文件还在，不会出现 0 字节备份覆盖好数据。"
+        },
+        {
+          "id": "s6",
+          "objective": "补跑备份并验证产物可用",
+          "accept": [
+            "^/opt/mes/scripts/backup-db\\.sh|^bash\\b.*backup-db",
+            "^ls\\b.*-lh.*backup",
+            "^gzip\\b.*-t|^head\\b.*\\.sql",
+            "^mysql\\b.*<"
+          ],
+          "output": "$ /opt/mes/scripts/backup-db.sh\n$ ls -lh /data/backup/db/db-2026-10-30.sql\n-rw-r----- 1 mes mes 3.0G Oct 30 09:34 db-2026-10-30.sql\n$ head -3 /data/backup/db/db-2026-10-30.sql\n-- MySQL dump 10.13  Distrib 8.0.36",
+          "hint": "补跑一次，再 ls 确认非空、head 确认内容像 dump。",
+          "explain": "备份完成的判据是「文件非空且内容像 dump」，不是「脚本退出码为 0」。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^rm\\s+-rf\\s+/data/backup",
+          "output": "⚠️ 危险操作被拦截：整目录删除会把历史可用备份一起抹掉。演练正确做法是 find -mtime +14 精确删除超期文件。"
+        }
+      ],
+      "sop": [
+        "ls -lh + find -size 0 找出空备份",
+        "cat 备份脚本 + tail 备份日志，确认失败原因",
+        "df -h + du --max-depth=1 定位磁盘占用",
+        "find -mtime +14 精确清理过期备份",
+        "改脚本为「临时文件 + 非空校验 + 原子改名」",
+        "补跑备份，ls 非空 + head 校验内容"
+      ],
+      "doc": {
+        "id": "lx-d9",
+        "path": "/content/labs/lx-d9.md",
+        "title": "备份文件是 0 字节：昨晚的库备份没成 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d10",
+      "kind": "terminal",
+      "title": "连接池被打满：报工接口大面积超时",
+      "difficulty": "进阶",
+      "minutes": 10,
+      "ticket": {
+        "background": "MES 报工接口服务 mes-report-api 用 HikariCP 连接 MySQL，连接池上限 20。库里有条 ERP 重报表查询经常跑十几分钟。",
+        "symptom": "上午 10 点开始，车间终端提交报工大面积超时，应用日志刷 \"connection pool exhausted\"，数据库连接数打满。",
+        "objective": "定位是哪个会话占着连接不放，安全释放它，验证报工恢复，并把连接池与慢查询两处都补上防护。"
+      },
+      "prompt": "ops@mes-app-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "从应用日志确认是连接池耗尽",
+          "accept": [
+            "^journalctl\\b.*-u\\s+mes-report-api",
+            "^grep\\b.*pool",
+            "^tail\\b.*mes-report-api.*\\.log"
+          ],
+          "output": "$ journalctl -u mes-report-api -n 20 --no-pager\nmes-report-api[3301]: HikariPool-1 - Connection is not available, request timed out after 3000ms\nmes-report-api[3301]: java.sql.SQLTransientConnectionException: Too many connections",
+          "hint": "journalctl -u 看应用自己报什么。",
+          "explain": "应用日志先给方向：连接池取不到连接，是「连接不够用」而不是「数据库挂了」。"
+        },
+        {
+          "id": "s2",
+          "objective": "查数据库侧连接与正在执行的 SQL",
+          "accept": [
+            "^mysql\\b.*show\\s+processlist",
+            "^mysql\\b.*show\\s+status",
+            "^mysql\\b.*information_schema"
+          ],
+          "output": "$ mysql -u mes -p mes_prod -e 'SHOW FULL PROCESSLIST'\nId  User  Command  Time  State  Info\n512  mes   Query   982   Sending data  SELECT * FROM work_reports ORDER BY report_time\n513  mes   Sleep   0     Sleep\n...共 20 条",
+          "hint": "mysql -e 'SHOW FULL PROCESSLIST' 看谁在跑。",
+          "explain": "20 条连接正好等于连接池上限，而且其中一条已经跑了 982 秒——线索就在这条长查询上。"
+        },
+        {
+          "id": "s3",
+          "objective": "确认阻塞/长事务的来源与影响面",
+          "accept": [
+            "^mysql\\b.*innodb_trx",
+            "^mysql\\b.*show\\s+engine",
+            "^mysql\\b.*show\\s+processlist"
+          ],
+          "output": "$ mysql -u mes -p mes_prod -e 'SELECT trx_id, trx_started, trx_mysql_thread_id, trx_query FROM information_schema.innodb_trx'\ntrx_id  trx_started           trx_mysql_thread_id  trx_query\n7f3c    2026-10-30-09:41:12   512                  SELECT * FROM work_reports ORDER BY report_time",
+          "hint": "information_schema.innodb_trx 看未提交事务与线程 id。",
+          "explain": "把「长查询」升级成「未提交长事务」：它不只是慢，还在占着连接和锁。"
+        },
+        {
+          "id": "s4",
+          "objective": "终止阻塞源头会话（只 kill 那一条会话）",
+          "accept": [
+            "^mysql\\b.*kill\\b"
+          ],
+          "output": "$ mysql -u mes -p mes_prod -e 'KILL 512'\n$ mysql -u mes -p mes_prod -e 'SHOW FULL PROCESSLIST' | head -3\nId  User  Command  Time  State  Info\n512  mes   Query   0     Query  killed",
+          "hint": "KILL 具体的 thread id，不要重启整个 mysqld。",
+          "explain": "KILL 单条会话是精准止血；重启数据库会把 MES 业务一起打断，属于事故扩大。"
+        },
+        {
+          "id": "s5",
+          "objective": "调整连接池上限并重启服务",
+          "accept": [
+            "^grep\\b.*maximum-pool-size|^grep\\b.*pool",
+            "^sed\\b.*pool|^vi\\b.*application",
+            "^systemctl\\s+restart\\s+mes-report-api"
+          ],
+          "output": "$ grep -n 'maximum-pool-size' /opt/mes/report-api/application.yml\n8:    maximum-pool-size: 20\n$ cp /opt/mes/report-api/application.yml /opt/mes/report-api/application.yml.bak-20261030\n$ sed -i 's/maximum-pool-size: 20/maximum-pool-size: 50/' /opt/mes/report-api/application.yml\n$ systemctl restart mes-report-api",
+          "hint": "备份配置后调大池上限，再重启服务。",
+          "explain": "池太小会在负载高峰被瞬时打满；放大到 50 是给短时峰值留余量，同时靠慢查询治理治本。"
+        },
+        {
+          "id": "s6",
+          "objective": "验证报工恢复且连接数回落",
+          "accept": [
+            "^mysql\\b.*show\\s+status",
+            "^curl\\s",
+            "^journalctl\\b.*-u\\s+mes-report-api"
+          ],
+          "output": "$ mysql -u mes -p mes_prod -e 'SHOW STATUS LIKE \"Threads_connected\"'\nThreads_connected: 6\n$ curl -s -o /dev/null -w '%{http_code}\\n' -X POST http://127.0.0.1:8093/api/work-report -d '{}'\n200\n$ journalctl -u mes-report-api -n 5 --no-pager | grep -c 'Connection is not available'\n0",
+          "hint": "确认连接数回落、报工接口 200、日志不再刷连接池错误。",
+          "explain": "三条证据齐了才算处置完成：连接数回落、接口可用、错误不再出现。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^systemctl\\s+(restart|stop)\\s+mysqld",
+          "output": "⚠️ 危险操作被拦截：重启 mysqld 会打断所有 MES 业务连接，正确的止血手段是 KILL 那条阻塞会话。"
+        }
+      ],
+      "sop": [
+        "journalctl -u 看应用报的连接池错误",
+        "SHOW FULL PROCESSLIST 找出长会话",
+        "information_schema.innodb_trx 确认未提交长事务",
+        "KILL 具体 thread id 精准止血",
+        "备份并调大 maximum-pool-size，重启应用",
+        "Threads_connected 回落 + 报工接口 200 + 日志无报错"
+      ],
+      "doc": {
+        "id": "lx-d10",
+        "path": "/content/labs/lx-d10.md",
+        "title": "连接池被打满：报工接口大面积超时 · 题目文档"
+      }
+    },
+    {
+      "id": "lx-d11",
+      "kind": "terminal",
+      "title": "大型综合：整套 MES 演练环境上线、故障注入与回滚",
+      "difficulty": "综合",
+      "minutes": 45,
+      "ticket": {
+        "background": "你要在一台演练机上从零交付一套 MES 最小可用环境：MySQL 业务库 + 一个可离线部署的小型 Web 服务（报工看板）+ nginx 反向代理 + 健康检查与监控脚本，并交付一份可回滚的上线记录。",
+        "symptom": "交付窗口内，运维方会随机注入 1–2 个故障（磁盘写满、证书过期、数据库连接池耗尽、权限不足、备份为空）。你需要定位、修复、验证，并保证任何一步都能回滚到上一个版本。",
+        "objective": "按「盘点 → 部署 → 反代 → 监控 → 注入排查 → 端到端验收 → 回滚演练 → 交付清单」八个阶段完成整场演练，每阶段都有可机器判定的验收命令。"
+      },
+      "prompt": "deploy@mes-drill-01:~$",
+      "steps": [
+        {
+          "id": "s1",
+          "objective": "阶段一：盘点环境（规格、端口占用、已有服务）",
+          "accept": [
+            "^nproc",
+            "^free\\s+-h",
+            "^df\\b",
+            "^ss\\s+-lntp",
+            "^systemctl\\s+list-units"
+          ],
+          "output": "$ nproc\n4\n$ free -h | head -2\nMem:  7.8Gi  2.1Gi  1.2Gi\n$ df -h / | tail -1\n/dev/vda1        16G  6.1G  8.2G  45% /\n$ ss -lntp | head -5\n$ systemctl list-units --type=service --state=running | grep mes",
+          "hint": "nproc / free -h / df -h 看规格，ss -lntp 看端口占用。",
+          "explain": "先盘点是硬规矩：规格不够就别开始部署，端口冲突先解决再装服务——否则后面的故障全是自己挖的坑。"
+        },
+        {
+          "id": "s2",
+          "objective": "阶段二：部署数据库并建库建表",
+          "accept": [
+            "^docker\\s+run.*mysql",
+            "^docker\\s+ps",
+            "^mysql\\b.*-e.*create",
+            "^mysql\\b.*create",
+            "^systemctl\\s+(status|is-active)"
+          ],
+          "output": "$ docker run -d --name mes-mysql -e MYSQL_ROOT_PASSWORD=*** -e MYSQL_DATABASE=mes_prod -p 3307:3306 mysql:8.0\n$ docker ps --format '{{.Names}} {{.Status}}'\nmes-mysql Up 20 seconds\n$ mysql -h 127.0.0.1 -P 3307 -u root -p mes_prod -e 'CREATE TABLE work_report (id INT PRIMARY KEY AUTO_INCREMENT, wo_no VARCHAR(32), qty INT, report_time DATETIME);'\n$ mysql -h 127.0.0.1 -P 3307 -u root -p mes_prod -e 'SELECT COUNT(*) FROM work_report;'\n0",
+          "hint": "docker run 起一个独立实例（端口 3307 避开宿主既有服务），再建表并验证。",
+          "explain": "演练数据库必须与任何在用实例物理隔离：独立容器 + 独立端口 + 一次性口令，题目做完直接销毁。"
+        },
+        {
+          "id": "s3",
+          "objective": "阶段三：部署应用（离线包 + systemd 托管）",
+          "accept": [
+            "^tar\\b",
+            "^systemctl\\s+(enable|start|daemon-reload)",
+            "^useradd\\b",
+            "^chown\\b",
+            "^systemctl\\s+is-active"
+          ],
+          "output": "$ tar -xzf /opt/mes/dist/mes-board-1.0.0.tar.gz -C /opt/mes/app\n$ useradd -r -s /usr/sbin/nologin mesapp\n$ chown -R mesapp:mesapp /opt/mes/app\n$ systemctl daemon-reload && systemctl enable --now mes-board\n$ systemctl is-active mes-board\nactive",
+          "hint": "解包 → 建专用用户 → 改属主 → 单元托管。",
+          "explain": "应用用专用系统用户运行并把属主给到它，是权限类故障的预防手段，也能让权限问题有明确责任边界。"
+        },
+        {
+          "id": "s4",
+          "objective": "阶段四：配置反向代理与健康检查",
+          "accept": [
+            "^cat\\b.*>.*\\.conf|^tee\\b.*\\.conf",
+            "^nginx\\s+-t",
+            "^systemctl\\s+reload\\s+nginx",
+            "^curl\\s.*health"
+          ],
+          "output": "$ cat > /etc/nginx/conf.d/mes-board.conf <<'EOF'\nserver {\n    listen 8099;\n    location / { proxy_pass http://127.0.0.1:8094; }\n    location = /health { return 200 'ok'; }\n}\nEOF\n$ nginx -t && systemctl reload nginx\n$ curl -s http://127.0.0.1:8099/health\nok",
+          "hint": "写站点配置 → nginx -t 校验 → reload → curl 验证。",
+          "explain": "nginx -t 是改配置后的强制关卡：校验不过绝不 reload，否则整站可能起不来。"
+        },
+        {
+          "id": "s5",
+          "objective": "阶段五：部署监控与备份脚本（定时 + 可验证）",
+          "accept": [
+            "^cat\\b.*>.*\\.sh|^tee\\b.*\\.sh",
+            "^chmod\\b.*\\.sh",
+            "^crontab\\b",
+            "^/opt/mes/scripts/.*\\.sh",
+            "^ls\\b.*backup"
+          ],
+          "output": "$ cat > /opt/mes/scripts/health-check.sh <<'EOF'\n#!/bin/bash\ncurl -fsS http://127.0.0.1:8099/health || exit 1\nEOF\n$ chmod +x /opt/mes/scripts/health-check.sh\n$ cat > /opt/mes/scripts/backup-db.sh <<'EOF'\n#!/bin/bash\nset -euo pipefail\nOUT=/data/backup/db/db-$(date +%F).sql\nTMP=$OUT.tmp\nmysqldump -h 127.0.0.1 -P 3307 -u root -p*** mes_prod > $TMP\n[ -s $TMP ] || { echo 'empty backup' >&2; exit 1; }\nmv $TMP $OUT\nEOF\n$ chmod +x /opt/mes/scripts/backup-db.sh\n$ crontab -l | grep -q mes && echo scheduled || (crontab -l; echo '0 2 * * * /opt/mes/scripts/backup-db.sh' | crontab -)",
+          "hint": "写健康检查与备份脚本，加执行权限并排 cron。",
+          "explain": "备份脚本必须带「非空校验 + 原子改名」，健康检查脚本必须能被 crontab 调用——这两条是后面回滚与监控验收的依据。"
+        },
+        {
+          "id": "s6",
+          "objective": "阶段六：故障定位（对注入的故障取证）",
+          "accept": [
+            "^df\\b",
+            "^du\\b",
+            "^journalctl\\b",
+            "^systemctl\\s+status",
+            "^ls\\b.*-l",
+            "^openssl\\s+x509",
+            "^mysql\\b.*show\\s+processlist",
+            "^dmesg\\b"
+          ],
+          "output": "$ df -h /\n/dev/vda1        16G  16G     0 100% /\n$ du -h --max-depth=1 /var | sort -h | tail -3\n$ journalctl -u mes-board -n 30 --no-pager | tail -10\n$ systemctl status mes-board | tail -5",
+          "hint": "按现象选择取证命令：df/du 看磁盘、journalctl 看服务日志、openssl 看证书、show processlist 看连接。",
+          "explain": "故障注入点是多选一，先用现象定位属于哪一类，再深挖；取证要先于动手改。"
+        },
+        {
+          "id": "s7",
+          "objective": "阶段七：修复并保留证据（先备份再改）",
+          "accept": [
+            "^cp\\b",
+            "^truncate\\s+-s\\s*0|^find\\b.*-mtime.*-delete|^chown\\b|^sed\\b|^systemctl\\s+(restart|reload)",
+            "^mysql\\b.*kill\\b",
+            "^openssl\\s+.*x509"
+          ],
+          "output": "$ cp /etc/nginx/conf.d/mes-board.conf /etc/nginx/conf.d/mes-board.conf.bak-20261030\n$ truncate -s 0 /var/log/mes-board.log\n$ find /var/log/mes-board.d -type f -mtime +7 -delete\n$ systemctl restart mes-board && systemctl is-active mes-board\nactive",
+          "hint": "任何修改前先备份证据与配置；修完立刻验证服务状态。",
+          "explain": "修复动作要可回滚：备份文件与配置放在一起，证据留档（截图/日志片段），复盘时能还原现场。"
+        },
+        {
+          "id": "s8",
+          "objective": "阶段八：端到端验收（可用性 + 数据一致性）",
+          "accept": [
+            "^curl\\s.*(health|8099)",
+            "^mysql\\b.*select",
+            "^systemctl\\s+is-active"
+          ],
+          "output": "$ curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8099/health\n200\n$ curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8099/api/report\n200\n$ mysql -h 127.0.0.1 -P 3307 -u root -p mes_prod -e 'SELECT COUNT(*) FROM work_report;'\n42\n$ systemctl is-active mes-board mes-mysql nginx\nactive\nactive\nactive",
+          "hint": "健康检查、业务接口、数据查询、服务状态四条一起验。",
+          "explain": "验收要覆盖四层：健康检查通、业务接口通、数据对得上、服务在运行——少一条都不算上线成功。"
+        },
+        {
+          "id": "s9",
+          "objective": "阶段九：回滚演练（回到上一个版本并验证）",
+          "accept": [
+            "^systemctl\\s+(stop|disable)",
+            "^cp\\b.*\\.bak|^mv\\b.*\\.bak",
+            "^systemctl\\s+(start|is-active)",
+            "^curl\\s"
+          ],
+          "output": "$ systemctl stop mes-board\n$ cp /opt/mes/app/releases/mes-board-1.0.0/application.yml /opt/mes/app/current/application.yml\n$ systemctl start mes-board\n$ curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8099/health\n200",
+          "hint": "停服务 → 回退配置/版本 → 起服务 → 验证。",
+          "explain": "回滚必须真的演练过一次：没有验证过的回滚方案等于没有回滚方案——这是上线前最有价值的一次演练。"
+        },
+        {
+          "id": "s10",
+          "objective": "阶段十：交付验收清单",
+          "accept": [
+            "^cat\\b.*>.*\\.md|^tee\\b",
+            "^ls\\b.*-l",
+            "^cat\\b.*\\.md"
+          ],
+          "output": "$ cat > /opt/mes/delivery/acceptance.md <<'EOF'\n# MES 演练环境上线验收清单\n- [x] 规格：4 vCPU / 7.8 GiB / 根分区 16G，Debian 13\n- [x] 数据库：mes-mysql 容器，端口 3307，work_report 表就绪\n- [x] 应用：mes-board.service active，专用用户 mesapp\n- [x] 反代：nginx 8099，/health 返回 200\n- [x] 监控与备份：health-check.sh、backup-db.sh 已排 cron\n- [x] 故障：已定位并修复，证据留档\n- [x] 端到端：接口 200，数据条数一致\n- [x] 回滚：已演练并验证\nEOF\n$ ls -l /opt/mes/delivery/acceptance.md",
+          "hint": "把十项验收逐条写成清单文件。",
+          "explain": "交付物是可核查的清单，不是「已完成」三个字；逐条勾选，评审与复盘都有据可依。"
+        }
+      ],
+      "danger": [
+        {
+          "pattern": "^rm\\s+-rf\\s+/var/log",
+          "output": "⚠️ 危险操作被拦截：整目录删除会带走故障现场证据。演练正确做法是 truncate -s 0 清空或按 mtime 精确清理。"
+        },
+        {
+          "pattern": "^docker\\s+rm\\s+-f\\s+mes-mysql",
+          "output": "⚠️ 危险操作被拦截：删除演练数据库容器会让后续验收无数据可验；演练结束前请先完成数据一致性核对。"
+        },
+        {
+          "pattern": "^systemctl\\s+stop\\s+nginx",
+          "output": "⚠️ 危险操作被拦截：停 nginx 会让整站反代不可用；题目只允许停用自己部署的 mes-board 服务。"
+        }
+      ],
+      "sop": [
+        "阶段一：nproc / free -h / df -h / ss -lntp 盘点规格与端口",
+        "阶段二：docker run 独立 MySQL 实例（端口 3307）+ 建表",
+        "阶段三：解包 + 专用用户 + systemd 托管 mes-board",
+        "阶段四：写 nginx 站点配置 + nginx -t + reload + curl 验证",
+        "阶段五：health-check.sh 与 backup-db.sh（临时文件+非空校验+原子改名）+ 排 cron",
+        "阶段六：按现象取证（df/du、journalctl、openssl、show processlist）",
+        "阶段七：先备份再修复，修完立即验证服务状态",
+        "阶段八：健康检查 + 业务接口 + 数据条数 + 服务状态四层验收",
+        "阶段九：真实演练一次回滚（停 → 回退 → 起 → 验证）",
+        "阶段十：输出十项验收清单文件"
+      ],
+      "doc": {
+        "id": "lx-d11",
+        "path": "/content/labs/lx-d11.md",
+        "title": "大型综合：整套 MES 演练环境上线、故障注入与回滚 · 题目文档"
+      }
     }
   ]
 }

@@ -32,12 +32,15 @@ const REQUIRED_SECTIONS = [
 const questions = collectQuestions()
 
 describe("题目与文档一一对应", () => {
-  it("题目总量符合预期（数据库实操营 20 题 + 运维实操营 20 条）", () => {
+  it("题目总量符合预期（数据库实操营 20 题 + 运维实操营 28 条）", () => {
     const db = questions.filter((q: { kind: string }) => q.kind === "db")
     const ops = questions.filter((q: { kind: string }) => q.kind !== "db")
+    const terminal = questions.filter((q: { kind: string }) => q.kind === "ops-terminal")
     expect(db.length).toBe(20)
-    expect(ops.length).toBe(20)
-    expect(questions.length).toBe(40)
+    // 运维实操营：原有 20 条 + 本轮新增 7 道小型排障题 + 1 道大型综合题
+    expect(ops.length).toBe(28)
+    expect(terminal.length).toBe(16)
+    expect(questions.length).toBe(48)
   })
 
   it("每道题目都带 doc 引用字段，且指向真实存在的文档", () => {
