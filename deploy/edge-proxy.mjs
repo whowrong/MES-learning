@@ -6,7 +6,7 @@
 //   2. 「<前缀>/__pb/*」映射到 PocketBase 根路径(PB 本体直接提供 /api 与静态文件);
 //   3. 前端在子路径下无法直达 PB 的 /api/files 缩略图等接口时通过 __pb 透传;
 //   4. 把请求头 X-Pb-Auth 还原为 Authorization(PocketBase JS SDK 在部分
-//      代理场景下会改用 X-Pb-Auth 携带令牌);
+//      代理场景下会改用 X-Pb-Auth 携带令牌); 两者同时存在时以 X-Pb-Auth 为准;
 //   5. 透传通用 HTTP upgrade; PocketBase 0.40.x realtime 使用 SSE/EventSource, 非 WebSocket;
 //
 // 环境变量:
@@ -70,7 +70,11 @@ const server = http.createServer((req, res) => {
   if (isPrivateAdminPath(mapped.path)) { res.writeHead(404); return res.end("not found"); }
 
   const headers = { ...req.headers, host: TARGET.host };
-  if (headers["x-pb-auth"] && !headers["authorization"]) {
+  // 令牌来源优先级: X-Pb-Auth 优先, Authorization 只作回落。
+  // 前置 Basic Auth 网关与前端会争用同一个 Authorization 头, 显式用
+  // X-Pb-Auth 传来的才是 PocketBase 令牌, 因此有该头时必须覆盖 authorization;
+  // 没有该头时才沿用请求自带的 authorization。
+  if (headers["x-pb-auth"]) {
     headers["authorization"] = headers["x-pb-auth"];
   }
   const upstream = http.request(
@@ -86,7 +90,8 @@ server.on("upgrade", (req, socket, head) => {
   if (!mapped || mapped.redirect || isPrivateAdminPath(mapped.path)) { socket.destroy(); return; }
   const upstream = net.connect(Number(TARGET.port), TARGET.hostname, () => {
     const headers = { ...req.headers, host: TARGET.host };
-    if (headers["x-pb-auth"] && !headers["authorization"]) headers["authorization"] = headers["x-pb-auth"];
+    // 与普通请求一致: X-Pb-Auth 优先, Authorization 只作回落。
+    if (headers["x-pb-auth"]) headers["authorization"] = headers["x-pb-auth"];
     let raw = `${req.method} ${mapped.path} HTTP/1.1\r\n`;
     for (const [k, v] of Object.entries(headers)) raw += `${k}: ${v}\r\n`;
     raw += "\r\n";

@@ -491,6 +491,8 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 | `HEAD`（本轮） | 部署目标表述改正：47.122.104.160 = 代理服务器、非部署目标；新增 6.3「目标环境确定后脚本必须复核的项」；补充代理出口用法 |
 | `09ba071` | 修复 `deploy/mes-deploy.sh` 的存档一致性快照：`VACUUM INTO` 目标路径从双引号改成单引号（SQLite 把双引号当标识符，导致每次都退回复制数据文件） |
 | `HEAD`（本轮） | 第十一节改为推送后现状；新增第十二节「instabox 部署实录」 |
+| `5d25a7f` | 记录本轮在当前 HEAD 的自测复跑结果与前端产物一致性 |
+| `6200a27` | **本轮（第二轮）**：`deploy/edge-proxy.mjs` 令牌来源改为「`x-pb-auth` 优先、`authorization` 回落」；说明文档补 12.3（裸 IP 入口会 401、推荐走域名）与 12.8（本轮改动、复测与入口哈希变化的解释）；第十一节改为「推送待凭据」现状 |
 
 **重点一：简写 CRUD 钩子的存档修复**（`templates/pb_hooks/shorthand_crud.pb.js`）
 
@@ -519,10 +521,35 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 - **长期推送路径已搁置**：刘先生 2026-10-29 明确表示「好麻烦，算了，累死了」，
   因此不再提 Deploy key / PAT / 密钥对 / 分支保护等建议，也不再生成新密钥、不动远端引用；
   只有他明确给出推送方式时才执行写操作。
-- **本轮（VACUUM 修复 + 文档更新）的改动只在本地提交，未推送**。随附交付物供后续推送：
-  - `today-dev.bundle`（含 `today-dev` 全部分支状态，可用 `git clone today-dev.bundle` 后推送）；
-  - `today-dev-vs-4aa4e1d.diff`（本轮两个改动的补丁，相对 `4aa4e1d`）；
-  - `today-dev-vs-wabi-dev.diff`（相对 `wabi-dev`@bed9246 的全量 diff，仍然有效）。
+- **本轮（第二轮，2026-10-30 上午）的改动只在本地提交，尚未推送**。本地 `today-dev` 现有 4 个提交待推
+  （相对远端 `4aa4e1d` 领先 4 个）：`09ba071` VACUUM 修复、`684bcaf` 文档更新、`5d25a7f` 自测记录、
+  `6200a27` 本轮的 edge-proxy 令牌头优先级修复 + 12.3/12.8 文档。
+  远端现状（目标机直连 GitHub 只读复核）：`main` = `b5c8335`、`wabi-dev` = `bed9246`、
+  `today-dev` = `4aa4e1d`、tag 仍是基线那 12 个 v1.x，**与上一轮推送后完全一致，未被本轮改动过**。
+- **推送被卡在一个凭据上（唯一需要刘先生做的一步）**：GitHub 上那条 Deploy key 现在**没有对应私钥**
+  （上一轮推完即删），沙箱与目标机都不存在任何可用的 GitHub 写凭据（无 SSH 私钥、无 PAT、
+  `gh` 未登录、GitHub HTTPS 在沙箱侧被出口策略挡成 403）。因此本轮按约定重新生成了一把
+  一次性 ed25519 deploy key（私钥只存在本地、不入库、不外传），**只差刘先生把下面这段公钥
+  加到仓库的 Deploy keys 并勾上写权限**：
+
+  ```
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAwniRsTGWaOBpmf7pNSrk5mH0bT5jkRZtYBippGpGt mes-learning-deploy-2026-10-30
+  ```
+
+  加好之后推送是一条命令（显式 refspec，不推 `main`/`wabi-dev`、不打 tag、不 force、不删远端引用）：
+
+  ```bash
+  GIT_SSH_COMMAND="ssh -p 443 -o IdentitiesOnly=yes -i <私钥路径>" \
+    git push --no-follow-tags --no-force \
+      ssh://git@ssh.github.com:443/whowrong/MES-learning.git \
+      refs/heads/today-dev:refs/heads/today-dev
+  ```
+
+  在刘先生给出写权限之前，本轮**不伪造「已推送」**：远端 `today-dev` 仍是 `4aa4e1d`。
+- 随附交付物（按最终树重新生成，`6200a27` 为 today-dev 头）：
+  - `today-dev.bundle`（含 `today-dev` 分支全量状态，克隆后即可推送）；
+  - `today-dev-vs-4aa4e1d.diff`（相对 `4aa4e1d` 的本轮改动：VACUUM 修复、文档更新、自测记录、edge-proxy 修复）；
+  - `today-dev-vs-wabi-dev.diff`（相对 `wabi-dev`@bed9246 的全量 diff）。
 
 **重点二：构建相关**
 
@@ -615,8 +642,23 @@ git diff bed9246..today-dev --stat                                        # 全�
 
   站前端的 `src/lib/pb.ts` 已有配套逻辑：非「localhost / 裸 IP」的部署形态一律把 PB 令牌放进
   `X-Pb-Auth`（见该文件 `PB_USER_AUTH_HEADER` 与 `pb.beforeSend`），所以域名形态下这条链路是通的。
-  **遗留建议**：`deploy/edge-proxy.mjs` 本身可以改成「`x-pb-auth` 优先于 `authorization`」，
-  这样任何前置 Basic Auth 网关都不必再配这段 map；该改动属仓库变更，等刘先生或 Muse 确认后再动。
+
+- **本轮补上的第二层保险（仓库变更）**：`deploy/edge-proxy.mjs` 原本是「上游没有 `Authorization`
+  时才用 `X-Pb-Auth` 还原令牌」，也就是 `authorization` 优先。现已改为
+  **「`x-pb-auth` 优先于 `authorization`」**：请求带 `X-Pb-Auth` 时直接用它覆盖 `Authorization`；
+  没有该头时才回落到请求自带的 `authorization`。普通请求与 upgrade/SSE 两条路径都已改。
+  这样以后换任何前置 Basic Auth 网关，即使对方像 nginx 一样把 Basic 凭据写进 `Authorization`，
+  只要令牌走 `X-Pb-Auth` 就不会被挤掉。nginx 上那段 map 改写本轮**保留不动**，作为双保险。
+
+- **入口选择：走域名，不要走裸 IP（重要）**：`src/lib/pb.ts` 的 `isDirectPbHost()` 把
+  `localhost`、`[::1]` 和裸 IPv4 判为「直连 PB」形态，这时前端把 PB 令牌放进 **`Authorization`** 头。
+  而裸 IP 入口上的 `auth_basic` 门禁用的也是同一个 `Authorization` 头：前端 JS 设置的请求头会覆盖
+  浏览器自动附带的 Basic 凭据，nginx 收到的不是 `Basic ...` 而是 PB 令牌，于是 `auth_basic` 校验失败
+  → **裸 IP 访问时前端会用 `Authorization` 传令牌、与 Basic Auth 争同一个头，站内登录会 401**。
+  这不是账号密码错了，是两个用途撞了同一个头。
+  **域名入口下则正常**：前端改走 `X-Pb-Auth`，Basic 凭据与 PB 令牌各走各的头，nginx 再用上面那段 map
+  把发给上游的 `Authorization` 改写成 `X-Pb-Auth` 的值，PocketBase 收到的就是纯令牌。
+  → 结论：**推荐路径是域名入口**；裸 IP 只在排查时临时使用，不要用于日常登录使用。
 
 ### 12.4 /workspace 软链的用途
 
@@ -662,4 +704,39 @@ Instabox 免费档的硬约束：闲置 30 分钟自动暂停（关不掉）、�
 | 进程被杀 | 6 秒内 systemd 拉起 |
 | 磁盘 | `/data` 用 1.1–1.2 G / 20 G（约 6%） |
 | 既有服务 | 机器上原有的 metabase（平台发布 3000）不受影响，外网 200 |
-| 前端产物一致性 | 本地重建入口 `/mes/assets/index-fK4qGjST.js`，与目标机在跑的前端哈希一致（线上前端 = 仓库当前源码） |
+| 前端产物一致性 | 第一轮本地重建入口 `/mes/assets/index-fK4qGjST.js`，与当时线上在跑的前端哈希一致（线上前端 = 仓库当前源码）。**第二轮重建入口变为 `/mes/assets/index-VFvB5CNx.js`**（见 12.8：前端源码未变，是打包器版本差异） |
+
+### 12.8 第二轮：令牌头优先级修复与复测（2026-10-30 上午）
+
+- **改动**：`deploy/edge-proxy.mjs` 的令牌来源改为「`x-pb-auth` 优先、`authorization` 回落」，
+  普通请求与 upgrade/SSE 两条路径都改了。原因与背景见 12.3；本轮按刘先生的授权直接执行，没有再等确认。
+- **单元级验证**（独立脚本：起一个假上游，按三种入参组合观察上游实际收到的 `Authorization`）：
+
+  | 入参 | 上游收到的 `Authorization` | 旧代码 | 新代码 |
+  | --- | --- | --- | --- |
+  | 仅 `x-pb-auth` | = `x-pb-auth` 的值 | PASS | PASS |
+  | 仅 `authorization` | = `authorization` 的值（回落） | PASS | PASS |
+  | 两者同时且冲突 | 期望 = `x-pb-auth` 的值 | **FAIL**（拿到 authorization） | **PASS** |
+
+  这条用例能区分新旧行为，所以不是「改完看着像对了」。
+- **部署**：目标机仓库切到 `6200a27`（4 个提交，工作区干净）→ `npx vite build --base=/mes/` 重建 →
+  `deploy/mes-deploy.sh` 走「备份 → 部署 → 校验 → 失败自动回滚」（备份目录
+  `/data/mes/backups/mes-backup-20261030-011807`）→ 运行时 `edge-proxy.mjs` 覆盖后重启 `mes-edge-proxy`。
+  nginx 那段 `map` 改写**未动**，作为双保险保留。
+- **复测**：30 项检查全部 PASS（脚本留在目标机 `/data/mes/verify_round2.sh`）。
+  - nginx 门禁：未认证 `/mes/`、`/mes/career-prep` 均 401；Basic Auth 认证后两者均 200；根路径 302。
+  - 站内链路：应用账号登录取到令牌；带令牌读 `player_progress` = 1 条记录；带令牌打 `dblab` = 200；
+    不带令牌读 = 401。
+  - **令牌头优先级实测（直连 8091）**：`authorization`（Basic 凭据）与 `x-pb-auth`（PB 令牌）同时存在
+    → 200（这条正是修复前会失败的场景）；仅 `x-pb-auth` → 200；仅 `authorization` → 200；无令牌 → 401。
+  - 判分：db-c5 校验查询 = `[[0, 0]]`；db-r5 四行 =
+    `[["L2",27,165,0.1636],["L1",8,60,0.1333],["L4",37,497,0.0744],["L3",16,299,0.0535]]`，与期望逐值一致。
+  - progress-guard：练习前后 12 个受监控字段逐条一致（`changed/missing/added` 全空），记录数 1 → 1。
+  - systemd：四个单元（`mes-app-prepare`/`mes-pocketbase`/`mes-edge-proxy`/`nginx`）均 `active` + `enabled`；
+    `kill -9` 两个进程后 6 秒内被 systemd 拉起，之后站点 200、站内登录可用、记录数仍 1。
+  - 外网入口复测：未认证 401、认证后 200、根路径 302，线上入口脚本已是新构建 `index-VFvB5CNx.js`。
+- **入口哈希从 `index-fK4qGjST.js` 变成 `index-VFvB5CNx.js`（前端源码没动）**：
+  `git diff 4aa4e1d..6200a27 -- src public server templates vite.config.ts package.json pnpm-lock.yaml`
+  输出为空；线上 `pb_public/content` 与仓库 `public/content` 逐文件一致；产物模块图文件集一致
+  （46 个，文件名去掉哈希后完全相同），差异只在内容哈希 → 属于打包器版本差异（当前按 lock 里的
+  vite 8.0.11 重建），不是功能改动。换句话说：线上前端仍等于仓库当前源码。
