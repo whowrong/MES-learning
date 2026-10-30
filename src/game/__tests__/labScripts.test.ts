@@ -7,6 +7,7 @@ import {
   extractJsonBlock,
   looksLikeProduction,
   matchLabAssert,
+  stripCommandWrappers,
   parseLabScriptResponse,
   type LabStep,
 } from "@/game/labScripts"
@@ -97,6 +98,23 @@ describe("步骤断言", () => {
   it("命中任一正则即通过", () => {
     expect(matchLabAssert(step, "Filesystem Size Used")).toBe(true)
     expect(matchLabAssert(step, "nothing here")).toBe(false)
+  })
+
+  it("命令带 sudo / env / timeout 包装时仍按去掉包装后的命令判定", () => {
+    const findStep: LabStep = { id: "s2", title: "t", command: "find", expect: "", assert: ["^find\\b.*-mtime"] }
+    expect(matchLabAssert(findStep, "sudo find /data/archive -mtime +14")).toBe(true)
+    expect(matchLabAssert(findStep, "find /data/archive -mtime +14")).toBe(true)
+    const dfStep: LabStep = { id: "s3", title: "t", command: "df", expect: "", assert: ["^df\\b"] }
+    expect(matchLabAssert(dfStep, "timeout 10 df -i /data")).toBe(true)
+    expect(matchLabAssert(dfStep, "env LANG=C df -i /data")).toBe(true)
+    expect(matchLabAssert(dfStep, "sudo -n df -i /data")).toBe(true)
+    expect(matchLabAssert(dfStep, "cat /etc/hosts")).toBe(false)
+  })
+
+  it("去掉包装只影响命令头部，命令本体仍按原样判定", () => {
+    expect(stripCommandWrappers("sudo find /data -mtime +14")).toBe("find /data -mtime +14")
+    expect(stripCommandWrappers("env LANG=C df -h")).toBe("df -h")
+    expect(stripCommandWrappers("df -h")).toBe("df -h")
   })
 })
 

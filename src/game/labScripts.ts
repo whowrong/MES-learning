@@ -239,12 +239,32 @@ export function detectLabDanger(command: string): { danger: boolean; note: strin
   return { danger: false, note: "" }
 }
 
+/**
+ * 去掉命令前面的包装（sudo / doas / env / timeout / nohup 等）。
+ *
+ * 题目里的 accept 正则大多从 ^ 锚定（例如 ^find\b.*-mtime），模型给出的命令
+ * 常常带 sudo 前缀；不去掉包装就会把「命令是对的」判成不达标。
+ */
+export function stripCommandWrappers(command: string): string {
+  let c = (command ?? "").trim()
+  let prev = ""
+  while (prev !== c) {
+    prev = c
+    c = c.replace(/^(?:sudo|doas|nohup|nice|ionice|command|time)(?:\s+-\S+)*\s+/, "")
+    c = c.replace(/^env\s+(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, "")
+    c = c.replace(/^timeout\s+\d+(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S*)*\s+/, "")
+  }
+  return c
+}
+
 /** 步骤断言：命中任一 accept 正即算通过 */
 export function matchLabAssert(step: LabStep, output: string): boolean {
   const text = output ?? ""
+  const candidates = text === stripCommandWrappers(text) ? [text] : [text, stripCommandWrappers(text)]
   return step.assert.some((pattern) => {
     try {
-      return new RegExp(pattern, "m").test(text)
+      const re = new RegExp(pattern, "m")
+      return candidates.some((c) => re.test(c))
     } catch {
       return false
     }
