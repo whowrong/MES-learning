@@ -285,15 +285,25 @@ async function createServerEnv() {
     removeContainer(name)
     return fail("sshd 已就绪但端口连不上，已自动销毁，可重试")
   }
-  // 演练账号给免密 sudo：站点自己建的一次性容器里，非 root 账号要能建目录、看服务状态。
-  // 必须在容器就绪之后再写 —— 镜像的初始化脚本会在启动阶段重建 sudoers 配置。
-  docker(["exec", name, "sh", "-c", "printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' > /etc/sudoers.d/lab && chmod 440 /etc/sudoers.d/lab"], 30000)
+  // 容器就绪之后再做两件事（镜像的初始化脚本会在启动阶段重建 sudoers 配置，所以要等它跑完）：
+  //   1) 给演练账号免密 sudo：非 root 账号要能建目录、看服务状态；
+  //   2) 预建 /data/archive 并交给演练账号：磁盘类题目（inode 打满、备份清理）直接用这个路径。
+  const provision = docker(
+    ["exec", name, "sh", "-c", [
+      "printf 'lab ALL=(ALL) NOPASSWD: ALL\\n' > /etc/sudoers.d/lab && chmod 440 /etc/sudoers.d/lab",
+      "mkdir -p /data/archive && chown -R lab:users /data 2>/dev/null || chown -R lab /data",
+      "id lab",
+    ].join("; ")],
+    30000,
+  )
+  const sudoReady = /uid=.*lab/.test(provision.stdout || "")
   return out({
     ok: true,
     env: {
       id, kind: "server", engine: "sshd", status: "ready",
       host: "127.0.0.1", port, container: name,
       createdAt: new Date().toISOString(),
+      sudoReady,
       connection: { host: "127.0.0.1", port, username, password },
     },
   })
