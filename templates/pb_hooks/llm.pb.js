@@ -46,82 +46,27 @@ var LLM_APP_CODE = "vibex"
 //   MES_LLM_SUPPORTS_TEMPERATURE  是否透传 temperature（默认 false，很多模型不接受该参数）
 // 这几个变量没配时，行为与平台部署保持一致（用渲染/注入进来的清单与 RunningHub 上游）。
 
-// 环境变量优先；没配就返回 null，交给原有的平台清单。
-function envModelMap() {
-  var raw = String($os.getenv("MES_LLM_MODELS") || "").trim()
-  if (!raw) return null
-  var maxTokens = Number($os.getenv("MES_LLM_MAX_TOKENS") || 8192)
-  if (!maxTokens || maxTokens < 16) maxTokens = 8192
-  var timeoutS = Number($os.getenv("MES_LLM_TIMEOUT_S") || 100)
-  if (!timeoutS || timeoutS < 5) timeoutS = 100
-  if (timeoutS > 120) timeoutS = 120
-  var temp = String($os.getenv("MES_LLM_SUPPORTS_TEMPERATURE") || "false").toLowerCase() === "true"
-  var map = {}
-  var parts = raw.split(",")
-  for (var i = 0; i < parts.length; i++) {
-    var name = parts[i].trim()
-    if (!name) continue
-    map[name] = {
-      rh_model_id: name,
-      max_tokens: maxTokens,
-      timeout_s: timeoutS,
-      supports_temperature: temp,
-    }
-  }
-  return Object.keys(map).length > 0 ? map : null
-}
-
-// 上游 chat 地址：兼容 {base}/v1 与 {base}/v1 两种写法
-function llmChatUrl(base) {
-  var b = String(base || "").replace(/\/+$/, "")
-  if (/\/v1$/.test(b)) return b + "/chat/completions"
-  return b + "/v1/chat/completions"
-}
-
-// 是否 RunningHub 上游（决定要不要带平台专属请求头与错误口径）
-function isRunningHubBase(base) {
-  return /runninghub\.cn/.test(String(base || ""))
-}
-
-onBootstrap(function (e) {
-  e.next()
-  try {
-    var existing = null
-    try { existing = $app.findCollectionByNameOrId("llm_jobs") } catch (_) { existing = null }
-    if (!existing) {
-      var col = new Collection({
-        type: "base", name: "llm_jobs",
-        listRule: null, viewRule: null, createRule: null, updateRule: null, deleteRule: null,
-        fields: [
-          { name: "request_id", type: "text", required: true, max: 160 },
-          { name: "model_name", type: "text", required: true, max: 80 },
-          { name: "page", type: "text", max: 64 },
-          { name: "status", type: "text", required: true, max: 32 },
-          { name: "result_text", type: "text", max: 80000 },
-          { name: "error_message", type: "text", max: 4000 },
-        ],
-        indexes: ["CREATE UNIQUE INDEX idx_llm_jobs_request_id ON llm_jobs (request_id)"],
-      })
-      $app.save(col)
-      try { $app.logger().info("llm_jobs created") } catch (_) {}
-    }
-  } catch (err) {
-    try { $app.logger().error("llm_jobs bootstrap: " + String(err && err.message || err)) } catch (_) {}
-  }
-})
-
-// Require a normal MES app account for custom routes. Superusers are intentionally
-// excluded from the browser API; collection admin remains local to PocketBase.
-function requireMesUser(e) {
-  if (!e.auth) throw new UnauthorizedError("Authentication required")
-  if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") {
-    throw new ForbiddenError("MES app account required")
-  }
-  return e.next()
-}
-
 routerAdd("GET", "/api/llm/models", function (e) {
   try {
+    // 每个 routerAdd 处理器是独立作用域, 看不到顶层函数(同本文件 readKey 的写法)
+    function envModelMap() {
+      var raw = String($os.getenv("MES_LLM_MODELS") || "").trim()
+      if (!raw) return null
+      var maxTokens = Number($os.getenv("MES_LLM_MAX_TOKENS") || 8192)
+      if (!maxTokens || maxTokens < 16) maxTokens = 8192
+      var timeoutS = Number($os.getenv("MES_LLM_TIMEOUT_S") || 100)
+      if (!timeoutS || timeoutS < 5) timeoutS = 100
+      if (timeoutS > 120) timeoutS = 120
+      var temp = String($os.getenv("MES_LLM_SUPPORTS_TEMPERATURE") || "false").toLowerCase() === "true"
+      var map = {}
+      var parts = raw.split(",")
+      for (var i = 0; i < parts.length; i++) {
+        var name = parts[i].trim()
+        if (!name) continue
+        map[name] = { rh_model_id: name, max_tokens: maxTokens, timeout_s: timeoutS, supports_temperature: temp }
+      }
+      return Object.keys(map).length > 0 ? map : null
+    }
     var allowedModels = []
     // 独立部署：环境变量里的模型清单优先；平台部署仍是渲染后的清单
     var envModels = envModelMap()
@@ -146,6 +91,33 @@ routerAdd("GET", "/api/llm/models", function (e) {
 }, requireMesUser)
 
 routerAdd("POST", "/api/llm/chat", function (e) {
+    // 每个 routerAdd 处理器是独立作用域, 看不到顶层函数(同本文件 readKey 的写法)
+    function envModelMap() {
+      var raw = String($os.getenv("MES_LLM_MODELS") || "").trim()
+      if (!raw) return null
+      var maxTokens = Number($os.getenv("MES_LLM_MAX_TOKENS") || 8192)
+      if (!maxTokens || maxTokens < 16) maxTokens = 8192
+      var timeoutS = Number($os.getenv("MES_LLM_TIMEOUT_S") || 100)
+      if (!timeoutS || timeoutS < 5) timeoutS = 100
+      if (timeoutS > 120) timeoutS = 120
+      var temp = String($os.getenv("MES_LLM_SUPPORTS_TEMPERATURE") || "false").toLowerCase() === "true"
+      var map = {}
+      var parts = raw.split(",")
+      for (var i = 0; i < parts.length; i++) {
+        var name = parts[i].trim()
+        if (!name) continue
+        map[name] = { rh_model_id: name, max_tokens: maxTokens, timeout_s: timeoutS, supports_temperature: temp }
+      }
+      return Object.keys(map).length > 0 ? map : null
+    }
+    function llmChatUrl(base) {
+      var b = String(base || "").replace(/\/+$/, "")
+      if (/\/v1$/.test(b)) return b + "/chat/completions"
+      return b + "/v1/chat/completions"
+    }
+    function isRunningHubBase(base) {
+      return /runninghub\.cn/.test(String(base || ""))
+    }
   function readKey(ev) {
     // 独立部署：密钥只从服务端环境读，绝不从浏览器带进来
     var envKey = String($os.getenv("MES_LLM_API_KEY") || "").trim()
