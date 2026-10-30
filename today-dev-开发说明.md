@@ -174,6 +174,12 @@ Muse《MES 信息文档》第 5 节记载：2026-10-28 刘先生报过一次「�
 
 新增测试：`src/game/__tests__/careerPrep.test.ts`（15 条）、`src/content/__tests__/career-quality.test.ts`（10 条）。
 
+**2026-10-30 复跑（HEAD = `684bcaf`，即本轮 VACUUM 修复 + 文档更新两次提交之后）**：`npx tsc -b` 通过；
+`npx vitest run` 22 个测试文件、625 条用例全部通过；
+`VITE_MES_SELF_HOSTED_AUTH=true npx vite build --base=/mes/` 通过，产物入口 `/mes/assets/index-fK4qGjST.js`
+——与目标机当前正在对外服务的构建产物哈希完全一致，说明线上前端与仓库当前源码同源
+（本轮两次提交只动了部署脚本与说明文档，不影响前端产物）。
+
 ## 六、部署与备份保留策略
 
 > **部署已挂起（2026-10-29，按 Muse 审核意见 + 刘先生澄清）**
@@ -656,3 +662,4 @@ Instabox 免费档的硬约束：闲置 30 分钟自动暂停（关不掉）、�
 | 进程被杀 | 6 秒内 systemd 拉起 |
 | 磁盘 | `/data` 用 1.1–1.2 G / 20 G（约 6%） |
 | 既有服务 | 机器上原有的 metabase（平台发布 3000）不受影响，外网 200 |
+| 前端产物一致性 | 本地重建入口 `/mes/assets/index-fK4qGjST.js`，与目标机在跑的前端哈希一致（线上前端 = 仓库当前源码） |
