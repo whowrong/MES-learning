@@ -125,7 +125,7 @@ function requireMesUser(e) {
 }
 
 routerAdd("GET", "/api/player_progress", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history", "delivery_history", "delivery_workspace"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -168,7 +168,7 @@ routerAdd("GET", "/api/player_progress", function (e) {
 }, requireMesUser)
 
 routerAdd("GET", "/api/player_progress/{id}", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history", "delivery_history", "delivery_workspace"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -188,7 +188,7 @@ routerAdd("GET", "/api/player_progress/{id}", function (e) {
 }, requireMesUser)
 
 routerAdd("POST", "/api/player_progress", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history", "delivery_history", "delivery_workspace"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
@@ -219,7 +219,7 @@ routerAdd("POST", "/api/player_progress", function (e) {
 }, requireMesUser)
 
 routerAdd("PATCH", "/api/player_progress/{id}", function (e) {
-  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history"]
+  var JSON_FIELDS = ["chapter_status", "gauges", "review_queue", "term_mastery", "review_state", "study_days", "interview_history", "factory_history", "ops_history", "db_history", "career_history", "delivery_history", "delivery_workspace"]
   var TEXT_FIELDS = ["last_route"]
   function recObj(rec) {
     var o = { id: rec.id, created: String(rec.get("created") || ""), updated: String(rec.get("updated") || "") }
