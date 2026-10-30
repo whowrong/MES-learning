@@ -730,3 +730,117 @@ Instabox 免费档的硬约束：闲置 30 分钟自动暂停（关不掉）、�
   输出为空；线上 `pb_public/content` 与仓库 `public/content` 逐文件一致；产物模块图文件集一致
   （46 个，文件名去掉哈希后完全相同），差异只在内容哈希 → 属于打包器版本差异（当前按 lock 里的
   vite 8.0.11 重建），不是功能改动。换句话说：线上前端仍等于仓库当前源码。
+
+## 十三、本轮：实施路线第 6 章「上线陪产」建成独立模块 + 接入 tokenrhythm.studio 文本大模型（2026-10-30 上午）
+
+### 13.1 结论先说
+
+- **「实施路线的最后一个模块」= 首页「实施路线图」第 6 章「上线陪产」**，源码里唯一一处 `施工中` 文案就在
+  `src/components/home/ChapterMap.tsx` 的锁定徽章上（`CHAPTERS[5]`，`playable:false`）。本轮把它从占位改成了
+  一个真正能进的模块：独立路由 `/delivery`，标题「上线陪产 · 交付闭环」。
+- **「AI 部分是代码问题还是单纯没接入」——两个问题都有**：
+  - *代码问题*：`templates/pb_hooks/llm.pb.js` 顶部 `var ALLOWED_MODELS = []` 是空清单，路由处理器内又被同名局部变量
+    `var allowedModels = []` 遮蔽，且上游地址硬编码成 `https://llm.runninghub.cn`；结果就是 `/api/llm/models` 返回空、
+    `/api/llm/chat` 直接 `model_not_allowed`。同时 `timeout` 写死 600s，超过 PocketBase `$http.send` 的 120s 上限。
+  - *没接入*：站内 `src/pages`、`src/components` 里**没有任何一处** import 或调用 `src/lib/llm.ts` / `aigc.ts`
+    （grep 调用点为空），唯一的 AI 触点是运维实操营的「真实服务器模式」webhook。等于上游通了也没人用。
+- **形态选择**：没有在关卡引擎里做 `ch6.json`，而是新建独立模块路由。理由：本次要求的形态是
+  「讲解卡 + 判分题 + 排序题 + 交付物工作区」，与「实习准备营」的 `cards/questions/orders` 范式 1:1 对应；
+  关卡引擎（match/judge/quiz/fill/sort）既没有讲解卡也没有写作工作区，硬塞进去要改 868 行的 `useLevel.ts`，
+  风险与收益不成比例。
+
+### 13.2 新模块「上线陪产 · 交付闭环」
+
+- 内容文件 `public/content/delivery/index.json`（内容与代码分离，加题不用改组件）：
+  - **讲解卡 8 张**（写法层：怎么写、怎么交、怎么验、上线后怎么守，不重复站内已有的定义型叙述）；
+  - **判分题 12 道**：单选 6 / 多选 4 / 判断 2，判定口径与「实习准备营」完全一致（多选少选算错）；
+  - **流程排序题 2 道**：实施九步（9 步）与上线流程（7 步），必须完全一致才算对；
+  - **交付物工作区规范**：四件交付物 —— 操作手册 / 需求调研记录 / 上线验收单 / 培训课件大纲，
+    每件带「读者、要回答什么、建议结构、字数门槛、必备要素（含正则规则）、关联术语」。
+- 代码：
+  - `src/content/delivery.ts`：类型 + 加载器 + `validateDeliveryModule`（缺字段直接报错，不渲染到一半崩）；
+  - `src/game/delivery.ts`：组卷与判定复用 `src/game/careerPrep.ts` 的 `judgeCareerQuestion` / `scoreCareerPaper` /
+    `wrongCareerTermIds`；**新增站内独一份的能力**：`checkDeliverable` / `checkWorkspace` —— 按「必备要素」逐条查文本
+    （版本号与生效日期、角色与适用范围、分步操作、截图占位、报错处理；调研时间与参与人、现场原话、需求分级、
+    范围边界、客户确认；验收范围与版本、验收项与判定标准、遗留问题与责任人、回滚方案、签字栏；对象岗位与课时、
+    分模块大纲、现场演练、考核方式、讲师与开课安排），而不是数字数。
+  - `src/pages/Delivery/*`、`src/components/delivery/*`：讲解卡面板、交付物工作区面板（含 AI 评审）、结果面板；
+    判分题与排序题直接复用 `CareerQuizCard` / `CareerOrderPanel`，保证两个模块判定与交互一致。
+- 测试：新增 `src/game/__tests__/delivery.test.ts`（12 例）与 `src/content/__tests__/delivery-quality.test.ts`（12 例）；
+  仓库全量 **649 例全绿**。内容红线测试当场抓出我写的一个正则笔误（字符类没闭合），已修。
+
+### 13.3 首页与存档接线
+
+- `ChapterDef` 增加可选 `route?: string`；第 6 章设 `route:"/delivery"`，`ChapterMap` 对带 route 的章节显示「可进入」，
+  `useHome.openChapter` 遇 route 直接跳转，不再弹「施工中」。首页「常驻模块」新增「交付物工作区」入口卡片。
+- 存档：`player_progress` 新增两个 json 字段 `delivery_history`（练习历史）、`delivery_workspace`（草稿）。
+  `shorthand_crud.pb.js` 的集合定义**只加不删**地补上这两列（DB 里已确认列存在）。
+- **`progress-guard` 的 12 个受监控字段保持不变**：如果把新字段塞进 `FIELD_ORDER`，首次部署时 DB 尚无该列，
+  快照 SQL 会失败 → before 取到空集 → compare 静默通过，反而留下校验漏洞。新字段不进 `FIELD_ORDER`。
+
+### 13.4 AI 接入（环境变量驱动的 OpenAI 兼容上游）
+
+改造 `templates/pb_hooks/llm.pb.js`，**平台部署行为不变**（没配环境变量时仍走 RunningHub 渲染清单与专有请求头）：
+
+| 环境变量 | 作用 |
+| --- | --- |
+| `MES_LLM_BASE` | 上游地址，如 `https://tokenrhythm.studio/v1`（以 `/v1` 结尾则拼 `{base}/chat/completions`，否则 `{base}/v1/chat/completions`） |
+| `MES_LLM_API_KEY` | 上游密钥，**只从服务端环境读**，绝不接受浏览器带来的头 |
+| `MES_LLM_MODELS` | 允许的模型名，逗号分隔（本轮：`mimo-v2.6-pro`） |
+| `MES_LLM_MAX_TOKENS` / `MES_LLM_TIMEOUT_S` / `MES_LLM_SUPPORTS_TEMPERATURE` | 输出上限（8192）/ 超时（100s，钳到 ≤120）/ 是否透传 temperature |
+
+- 非 RunningHub 上游时**不发** `x-rh-llm-app-code`、`X-LLM-Include-Billing` 这两个平台专有头；上游 401 映射成
+  `llm_unauthorized`（502）而不是误报 `rh_login_required`（412）。
+- 前端消费点：交付物工作区里的「AI 交付物评审」——写完一稿后点一下，`src/lib/llm.ts` 的 `listLlmModels()` 判断可用模型、
+  `callLlmWithFallback()` 走站点自己的 `/api/llm/chat`，按「缺什么 / 哪里写得不好 / 可直接替换的句子 / 评分」四段输出。
+  这是**站内第一个真实消费大模型的业务功能**（此前只有运维 webhook）。没有可用模型时前端明确显示「服务端未启用模型」，
+  不静默降级。
+
+### 13.5 密钥落点
+
+- 新建 `/data/mes/secrets/llm.env`（`-rw------- user:user`，目录本身 `drwx------`），只放 `MES_LLM_*` 变量。
+- `mes-pocketbase.service` 与 `mes-edge-proxy.service` 各加一行 `EnvironmentFile=-/data/mes/secrets/llm.env`
+  （`-` 前缀表示文件缺失不阻断启动；原单元已备份为 `*.service.bak-20261030`）。
+- 密钥值**不进仓库、不进本文档、不进 bundle / diff / 日志**；仓库里只有变量名与说明。
+- **当前状态**：上游地址与模型名已按 `https://tokenrhythm.studio/v1` + `mimo-v2.6-pro` 配好，**密钥行仍为空**
+  （`MES_LLM_API_KEY=`）。填入后 `sudo systemctl restart mes-pocketbase` 即生效；未填时后端明确返回
+  `503 llm_not_configured`，前端显示「服务端未配置上游密钥」，不会假装能用。
+
+### 13.6 部署与验证记录（目标机 instabox dev）
+
+- 提交链：`6091d8b`（对齐目标机上比沙箱副本多的一个文档提交）→ `0e5a34b` 交付闭环模块 + AI 接入 →
+  `ff2352e` 部署校验清单补 `content/delivery/index.json` → `cb9feb1`/`4dc4b8c` hook 作用域与自带鉴权修复 →
+  `cf503d1` 存档白名单放行新字段。**未推送远端**（缺 GitHub 写凭据，且本轮明确不推 main / wabi-dev、不打 tag）。
+- 部署：`git bundle` → 目标机 `git fetch` 快进到 `cf503d1` → `npx vite build --base=/mes/` →
+  `deploy/mes-deploy.sh`（备份 → 部署 → 校验 → 失败自动回滚），备份目录 `/data/mes/backups/mes-backup-20261030-042710`。
+- 部署脚本自带校验全部通过：首页 200、入口脚本 200、四个内容文件 200（含新增的 `content/delivery/index.json`）、
+  `__pb/api/player_progress` 401（未登录属预期）；`progress-guard` 部署前后比对 **1 条记录、changed/missing/added 全空**。
+- 公网入口基线不变：未认证 `/mes/` = 401、已认证 = 200、未认证 `/mes/delivery` = 401、已认证 = 200、内容文件 = 200、根路径 = 302。
+- 新字段写路径实测：`PATCH delivery_workspace` → 200 且回读一致 → 再 PATCH 还原为 `{}`；受监控字段一字未动
+  （`study_days`、`last_route` 等保持原值）。
+- **AI 端到端实测（用本地同协议 mock 上游替换最后一跳，站点自身的链路全部真实跑通）**：
+  站内登录取令牌 → `GET /mes/__pb/api/llm/models` = 200，返回 `["mimo-v2.6-pro"]`（`max_tokens=8192`、`timeout_s=100`）→
+  `POST /mes/__pb/api/llm/chat` = 200，返回模型文本与 `usage`；mock 侧抓到的真实上游请求是
+  `POST {base}/v1/chat/completions`、`Authorization: Bearer <env 里的密钥>`、`Content-Type: application/json`、
+  **不带** `x-rh-llm-app-code` / `X-LLM-Include-Billing`，请求体 `{"model":"mimo-v2.6-pro","messages":[…],"max_tokens":8192,"stream":false}`。
+  连跑两次 PocketBase 重启，结果一致。上游协议本身此前已对 `tokenrhythm.studio` 实测通过（`/v1/models` 25 个模型、
+  `chat/completions` 用 `mimo-v2.6-pro` 返回 200 与「连通」）。
+
+### 13.7 顺手修掉的两个既有缺陷（都是这轮被触发的）
+
+1. **`llm.pb.js` 依赖别的 hook 文件的 `requireMesUser`**：PocketBase 加载多个 hook 文件的顺序不保证，
+   顺序一变整个 `llm.pb.js` 加载失败（`ReferenceError: requireMesUser is not defined`），
+   `/api/llm/*` 路由整体消失（GET 落到 SPA 回退返回 HTML、POST 返回 404）。
+   现在 `llm.pb.js` 自带一份 `requireMesUser`，与 `aigc.pb.js` / `lab_proxy.pb.js` 同一套写法，不再依赖加载顺序。
+2. **存档读写白名单没放行新字段**：`shorthand_crud.pb.js` 的 `JSON_FIELDS` 没包含 `delivery_history` /
+   `delivery_workspace`，导致 PATCH 返回 200 但字段被丢弃（DB 列在、值写不进）。已把两个字段加进 4 处白名单。
+
+### 13.8 本轮仍然待办（诚实项）
+
+- **密钥待填**：`/data/mes/secrets/llm.env` 的 `MES_LLM_API_KEY=` 现在是空的。填上刘先生给的 `sk_tr_...` 后
+  `sudo systemctl restart mes-pocketbase` 即完成最后一跳；本轮已用同协议 mock 证明除密钥外的链路全部打通。
+- **AIGC 仍不可用**：tokenrhythm 只提供 chat 模型，没有图像/视频生成；站内 AIGC 走 RunningHub 专有的
+  media/upload 与 openapi/v2/query 接口，本轮不臆造凭据、不改其实现，只在 `/api/aigc/models` 的空清单里补了
+  明确原因说明（前端据此提示，而不是静默返回空）。
+- **第 5 章「质量与库存」仍是「施工中」**：它是实施路线图里的另一格（关卡引擎形态），不在本次「最后一个模块」的范围内。
+- **远端未推送**：仍缺 GitHub 写凭据，本轮按约定只落本地提交与目标机部署。
