@@ -28,6 +28,31 @@
 
 // Require a normal MES app account for custom routes. Superusers are intentionally
 // excluded from the browser API; collection admin remains local to PocketBase.
+function decodeUtf8Bytes(bytes) {
+  var out = ""
+  var i = 0
+  var len = bytes.length
+  while (i < len) {
+    var b = bytes[i++] & 0xff
+    if (b < 0x80) { out += String.fromCharCode(b); continue }
+    if (b >= 0xc0 && b < 0xe0 && i < len) {
+      out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f)); continue
+    }
+    if (b >= 0xe0 && b < 0xf0 && i + 1 < len) {
+      var b1 = bytes[i++] & 0x3f, b2 = bytes[i++] & 0x3f
+      out += String.fromCharCode(((b & 0x0f) << 12) | (b1 << 6) | b2); continue
+    }
+    if (b >= 0xf0 && i + 2 < len) {
+      var c1 = bytes[i++] & 0x3f, c2 = bytes[i++] & 0x3f, c3 = bytes[i++] & 0x3f
+      var cp = ((b & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3
+      cp -= 0x10000
+      out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)); continue
+    }
+    out += "\ufffd"
+  }
+  return out
+}
+
 function requireMesUser(e) {
   if (!e.auth) throw new UnauthorizedError("Authentication required")
   if (e.auth.isSuperuser() || e.auth.collection().name !== "mes_users") {
@@ -38,30 +63,6 @@ function requireMesUser(e) {
 
 
 routerAdd("GET", "/api/dblab/connections", function (e) {
-  function decodeUtf8Bytes(bytes) {
-    var out = ""
-    var i = 0
-    var len = bytes.length
-    while (i < len) {
-      var b = bytes[i++] & 0xff
-      if (b < 0x80) { out += String.fromCharCode(b); continue }
-      if (b >= 0xc0 && b < 0xe0 && i < len) {
-        out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f)); continue
-      }
-      if (b >= 0xe0 && b < 0xf0 && i + 1 < len) {
-        var b1 = bytes[i++] & 0x3f, b2 = bytes[i++] & 0x3f
-        out += String.fromCharCode(((b & 0x0f) << 12) | (b1 << 6) | b2); continue
-      }
-      if (b >= 0xf0 && i + 2 < len) {
-        var c1 = bytes[i++] & 0x3f, c2 = bytes[i++] & 0x3f, c3 = bytes[i++] & 0x3f
-        var cp = ((b & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3
-        cp -= 0x10000
-        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff)); continue
-      }
-      out += "\ufffd"
-    }
-    return out
-  }
   function runLab(script, payload) {
     var nodeBin = $os.getenv("MES_LAB_NODE") || "node"
     var serverDir = $os.getenv("MES_SERVER_DIR") || "/workspace/pocketbase-bin/server"
