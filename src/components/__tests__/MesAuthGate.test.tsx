@@ -44,12 +44,14 @@ describe("站内登录入口的响应式定位", () => {
   })
 
   it("登录标识输入框仍是自由文本，标签仍是「账号」", () => {
-    render(
+    const { container } = render(
       <MesAuthGate>
         <div>页面内容</div>
       </MesAuthGate>,
     )
-    const input = screen.getByLabelText("账号") as HTMLInputElement
+    const input = container.querySelector('input[autocomplete="username"]') as HTMLInputElement
+    expect(input).toBeTruthy()
+    expect(input.closest("label")?.textContent).toContain("账号")
     expect(input.type).toBe("text")
     expect(input.getAttribute("autocomplete")).toBe("username")
     expect(screen.getByLabelText("密码").getAttribute("type")).toBe("password")

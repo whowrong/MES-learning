@@ -45,7 +45,7 @@ export function useSandbox() {
       try {
         const [mod, progressRes] = await Promise.all([
           loadSandboxContent(),
-          fetch(progressApi()).catch(() => null),
+          pbFetch(progressApi()).catch(() => null),
         ])
         if (cancelled) return
         setContent(mod)
