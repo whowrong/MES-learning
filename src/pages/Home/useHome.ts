@@ -33,6 +33,9 @@ function normalizeRecord(raw: Partial<ProgressRecord> & { id?: string }): Progre
     ops_history: Array.isArray(raw.ops_history) ? raw.ops_history : [],
     db_history: Array.isArray(raw.db_history) ? raw.db_history : [],
     career_history: Array.isArray(raw.career_history) ? raw.career_history : [],
+    delivery_history: Array.isArray(raw.delivery_history) ? raw.delivery_history : [],
+    delivery_workspace:
+      raw.delivery_workspace && typeof raw.delivery_workspace === "object" ? raw.delivery_workspace : {},
     last_route: raw.last_route ?? "/home",
   }
   return normalized
@@ -52,6 +55,7 @@ export function useHome() {
   const [opsCount, setOpsCount] = useState(0)
   const [dbCount, setDbCount] = useState(0)
   const [careerCount, setCareerCount] = useState(0)
+  const [deliveryCount, setDeliveryCount] = useState(0)
   // 锁定章节提示弹窗（点未开放章节卡时）
   const [lockedChapter, setLockedChapter] = useState<ChapterDef | null>(null)
   // 施工中占位弹窗（目标页面尚未上线时，避免跳白屏）
@@ -67,6 +71,7 @@ export function useHome() {
     setOpsCount((rec.ops_history ?? []).length)
     setDbCount((rec.db_history ?? []).length)
     setCareerCount((rec.career_history ?? []).length)
+    setDeliveryCount((rec.delivery_history ?? []).length)
     if (rec.id) setRecordId(rec.id)
   }, [])
 
@@ -127,6 +132,11 @@ export function useHome() {
   }, [applyRecord])
 
   const openChapter = useCallback((ch: ChapterDef) => {
+    // 独立模块直接进，不查关卡解锁状态。
+    if (ch.route) {
+      navigate(ch.route)
+      return
+    }
     const state = chapterState[String(ch.id)] ?? (ch.playable ? "open" : "locked")
     if (state === "locked" || !ch.playable) {
       setLockedChapter(ch)
@@ -163,6 +173,10 @@ export function useHome() {
 
   const openCareerPrep = useCallback(() => {
     navigate("/career-prep")
+  }, [navigate])
+
+  const openDelivery = useCallback(() => {
+    navigate("/delivery")
   }, [navigate])
 
   const openDebug = useCallback(() => {
@@ -213,7 +227,9 @@ export function useHome() {
     openOpsTraining,
     openDbTraining,
     openCareerPrep,
+    openDelivery,
     careerCount,
+    deliveryCount,
     openDebug,
     openSandbox,
     closeDialogs,

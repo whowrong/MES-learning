@@ -35,6 +35,54 @@ var ALLOWED_MODELS = []
 var LLM_BASE = "https://llm.runninghub.cn"
 var LLM_APP_CODE = "vibex"
 
+// 【独立部署注记 · 环境变量驱动】
+// 独立部署不跑 RunningHub 平台，模型清单、上游地址与密钥都从进程环境读：
+//   MES_LLM_BASE        上游 OpenAI 兼容地址，例如 https://tokenrhythm.studio/v1
+//                        （以 /v1 结尾时按 {base}/chat/completions 拼，否则 {base}/v1/chat/completions）
+//   MES_LLM_API_KEY     上游密钥，只落在目标机 /data/mes/secrets 与进程环境，绝不进仓库
+//   MES_LLM_MODELS      允许使用的模型名，逗号分隔；上游模型名与这里的名字一致
+//   MES_LLM_MAX_TOKENS  单次请求最大输出 token（默认 8192）
+//   MES_LLM_TIMEOUT_S   单次请求上游超时秒数（默认 100，PocketBase $http.send 上限 120）
+//   MES_LLM_SUPPORTS_TEMPERATURE  是否透传 temperature（默认 false，很多模型不接受该参数）
+// 这几个变量没配时，行为与平台部署保持一致（用渲染/注入进来的清单与 RunningHub 上游）。
+
+// 环境变量优先；没配就返回 null，交给原有的平台清单。
+function envModelMap() {
+  var raw = String($os.getenv("MES_LLM_MODELS") || "").trim()
+  if (!raw) return null
+  var maxTokens = Number($os.getenv("MES_LLM_MAX_TOKENS") || 8192)
+  if (!maxTokens || maxTokens < 16) maxTokens = 8192
+  var timeoutS = Number($os.getenv("MES_LLM_TIMEOUT_S") || 100)
+  if (!timeoutS || timeoutS < 5) timeoutS = 100
+  if (timeoutS > 120) timeoutS = 120
+  var temp = String($os.getenv("MES_LLM_SUPPORTS_TEMPERATURE") || "false").toLowerCase() === "true"
+  var map = {}
+  var parts = raw.split(",")
+  for (var i = 0; i < parts.length; i++) {
+    var name = parts[i].trim()
+    if (!name) continue
+    map[name] = {
+      rh_model_id: name,
+      max_tokens: maxTokens,
+      timeout_s: timeoutS,
+      supports_temperature: temp,
+    }
+  }
+  return Object.keys(map).length > 0 ? map : null
+}
+
+// 上游 chat 地址：兼容 {base}/v1 与 {base}/v1 两种写法
+function llmChatUrl(base) {
+  var b = String(base || "").replace(/\/+$/, "")
+  if (/\/v1$/.test(b)) return b + "/chat/completions"
+  return b + "/v1/chat/completions"
+}
+
+// 是否 RunningHub 上游（决定要不要带平台专属请求头与错误口径）
+function isRunningHubBase(base) {
+  return /runninghub\.cn/.test(String(base || ""))
+}
+
 onBootstrap(function (e) {
   e.next()
   try {
@@ -75,6 +123,9 @@ function requireMesUser(e) {
 routerAdd("GET", "/api/llm/models", function (e) {
   try {
     var allowedModels = []
+    // 独立部署：环境变量里的模型清单优先；平台部署仍是渲染后的清单
+    var envModels = envModelMap()
+    if (envModels) allowedModels = envModels
     var items = []
     for (var key in allowedModels) {
       if (!Object.prototype.hasOwnProperty.call(allowedModels, key)) continue
@@ -96,6 +147,9 @@ routerAdd("GET", "/api/llm/models", function (e) {
 
 routerAdd("POST", "/api/llm/chat", function (e) {
   function readKey(ev) {
+    // 独立部署：密钥只从服务端环境读，绝不从浏览器带进来
+    var envKey = String($os.getenv("MES_LLM_API_KEY") || "").trim()
+    if (envKey) return envKey
     try { var h = ev.requestInfo().headers || {}; var k = h["x_rh_api_key"] || h["X-Rh-Api-Key"] || h["x-rh-api-key"] || ""; if (k) return String(k) } catch (_) {}
     return $os.getenv("RH_LLM_API_KEY") || $os.getenv("RH_API_KEY") || ""
   }
@@ -166,8 +220,17 @@ routerAdd("POST", "/api/llm/chat", function (e) {
     var allowedModels = []
     var llmBase = "https://llm.runninghub.cn"
     var llmAppCode = "vibex"
+    // 独立部署：环境变量里的模型清单与上游地址优先
+    var envModels = envModelMap()
+    if (envModels) allowedModels = envModels
+    var envBase = String($os.getenv("MES_LLM_BASE") || "").trim()
+    if (envBase) llmBase = envBase
+    var rhMode = isRunningHubBase(llmBase)
     var key = readKey(e)
-    if (!key) return e.json(412, { error: "rh_login_required", message: "请用右上角按钮登录 RunningHub" })
+    if (!key) {
+      if (!rhMode) return e.json(503, { error: "llm_not_configured", message: "服务端未配置上游密钥 (MES_LLM_API_KEY)" })
+      return e.json(412, { error: "rh_login_required", message: "请用右上角按钮登录 RunningHub" })
+    }
 
     var body = e.requestInfo().body || {}
     var modelName = String(body.model || "").trim()
@@ -200,8 +263,10 @@ routerAdd("POST", "/api/llm/chat", function (e) {
 
     var maxTokens = Number(body.max_tokens || cfg.max_tokens || 8192)
     if (!maxTokens || maxTokens < 16) maxTokens = 8192
-    var timeoutS = Number(cfg.timeout_s || 600)
-    if (!timeoutS || timeoutS < 600) timeoutS = 600
+    var timeoutS = Number(cfg.timeout_s || 100)
+    if (!timeoutS || timeoutS < 5) timeoutS = 100
+    // PocketBase $http.send 的 timeout 上限是 120 秒，超了会直接抛错
+    if (timeoutS > 120) timeoutS = 120
     var payload = {
       model: String(cfg.rh_model_id || ""),
       messages: messages,
@@ -212,15 +277,25 @@ routerAdd("POST", "/api/llm/chat", function (e) {
       payload.temperature = body.temperature
     }
 
-    var res = $http.send({
-      url: llmBase + "/v1/chat/completions", method: "POST",
+    var reqHeaders = { "Authorization": "Bearer " + key, "Content-Type": "application/json" }
+    if (rhMode) {
       // X-LLM-Include-Billing 让响应体带 billing.charged_amount (本次平台现金/元), 用于收益看板归属
-      headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json", "x-rh-llm-app-code": llmAppCode, "X-LLM-Include-Billing": "true" },
+      reqHeaders["x-rh-llm-app-code"] = llmAppCode
+      reqHeaders["X-LLM-Include-Billing"] = "true"
+    }
+    var res = $http.send({
+      url: llmChatUrl(llmBase), method: "POST",
+      headers: reqHeaders,
       body: JSON.stringify(payload), timeout: timeoutS,
     })
     var rawBody = (res && typeof res.raw === "string") ? res.raw : ""
 
-    if ((res && res.statusCode === 401) || isRhAuthErr(rawBody)) {
+    if ((res && res.statusCode === 401) || (rhMode && isRhAuthErr(rawBody))) {
+      if (!rhMode) {
+        var um = "上游鉴权失败 (HTTP 401)"
+        jobRec.set("status", "failed"); jobRec.set("error_message", um); $app.save(jobRec)
+        return e.json(502, { error: "llm_unauthorized", message: um, fingerprint: um.substring(0, 80) })
+      }
       jobRec.set("status", "failed"); jobRec.set("error_message", "rh_login_required"); $app.save(jobRec)
       return e.json(412, { error: "rh_login_required", message: "RunningHub 登录态已过期" })
     }
@@ -237,6 +312,14 @@ routerAdd("POST", "/api/llm/chat", function (e) {
     }
 
     var text = (parsed.choices[0].message && parsed.choices[0].message.content) || ""
+    if (Array.isArray(text)) {
+      var parts2 = []
+      for (var pi = 0; pi < text.length; pi++) {
+        var seg = text[pi]
+        if (seg && typeof seg === "object" && seg.text) parts2.push(String(seg.text))
+      }
+      text = parts2.join("")
+    }
     jobRec.set("status", "success")
     jobRec.set("result_text", text.substring(0, 80000))
     $app.save(jobRec)

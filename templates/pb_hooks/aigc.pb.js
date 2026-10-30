@@ -370,7 +370,13 @@ routerAdd("GET", "/api/aigc/models", function (e) {
         media_params: cfg.media_params || [],
       })
     }
-    return e.json(200, { ok: true, models: items })
+    // 独立部署没有 RunningHub 媒体服务凭据时, 清单为空是「明确不可用」而不是静默失败:
+    // 前端据此提示原因, 不去猜一个不存在的模型。
+    var note = ""
+    if (items.length === 0) {
+      note = "图像/视频生成走 RunningHub 媒体服务(openapi/v2 媒体上传与任务查询), 当前部署未配置该服务凭据, AIGC 保持不可用; 站内文本大模型走 /api/llm/*。"
+    }
+    return e.json(200, { ok: true, models: items, note: note })
   } catch (err) {
     var msg = String(err && err.message || err)
     return e.json(500, { error: "aigc_models_error", message: msg, fingerprint: msg.substring(0, 80) })

@@ -41,6 +41,9 @@ onBootstrap(function (e) {
         { name: "ops_history", type: "json" },
         { name: "db_history", type: "json" },
         { name: "career_history", type: "json" },
+        // 上线陪产 · 交付闭环：练习历史与交付物草稿（只加字段，不动已有数据）
+        { name: "delivery_history", type: "json" },
+        { name: "delivery_workspace", type: "json" },
         { name: "last_route", type: "text", max: 500 },
         { name: "created", type: "autodate", system: true, onCreate: true, onUpdate: false },
         { name: "updated", type: "autodate", system: true, onCreate: true, onUpdate: true },

@@ -1,4 +1,4 @@
-import { BookOpen, Factory, FlaskConical, Video, Server, Database, Target, ArrowRight } from "lucide-react"
+import { BookOpen, Factory, FlaskConical, Video, Server, Database, Target, ArrowRight, ClipboardCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { SpotlightCard } from "@/components/bits/SpotlightCard"
 
@@ -9,19 +9,21 @@ interface ModuleEntriesProps {
   opsCount: number
   dbCount: number
   careerCount: number
+  deliveryCount: number
   onGlossary: () => void
   onInterview: () => void
   onFactoryTypes: () => void
   onOpsTraining: () => void
   onDbTraining: () => void
   onCareerPrep: () => void
+  onDelivery: () => void
   onSandbox: () => void
 }
 
 const CARD_ENTER =
   "animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
 
-export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, careerCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onCareerPrep, onSandbox }: ModuleEntriesProps) {
+export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, careerCount, deliveryCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onCareerPrep, onDelivery, onSandbox }: ModuleEntriesProps) {
   return (
     <section className="py-12">
       <div className="mx-auto max-w-6xl px-6">
@@ -219,6 +221,40 @@ export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCo
                 </span>
                 <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
                   开始准备
+                  <ArrowRight className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                </span>
+              </span>
+            </button>
+          </SpotlightCard>
+          <SpotlightCard
+            className={`group h-full rounded-2xl bg-card shadow-md [animation-delay:360ms] ${CARD_ENTER}`}
+          >
+            <button
+              type="button"
+              onClick={onDelivery}
+              className="relative flex h-full w-full items-start gap-4 p-6 text-left focus-visible:shadow-[var(--focus-ring)]"
+            >
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary transition-transform duration-300 group-hover:scale-110">
+                <ClipboardCheck className="h-6 w-6" />
+              </span>
+              <span className="flex h-full flex-col">
+                <span className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-foreground">交付物工作区</span>
+                  <Badge variant="outline" className="rounded-full bg-primary/10 text-primary">
+                    上线陪产
+                  </Badge>
+                  {deliveryCount > 0 && (
+                    <Badge variant="outline" className="rounded-full text-muted-foreground">
+                      已练 {deliveryCount} 场
+                    </Badge>
+                  )}
+                </span>
+                <span className="mt-1 text-sm leading-6 text-muted-foreground">
+                  操作手册、需求调研记录、上线验收单、培训课件大纲：先讲清怎么写，再在站内写一稿，
+                  系统按版本号、角色矩阵、截图占位、验收判定、回滚方案这些必备要素逐条校验。
+                </span>
+                <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
+                  进入工作区
                   <ArrowRight className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </span>
               </span>

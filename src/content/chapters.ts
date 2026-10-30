@@ -13,6 +13,11 @@ export interface ChapterDef {
   lockedTip: string
   /** 当前版本是否已开放游玩（第一周仅第一章） */
   playable: boolean
+  /**
+   * 独立模块路由：有值时首页路线卡片直接跳这个模块，不走关卡引擎，
+   * 也不受「通关上一章才解锁」的链条约束（例如上线陪产 · 交付闭环）。
+   */
+  route?: string
 }
 
 export const CHAPTERS: ChapterDef[] = [
@@ -68,13 +73,14 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     id: 6,
-    title: "上线陪产",
-    scene: "上线日风暴",
+    title: "上线陪产 · 交付闭环",
+    scene: "把项目交出去",
     story:
-      "条码打印机坏了、班组长当众发火、网络断了、昨晚数据对不上。限时排定处理顺序、选对沟通话术，最后拿到你的实施顾问评级。",
-    tags: ["突发事件优先级", "关键用户", "复盘卡"],
-    lockedTip: "这是综合关：上线第一天连环突发事件，考你处理顺序和沟通话术，结局按六项仪表给出顾问评级和复盘报告。",
+      "四件交付物怎么写、怎么交、怎么验收；上线那天怎么割接，之后第一个月巡检什么，出了事怎么回滚。实施顾问的最后一段路在这里补齐。",
+    tags: ["操作手册", "需求调研记录", "上线验收单", "培训课件"],
+    lockedTip: "",
     playable: false,
+    route: "/delivery",
   },
 ]
 
@@ -174,6 +180,10 @@ export interface ProgressRecord {
   db_history?: DbHistoryEntry[]
   /** 实习准备营练习历史（每次组卷测验追加一条） */
   career_history?: CareerHistoryEntry[]
+  /** 上线陪产 · 交付闭环练习历史（每次实战测验追加一条） */
+  delivery_history?: DeliveryHistoryEntry[]
+  /** 交付物工作区草稿：{ 交付物 id: 正文 } */
+  delivery_workspace?: Record<string, string>
   last_route: string
 }
 
@@ -216,6 +226,14 @@ export interface CareerHistoryEntry {
   at: string
   /** 赛道：direction1 / direction4 / base */
   track: string
+  score: number
+  total: number
+}
+
+/** 一次交付闭环测验的存档记录 */
+export interface DeliveryHistoryEntry {
+  /** 本地日期时间串 YYYY-MM-DD HH:mm */
+  at: string
   score: number
   total: number
 }

@@ -9,6 +9,8 @@ interface ChapterMapProps {
 }
 
 function stateOf(ch: ChapterDef, chapterState: Record<string, ChapterState>): ChapterState {
+  // 独立模块（route）不受关卡解锁链约束：内容建好了就能进，不再显示「施工中」。
+  if (ch.route) return "open"
   return chapterState[String(ch.id)] ?? (ch.playable ? "open" : "locked")
 }
 

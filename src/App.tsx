@@ -12,6 +12,7 @@ const FactoryTypesRoute = lazy(() => import("./pages/FactoryTypes/index.tsx"))
 const OpsTrainingRoute = lazy(() => import("./pages/OpsTraining/index.tsx"))
 const DbTrainingRoute = lazy(() => import("./pages/DbTraining/index.tsx"))
 const CareerPrepRoute = lazy(() => import("./pages/CareerPrep/index.tsx"))
+const DeliveryRoute = lazy(() => import("./pages/Delivery/index.tsx"))
 
 function RouteLoading() {
   return (
@@ -44,6 +45,7 @@ function App() {
         <Route path="/ops-training" element={<OpsTrainingRoute />} />
         <Route path="/db-training" element={<DbTrainingRoute />} />
         <Route path="/career-prep" element={<CareerPrepRoute />} />
+        <Route path="/delivery" element={<DeliveryRoute />} />
         <Route path="*" element={<HomeRoute />} />
       </Routes>
     </Suspense>
