@@ -493,6 +493,14 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 | `HEAD`（本轮） | 第十一节改为推送后现状；新增第十二节「instabox 部署实录」 |
 | `5d25a7f` | 记录本轮在当前 HEAD 的自测复跑结果与前端产物一致性 |
 | `6200a27` | **本轮（第二轮）**：`deploy/edge-proxy.mjs` 令牌来源改为「`x-pb-auth` 优先、`authorization` 回落」；说明文档补 12.3（裸 IP 入口会 401、推荐走域名）与 12.8（本轮改动、复测与入口哈希变化的解释）；第十一节改为「推送待凭据」现状 |
+| `6091d8b` | 第十一节改为已推送现状；追加上一轮推送记录 |
+| `0e5a34b` | **本轮**：新增「上线陪产 · 交付闭环」模块（实施路线第 6 章）并接入 tokenrhythm.studio 文本大模型 |
+| `ff2352e` | 部署校验清单补上 `content/delivery/index.json` |
+| `cb9feb1` | PocketBase 路由看不到文件顶层函数 → 环境变量辅助函数移入路由处理器作用域 |
+| `4dc4b8c` | `llm.pb.js` 自带 `requireMesUser`，不再依赖别的 hook 文件的加载顺序 |
+| `cf503d1` | 存档读写白名单放行 `delivery_history` / `delivery_workspace` |
+| `7827c95` | 文档第十三节：交付闭环模块 + AI 接入的部署与验证记录 |
+| `0a06c0b` | **本轮**：站内登录标识改为自定义账号名，登录框不再强制邮箱格式 |
 
 **重点一：简写 CRUD 钩子的存档修复**（`templates/pb_hooks/shorthand_crud.pb.js`）
 
@@ -508,37 +516,33 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 逐字节一致、`created`/`updated` 未变、新字段为空值；再只 PATCH 新字段，老字段仍逐字节一致。
 完整论证与只读排查清单见第 4.2 节。
 
-**推送状态与还缺什么**（2026-10-30 上午已推送完成，本节为推送后的现状）
+**推送状态与还缺什么**（2026-10-30 中午已推送完成，本节为推送后的现状）
 
-- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `d7b62ad`，与本地 HEAD 逐位一致。
-  本轮改走 HTTPS，用的是刘先生当场给出的仓库 PAT（有 repo 写权限）：推送时它只作为本地
+- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `0a06c0b`，与推送时的本地 HEAD 逐位一致。
+  本轮仍走 HTTPS，用的是刘先生当场给出的仓库 PAT（有 repo 写权限）：推送时它只作为本地
   `credential.helper` 凭据文件（600 权限）使用，推送结束后即删除；
   **PAT 不写入仓库任何文件、文档、bundle、diff、git 历史或日志**，本文档与交付物中也不出现。
-- **本次推送的提交范围**（相对上一轮远端 `4aa4e1d` 领先的 4 个提交，fast-forward）：
+- **本轮推了两次**（第一次代码、第二次本节所在的文档提交）：
 
-  | 提交 | 内容 |
-  | --- | --- |
-  | `09ba071` | VACUUM INTO 目标路径改单引号（存档一致性快照修复） |
-  | `684bcaf` | 第十一节改为推送后现状；新增第十二节「instabox 部署实录」 |
-  | `5d25a7f` | 记录本轮在当前 HEAD 的自测复跑结果与前端产物一致性 |
-  | `d7b62ad` | edge-proxy 令牌来源改为 `x-pb-auth` 优先、`authorization` 回落；补 12.3 / 12.8 文档 |
+  | 次序 | 范围 | 说明 |
+  | --- | --- | --- |
+  | 第一次 | `6091d8b..0a06c0b` | 实施路线第 6 章模块 + AI 接入 + 登录标识改动，共 7 个提交（见上表） |
+  | 第二次 | 本节所在的文档提交 | 推送后远端 `today-dev` 的最终状态 = 该提交 |
 
 - **远端核对（推送后，在目标机直连 GitHub 只读复核）**：
-  - 分支：`today-dev` = `d7b62ad81c3f660d2ab916d29712ec5304319ff3`（= 本地 HEAD，逐位一致）、
+  - 分支：`today-dev` = `0a06c0b20fe7be16223f0954030e6bfc9931f209`（= 推送时的本地 HEAD，逐位一致）、
     `main` = `b5c8335`（未动）、`wabi-dev` = `bed9246`（未动），远端仍恰 3 支；
   - tag：仍是基线那 12 个 v1.x（`v1.7.0`–`v1.14.2`），名称与对象 SHA 与本地 `refs/tags`
     **逐条一致**，无新增、无缺失、无删除；
-  - 本次是 fast-forward（`4aa4e1d..d7b62ad`）：**没有 force push，没有删除任何远端引用**，
-    没有推 `main` / `wabi-dev`，没有打新 tag。
-- **并行任务的提交**：「实施路线收尾模块建设与 AI 接入」那条线在本轮推送时**尚未**在本地
-  `today-dev` 产生提交，因此本次推送只包含上表这 4 个提交；那条线完成后的提交再单独推一次 `today-dev`。
-- **本节所在的这次文档提交**（把第十一节改成已推送现状）在推送 `d7b62ad` 之后紧接着推送，
-  因此远端 `today-dev` 的最终状态 = 本节所在的提交；随附交付物按该最终树生成。
-- **GitHub 上那条 Deploy key**：仍然没有对应私钥（不可用，也没有泄露风险）；本轮改走 HTTPS 后
+  - 两次都是 fast-forward：**没有 force push，没有删除任何远端引用**，
+    没有推 `main` / `wabi-dev`，没有打新 tag（推送参数：`--no-follow-tags --no-force` + 显式 refspec）。
+- **「实施路线收尾模块建设与 AI 接入」那条线**：该线此前未推送的提交（`0e5a34b`…`7827c95`）
+  已随本轮第一次推送一并进入远端 `today-dev`（旧稿里「尚未推送」的表述已过时）。
+- **GitHub 上那条 Deploy key**：仍然没有对应私钥（不可用，也没有泄露风险）；本轮继续走 HTTPS，
   更不需要它，删留仍由刘先生定，本轮不擅自处理。
 - 随附交付物（按最终树重新生成）：
   - `today-dev.bundle`（含 `today-dev` 分支全量状态，克隆后即可推送）；
-  - `today-dev-vs-4aa4e1d.diff`（相对 `4aa4e1d` 的本轮改动：VACUUM 修复、文档更新、自测记录、edge-proxy 修复）；
+  - `today-dev-vs-4aa4e1d.diff`（相对 `4aa4e1d` 的本轮改动：第 6 章模块 + AI 接入 + 登录标识 + 文档更新）；
   - `today-dev-vs-wabi-dev.diff`（相对 `wabi-dev`@bed9246 的全量 diff）。
 
 **重点二：构建相关**
@@ -837,10 +841,119 @@ Instabox 免费档的硬约束：闲置 30 分钟自动暂停（关不掉）、�
 
 ### 13.8 本轮仍然待办（诚实项）
 
-- **密钥待填**：`/data/mes/secrets/llm.env` 的 `MES_LLM_API_KEY=` 现在是空的。填上刘先生给的 `sk_tr_...` 后
-  `sudo systemctl restart mes-pocketbase` 即完成最后一跳；本轮已用同协议 mock 证明除密钥外的链路全部打通。
+- ~~**密钥待填**~~ → **已完成**（第十四节 14.5）：密钥已写入 `/data/mes/secrets/llm.env`（600 `user:user`，
+  目录 700），重启 PocketBase 后对真实上游 `mimo-v2.6-pro` 实测 HTTP 200（耗时 8.579s、usage total 68、
+  回复要点正确、调用在 `llm_jobs` 落库）。
 - **AIGC 仍不可用**：tokenrhythm 只提供 chat 模型，没有图像/视频生成；站内 AIGC 走 RunningHub 专有的
   media/upload 与 openapi/v2/query 接口，本轮不臆造凭据、不改其实现，只在 `/api/aigc/models` 的空清单里补了
   明确原因说明（前端据此提示，而不是静默返回空）。
 - **第 5 章「质量与库存」仍是「施工中」**：它是实施路线图里的另一格（关卡引擎形态），不在本次「最后一个模块」的范围内。
-- **远端未推送**：仍缺 GitHub 写凭据，本轮按约定只落本地提交与目标机部署。
+- ~~**远端未推送**~~ → **已完成**（第十一节 / 第十四节 14.7）：`today-dev` 已推到 `origin`；
+  推送用 PAT 只作 600 权限凭据文件、推完立即删除、复检无残留；`main` / `wabi-dev` / 12 个 tag 均未动。
+
+## 十四、本轮：站内账号标识改为 monika + 上游密钥实测 + 推送 today-dev（2026-10-30 中午）
+
+### 14.1 先定位账号载体（确认改的是哪个账号）
+
+| 检查项 | 结果 |
+| --- | --- |
+| Linux 系统账号 | `getent passwd monika` 无此用户 → **不是系统账号** |
+| nginx Basic Auth | `Basic Auth 账号: monika` 记在 `/data/mes/secrets/credentials.txt` 与 nginx 站点配置里 → 与站内应用账号**同名但互不相干，本轮未改** |
+| 站内应用账号 | PocketBase 0.40.6 的 `mes_users` auth 集合，**全库唯一一条记录** `id=5aipu96dx5kooxu`（原 `email=monika@mes.local`） |
+
+结论：站内登录标识就是 `mes_users` 那条记录的 `email`；公网入口的 Basic Auth 是另一套凭据，两者不共用。
+
+### 14.2 为什么不能直接把 email 改成 "monika"，以及本轮实际做法
+
+PocketBase 0.40.6 的 `email` 是**系统字段**，带邮箱格式校验：
+
+- 直接 `setEmail("monika")` 保存报错：`email: must be a valid email address.`（记录未被改动）；
+- 系统 email 字段也**不允许改类型**：实测把它替换成 text 字段后保存，PB 会还原回 email 类型。
+
+PB 允许的可行形态是：新增一个 **text 类型的身份字段**并给它加 UNIQUE 约束。实测报错原文给出了这条规则——
+`The field uname doesn't have a UNIQUE constraint.`（text 类型本身是被允许的，卡住的是唯一约束）。
+
+本轮采用的做法（全部在目标机执行，**没有写进仓库**）：
+
+1. 用 PocketBase 自带 JSVM（一次性 `pb_hooks` 钩子，用完即删）给 `mes_users` 增加 `username` text 字段 → PB 自己建列；
+2. 停 PB，在 `_collections` 的 `indexes` 里补
+   `CREATE UNIQUE INDEX idx_unique_username_<collectionId> ON mes_users (username)`，
+   并把 `options.passwordAuth.identityFields` 由 `["email"]` 改为 `["username"]`；
+3. 起 PB，用一次性钩子把记录 `username` 写成 `monika`，并按进程环境变量 `MES_APP_LOGIN_PASSWORD` 重设口令
+   （口令不经过命令行、不进日志）；
+4. 删除一次性钩子：运行时 `pb_hooks` 目录只剩 6 个正常文件（`aigc` / `lab_proxy` / `llm` / `mes_auth` /
+   `_rh_admin_sso` / `shorthand_crud`）。
+
+**遗留说明（需要知道）**：PB 要求 auth 记录保留一个合法邮箱，所以记录的 `email` 列仍是旧值 `monika@mes.local`；
+它已不在身份字段里，**不能再用来登录**（实测 400）。`/data/mes/secrets/mes.env` 的 `MES_APP_LOGIN_EMAIL`
+与 `credentials.txt` 的「应用登录账号」行已同步改为 `monika`（Basic Auth 两行原样未动）。
+
+### 14.3 登录实测
+
+| 场景 | 结果 |
+| --- | --- |
+| 身份 `monika` + 新口令 | **HTTP 200**，拿到 `mes_users` token（221 字符），后续所有受保护 API 均用此 token 实测通过 |
+| 身份 `monika@mes.local` + 同一口令 | **HTTP 400** `Failed to authenticate.`（旧标识确实不能再登录） |
+| 记录身份 | `id=5aipu96dx5kooxu` 未变；`mes_users` 仍 1 条记录，未新增、未删除 |
+
+口令按刘先生的要求与现网一致（长度 11、末四位 1016）；口令明文不写入仓库、文档、bundle、diff 与本说明。
+
+### 14.4 存档归属核对（不孤儿、不清库）
+
+`player_progress` 表**没有用户归属列**：它是单条全局记录（`id=xd321ng6i70pydz`），前端凭 `mes_users` token
+读写同一份存档。因此「改名后存档是否还挂在同一账号下」在这里等价于三件事——记录条数仍为 1、记录 id 未变、
+受监控的 12 个字段逐条一致。本轮实测：
+
+- 本轮两次部署的 `progress-guard` 前后比对**均通过**（`changed` / `missing` / `added` 全空）；
+- `06:54:55` 与 `06:55:27` 两个部署备份与现场**逐字节一致**；
+- 与 `04:27` 部署备份相比有 4 处差异（`db_history` / `factory_history` / `ops_history` / `last_route`），
+  这 4 处来自上一轮**实操写路径测试**写入的测试值与随后的还原，发生在本轮开始之前；
+  **本轮没有对 `player_progress` 做过任何写操作**（本轮只写过 `mes_users` 与 `llm_jobs`）；
+- 未清库、未重建、未删除任何记录。
+
+### 14.5 上游密钥写入与真实调用实测
+
+- 密钥写入 `/data/mes/secrets/llm.env` 的 `MES_LLM_API_KEY=`：文件 **600 `user:user`**、目录 **700 `user:user`**；
+  指纹为长度 49、末四位 `-TTU`、前缀 `sk_tr_`。**明文不出现在仓库、文档、bundle、diff、日志与回报**；
+- `sudo systemctl restart mes-pocketbase` 后实测 `GET /mes/__pb/api/llm/models` → **200**，
+  返回 `mimo-v2.6-pro`（`max_tokens=8192`、`timeout_s=100`、`supports_temperature=false`）；
+- `POST /mes/__pb/api/llm/chat`（带 `request_id`，问题：「用一句话说明：上线验收单应该包含哪三项内容？」）：
+  **HTTP 200，耗时 8.579s**，`model=mimo-v2.6-pro`、`status=success`；
+  回复要点：「项目/功能信息、验收结果（测试情况及通过与否）、签字确认（开发/测试/产品签署）三项」；
+  `usage` = `total_tokens 68`（`prompt_tokens` 22、`completion_tokens` 46、reasoning 0、cached 0）；
+- 同一次调用在 `llm_jobs` 落库一条 `status=success` 的记录（含 `result_text`）；
+- 前端消费点仍是交付物工作区的「AI 交付物评审」，走站点自身 `/api/llm/chat`。
+
+### 14.6 顺带修掉的一个部署缺陷（构建开关漏了）
+
+`DEPLOY.md` 写明：独立部署的构建命令必须带 `VITE_MES_SELF_HOSTED_AUTH=true`，否则不会包裹站内登录页。
+现网此前（含上一轮）用 `npx vite build --base=/mes/` 构建，**登录组件被 tree-shake 掉，产物里根本没有登录框**
+（实测部署后的 assets 里既没有新文案也没有旧文案）。这会让「登录标识改成 monika」在界面上无处可填。
+本轮按 `DEPLOY.md` 重新构建并部署：入口由 `index-OJPjwTxx.js` 变为 `index-B3ErMs9G.js`，
+产物内已含新的「账号」文案，登录框回到页面右上角，且输入框由 `type=email` 改为 `type=text`
+（否则浏览器原生邮箱校验会拦下 `monika`），标签与报错文案同步改为「账号」。
+
+### 14.7 推送与远端复核
+
+- 第一次推送（代码）：`6091d8b..0a06c0b`，fast-forward，推送参数
+  `git push --no-follow-tags --no-force origin refs/heads/today-dev:refs/heads/today-dev`；
+- 第二次推送：本节所在的文档提交（推送后远端 `today-dev` 的最终状态 = 该提交）；
+- 只读复核（目标机直连 GitHub）：`today-dev` 与推送时本地 HEAD 逐位一致，`main` 仍 `b5c8335`、
+  `wabi-dev` 仍 `bed9246`，远端仍恰 3 支；tag 仍 12 个 v1.x（`v1.7.0`–`v1.14.2`），
+  名称与对象 SHA 与本地 `refs/tags` **逐条一致**，无增无删；
+- PAT 处理：只作为 600 权限的 `credential.helper` 凭据文件使用，推送结束立即删除；
+  复检 `/tmp` `/root` `/home` `/data/mes` 无该 PAT 的任何残留片段，且无 `~/.git-credentials`、无残留 `credential.helper` 配置。
+
+### 14.8 本轮的副作用与未推进项（诚实项）
+
+- **一次性超管账号**：迁移集合 schema 需要超管权限，本轮临时建了一个 `ops_tmp_*@mes.local` 超管，
+  用完删除；删除后 PB 发现超管表为空，按它自己的行为自动重建了默认安装账号
+  `__pbinstaller@example.com`（与本轮开始前**同名同用途**，管理员入口仍是 PocketBase 安装 URL，见服务日志）。
+  既有的 `ops_tmp_*` 已彻底删除，`_superusers` 表只剩 1 条。
+- **登录页文案**：标签「邮箱」→「账号」，报错文案 →「账号或密码不正确，或账号尚未配置。」
+- **AIGC 图像/视频生成**：tokenrhythm 只有 chat 模型，站内 AIGC 仍走 RunningHub 专有接口；
+  本轮不臆造凭据，范围外未推进（`/api/aigc/models` 仍返回不可用原因说明）。
+- **实施路线第 5 章「质量与库存」**：仍是「施工中」，本轮未推进。
+- **两台 QwenPaw 现网、metabase 站点、nginx default 站点、nginx map 改写、Basic Auth 凭据**：本轮一律未动。
+- **`MES_APP_LOGIN_PASSWORD` 的引导守卫**：口令长度 11 < 12 时，`mes_auth.pb.js` 的引导逻辑会跳过建号，
+  所以新装环境仍需注意本轮设定的口令不满足引导口令长度要求（现有实例不受影响）。
