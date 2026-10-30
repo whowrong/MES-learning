@@ -126,7 +126,7 @@ async function waitReady(name, kind, timeoutMs) {
       ok = /sshd is listening/i.test(r.stdout + r.stderr)
     }
     if (ok) return true
-    await waitFor(step)
+    await waitFor(1500)
   }
   return false
 }
