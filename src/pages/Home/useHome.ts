@@ -12,6 +12,7 @@ import {
 } from "@/content/chapters"
 import { computeStreak } from "@/game/streak"
 import { getContinueChapter } from "@/game/continueChapter"
+import { isSandboxUnlocked, sandboxLockMessage } from "@/game/sandbox"
 
 function progressApi(): string {
   return `${getPocketBaseUrl()}/api/player_progress`
@@ -58,8 +59,8 @@ export function useHome() {
   const [deliveryCount, setDeliveryCount] = useState(0)
   // 锁定章节提示弹窗（点未开放章节卡时）
   const [lockedChapter, setLockedChapter] = useState<ChapterDef | null>(null)
-  // 施工中占位弹窗（目标页面尚未上线时，避免跳白屏）
-  const [constructionNote, setConstructionNote] = useState<{ title: string; body: string } | null>(null)
+  // 施工中 / 未解锁提示弹窗（目标页面尚未上线或前置条件未达成时，避免跳白屏）
+  const [notice, setNotice] = useState<{ title: string; body: string; tone: "locked" | "construction" } | null>(null)
 
   const applyRecord = useCallback((rec: ProgressRecord) => {
     setChapterState(rec.chapter_status)
@@ -183,16 +184,25 @@ export function useHome() {
     navigate("/debug")
   }, [navigate])
 
+  // 自由沙盘：第三章「建模与配置」通关后开放。
+  // 判据只有一条（站内文案一直这么写），不擅自放宽；没通关就把差哪一条说清楚。
+  const sandboxUnlocked = isSandboxUnlocked(chapterState)
+
   const openSandbox = useCallback(() => {
-    setConstructionNote({
+    if (isSandboxUnlocked(chapterState)) {
+      navigate("/sandbox")
+      return
+    }
+    setNotice({
       title: "自由沙盘",
-      body: "第三章通关后开放：随便建工单、改库存，看物料在工序之间怎么流动。先用剧情关卡把基本功练扎实。",
+      body: sandboxLockMessage(chapterState),
+      tone: "locked",
     })
-  }, [])
+  }, [chapterState, navigate])
 
   const closeDialogs = useCallback(() => {
     setLockedChapter(null)
-    setConstructionNote(null)
+    setNotice(null)
   }, [])
 
   const gaugeViews = GAUGE_DEFS.map((def) => {
@@ -218,7 +228,8 @@ export function useHome() {
     opsCount,
     dbCount,
     lockedChapter,
-    constructionNote,
+    notice,
+    sandboxUnlocked,
     openChapter,
     continueProgress,
     openGlossary,

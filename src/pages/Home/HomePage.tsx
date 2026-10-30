@@ -50,6 +50,7 @@ export function HomePage(p: ReturnType<typeof useHome>) {
           dbCount={p.dbCount}
           careerCount={p.careerCount}
           deliveryCount={p.deliveryCount}
+          sandboxUnlocked={p.sandboxUnlocked}
           onGlossary={p.openGlossary}
           onInterview={p.openInterview}
           onFactoryTypes={p.openFactoryTypes}
@@ -67,7 +68,7 @@ export function HomePage(p: ReturnType<typeof useHome>) {
       </footer>
       <HomeDialogs
         lockedChapter={p.lockedChapter}
-        constructionNote={p.constructionNote}
+        notice={p.notice}
         onClose={p.closeDialogs}
       />
     </div>

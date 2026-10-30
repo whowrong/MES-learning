@@ -10,6 +10,8 @@ interface ModuleEntriesProps {
   dbCount: number
   careerCount: number
   deliveryCount: number
+  /** 自由沙盘是否已解锁（第三章通关后为 true） */
+  sandboxUnlocked: boolean
   onGlossary: () => void
   onInterview: () => void
   onFactoryTypes: () => void
@@ -23,7 +25,7 @@ interface ModuleEntriesProps {
 const CARD_ENTER =
   "animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-backwards transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
 
-export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, careerCount, deliveryCount, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onCareerPrep, onDelivery, onSandbox }: ModuleEntriesProps) {
+export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCount, dbCount, careerCount, deliveryCount, sandboxUnlocked, onGlossary, onInterview, onFactoryTypes, onOpsTraining, onDbTraining, onCareerPrep, onDelivery, onSandbox }: ModuleEntriesProps) {
   return (
     <section className="py-12">
       <div className="mx-auto max-w-6xl px-6">
@@ -272,16 +274,21 @@ export function ModuleEntries({ reviewCount, interviewCount, factoryCount, opsCo
             <span className="flex h-full flex-col">
               <span className="flex items-center gap-2">
                 <span className="text-lg font-bold text-foreground">自由沙盘</span>
-                <Badge variant="outline" className="rounded-full text-muted-foreground">
-                  第三章通关后开放
-                </Badge>
+                {sandboxUnlocked ? (
+                  <Badge className="rounded-full bg-primary text-primary-foreground">已开放</Badge>
+                ) : (
+                  <Badge variant="outline" className="rounded-full text-muted-foreground">
+                    第三章通关后开放
+                  </Badge>
+                )}
               </span>
               <span className="mt-1 text-sm leading-6 text-muted-foreground">
                 不限流程的实验场：随便建工单、改库存、看物料方块在工序之间流动，
                 亲手验证「BOM 错了整条线会怎样」。
               </span>
-              <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-muted-foreground">
-                先用剧情关卡练基本功
+              <span className="mt-auto inline-flex items-center pt-3 text-sm font-medium text-primary">
+                {sandboxUnlocked ? "进入沙盘" : "先用剧情关卡练基本功"}
+                {sandboxUnlocked && <ArrowRight className="ml-1 h-4 w-4" />}
               </span>
             </span>
           </button>

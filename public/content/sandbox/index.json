@@ -1,0 +1,47 @@
+{
+  "moduleId": "sandbox",
+  "title": "自由沙盘",
+  "subtitle": "不限流程的实验场",
+  "intro": "这里没有剧情关卡，只有你自己的实验：随便改库存、随便下工单、随便把 BOM 写错，然后推进工序，看物料方块怎么在工序之间流动、产线在哪里卡住。",
+  "tips": [
+    "库存可以改成负数：账实不符的原料一旦被领走，产线就会停给你看。",
+    "BOM 单台用量随手改：改错之后再下单，看看是哪一步先断料。",
+    "工单按工序推进：领料开工 → 各道工序 → 完工入库，每一步都会写进事件日志。",
+    "沙盘里的一切只活在本页，不写入学习存档，也不影响主线进度。"
+  ],
+  "materials": [
+    { "id": "steel", "name": "钢板", "unit": "kg", "initial": 120, "note": "下料用。库存低于 BOM 需求就会停线。" },
+    { "id": "bolt", "name": "螺栓", "unit": "套", "initial": 260, "note": "装配用。领料时一次性扣掉整批用量。" },
+    { "id": "copper", "name": "铜管", "unit": "m", "initial": 30, "note": "换热器专用。少了它只有换热器会断料。" },
+    { "id": "motor", "name": "电机", "unit": "台", "initial": 4, "note": "装配用整机件，数量少，做多就会卡。" }
+  ],
+  "products": [
+    {
+      "id": "pump",
+      "name": "冷却泵",
+      "operations": ["cut", "weld", "assemble"],
+      "bom": [
+        { "material": "steel", "qty": 10 },
+        { "material": "bolt", "qty": 6 },
+        { "material": "motor", "qty": 1 }
+      ],
+      "note": "工序：下料 → 焊接 → 装配"
+    },
+    {
+      "id": "heater",
+      "name": "换热器",
+      "operations": ["cut", "weld", "assemble"],
+      "bom": [
+        { "material": "steel", "qty": 18 },
+        { "material": "bolt", "qty": 10 },
+        { "material": "copper", "qty": 3 }
+      ],
+      "note": "工序：下料 → 焊接 → 装配，铜管用量大，最容易断料"
+    }
+  ],
+  "workCenters": [
+    { "id": "cut", "name": "下料", "hoursPerUnit": 0.5 },
+    { "id": "weld", "name": "焊接", "hoursPerUnit": 1.2 },
+    { "id": "assemble", "name": "装配", "hoursPerUnit": 0.8 }
+  ]
+}

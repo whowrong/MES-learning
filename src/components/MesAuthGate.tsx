@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react"
+import { UserRound } from "lucide-react"
 import { pb } from "@/lib/pb"
 
 type AuthState = { valid: boolean; revision: number }
@@ -35,9 +36,23 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <details className="fixed right-3 top-3 z-50 max-w-[calc(100vw-1.5rem)] rounded-lg border bg-card/95 p-2 text-sm shadow-lg backdrop-blur">
-        <summary className="cursor-pointer select-none px-2 py-1 font-medium">
-          {auth.valid ? "已登录 · 账户" : "实操 / 存档登录"}
+      {/*
+        窄屏不能让登录入口压住顶栏：顶栏是 sticky top-0 h-16，右上角有「术语卡库 / 自由沙盘」两个按钮，
+        登录入口原来固定在 right-3 top-3（和顶栏同高），手机上直接盖住这两个按钮，点不到。
+        现在：窄屏（<sm）把入口挪到顶栏下方（top-16）并收成图标按钮，宽屏（>=sm）保持原来的位置与外观。
+      */}
+      <details
+        data-testid="mes-auth-entry"
+        className="fixed right-2 top-16 z-50 max-w-[calc(100vw-1.5rem)] rounded-lg border bg-card/95 p-2 text-sm shadow-lg backdrop-blur sm:right-3 sm:top-3"
+      >
+        <summary
+          data-testid="mes-auth-summary"
+          aria-label={auth.valid ? "已登录 · 账户" : "实操 / 存档登录"}
+          title={auth.valid ? "已登录 · 账户" : "实操 / 存档登录"}
+          className="flex h-10 w-10 cursor-pointer select-none items-center justify-center gap-2 rounded-md font-medium sm:h-auto sm:w-auto sm:justify-start sm:px-2 sm:py-1"
+        >
+          <UserRound className="h-4 w-4 sm:hidden" aria-hidden="true" />
+          <span className="hidden sm:inline">{auth.valid ? "已登录 · 账户" : "实操 / 存档登录"}</span>
         </summary>
         {auth.valid ? (
           <div className="flex items-center gap-3 px-2 pb-2">
