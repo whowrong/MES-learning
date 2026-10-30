@@ -508,45 +508,35 @@ bash deploy/mes-deploy.sh --dist <上传后的 dist 目录> --hooks templates/pb
 逐字节一致、`created`/`updated` 未变、新字段为空值；再只 PATCH 新字段，老字段仍逐字节一致。
 完整论证与只读排查清单见第 4.2 节。
 
-**推送状态与还缺什么**（已于 2026-10-29 推送完成，本节为推送后的现状）
+**推送状态与还缺什么**（2026-10-30 上午已推送完成，本节为推送后的现状）
 
-- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `4aa4e1d`，与本地 HEAD 一致。
-  认证用的是本任务现生成的一次性临时密钥对，推完即删（本机私钥已清除，不留存）。
-- **远端核对**（ssh 通道 + 只读镜像双通道结果一致）：
-  - 分支：`main` = `b5c8335`、`wabi-dev` = `bed9246`、`today-dev` = `4aa4e1d`；
-  - tag：仍是基线那 12 个 v1.x（`v1.7.0`–`v1.14.2`），与本地 `refs/tags` 集合完全一致；
-  - 未推 `main` / `wabi-dev`、未打 tag、未 force push、未删任何远端引用。
-- **GitHub 上那条 Deploy key**：现在没有对应私钥（不可用，也没有泄露风险）；删留由刘先生定，
-  本轮不擅自处理。
-- **长期推送路径已搁置**：刘先生 2026-10-29 明确表示「好麻烦，算了，累死了」，
-  因此不再提 Deploy key / PAT / 密钥对 / 分支保护等建议，也不再生成新密钥、不动远端引用；
-  只有他明确给出推送方式时才执行写操作。
-- **本轮（第二轮，2026-10-30 上午）的改动只在本地提交，尚未推送**。本地 `today-dev` 现有 4 个提交待推
-  （相对远端 `4aa4e1d` 领先 4 个）：`09ba071` VACUUM 修复、`684bcaf` 文档更新、`5d25a7f` 自测记录、
-  `6200a27` 本轮的 edge-proxy 令牌头优先级修复 + 12.3/12.8 文档。
-  远端现状（目标机直连 GitHub 只读复核）：`main` = `b5c8335`、`wabi-dev` = `bed9246`、
-  `today-dev` = `4aa4e1d`、tag 仍是基线那 12 个 v1.x，**与上一轮推送后完全一致，未被本轮改动过**。
-- **推送被卡在一个凭据上（唯一需要刘先生做的一步）**：GitHub 上那条 Deploy key 现在**没有对应私钥**
-  （上一轮推完即删），沙箱与目标机都不存在任何可用的 GitHub 写凭据（无 SSH 私钥、无 PAT、
-  `gh` 未登录、GitHub HTTPS 在沙箱侧被出口策略挡成 403）。因此本轮按约定重新生成了一把
-  一次性 ed25519 deploy key（私钥只存在本地、不入库、不外传），**只差刘先生把下面这段公钥
-  加到仓库的 Deploy keys 并勾上写权限**：
+- **已推送**：`today-dev` 已推到 `origin`，远端 `today-dev` = `d7b62ad`，与本地 HEAD 逐位一致。
+  本轮改走 HTTPS，用的是刘先生当场给出的仓库 PAT（有 repo 写权限）：推送时它只作为本地
+  `credential.helper` 凭据文件（600 权限）使用，推送结束后即删除；
+  **PAT 不写入仓库任何文件、文档、bundle、diff、git 历史或日志**，本文档与交付物中也不出现。
+- **本次推送的提交范围**（相对上一轮远端 `4aa4e1d` 领先的 4 个提交，fast-forward）：
 
-  ```
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAwniRsTGWaOBpmf7pNSrk5mH0bT5jkRZtYBippGpGt mes-learning-deploy-2026-10-30
-  ```
+  | 提交 | 内容 |
+  | --- | --- |
+  | `09ba071` | VACUUM INTO 目标路径改单引号（存档一致性快照修复） |
+  | `684bcaf` | 第十一节改为推送后现状；新增第十二节「instabox 部署实录」 |
+  | `5d25a7f` | 记录本轮在当前 HEAD 的自测复跑结果与前端产物一致性 |
+  | `d7b62ad` | edge-proxy 令牌来源改为 `x-pb-auth` 优先、`authorization` 回落；补 12.3 / 12.8 文档 |
 
-  加好之后推送是一条命令（显式 refspec，不推 `main`/`wabi-dev`、不打 tag、不 force、不删远端引用）：
-
-  ```bash
-  GIT_SSH_COMMAND="ssh -p 443 -o IdentitiesOnly=yes -i <私钥路径>" \
-    git push --no-follow-tags --no-force \
-      ssh://git@ssh.github.com:443/whowrong/MES-learning.git \
-      refs/heads/today-dev:refs/heads/today-dev
-  ```
-
-  在刘先生给出写权限之前，本轮**不伪造「已推送」**：远端 `today-dev` 仍是 `4aa4e1d`。
-- 随附交付物（按最终树重新生成，`6200a27` 为 today-dev 头）：
+- **远端核对（推送后，在目标机直连 GitHub 只读复核）**：
+  - 分支：`today-dev` = `d7b62ad81c3f660d2ab916d29712ec5304319ff3`（= 本地 HEAD，逐位一致）、
+    `main` = `b5c8335`（未动）、`wabi-dev` = `bed9246`（未动），远端仍恰 3 支；
+  - tag：仍是基线那 12 个 v1.x（`v1.7.0`–`v1.14.2`），名称与对象 SHA 与本地 `refs/tags`
+    **逐条一致**，无新增、无缺失、无删除；
+  - 本次是 fast-forward（`4aa4e1d..d7b62ad`）：**没有 force push，没有删除任何远端引用**，
+    没有推 `main` / `wabi-dev`，没有打新 tag。
+- **并行任务的提交**：「实施路线收尾模块建设与 AI 接入」那条线在本轮推送时**尚未**在本地
+  `today-dev` 产生提交，因此本次推送只包含上表这 4 个提交；那条线完成后的提交再单独推一次 `today-dev`。
+- **本节所在的这次文档提交**（把第十一节改成已推送现状）在推送 `d7b62ad` 之后紧接着推送，
+  因此远端 `today-dev` 的最终状态 = 本节所在的提交；随附交付物按该最终树生成。
+- **GitHub 上那条 Deploy key**：仍然没有对应私钥（不可用，也没有泄露风险）；本轮改走 HTTPS 后
+  更不需要它，删留仍由刘先生定，本轮不擅自处理。
+- 随附交付物（按最终树重新生成）：
   - `today-dev.bundle`（含 `today-dev` 分支全量状态，克隆后即可推送）；
   - `today-dev-vs-4aa4e1d.diff`（相对 `4aa4e1d` 的本轮改动：VACUUM 修复、文档更新、自测记录、edge-proxy 修复）；
   - `today-dev-vs-wabi-dev.diff`（相对 `wabi-dev`@bed9246 的全量 diff）。
