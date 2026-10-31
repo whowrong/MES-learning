@@ -182,7 +182,10 @@ async function execPg(conn, statements, action) {
 
 // ---------- SQL Server ----------
 async function execMssql(conn, statements, action) {
-  const mssql = await import("mssql")
+  // mssql 是 CommonJS 包：动态 import 拿到的是模块命名空间，connect 在 .default 上。
+  // 直接用命名空间会报 "mssql.connect is not a function"。
+  const mssqlMod = await import("mssql")
+  const mssql = (mssqlMod.default ?? mssqlMod)
   const pool = await mssql.connect({
     server: conn.host,
     port: Number(conn.port || 1433),

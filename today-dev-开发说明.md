@@ -1,6 +1,6 @@
 ---
-title: today-dev 开发说明（异步作业通道修 502 + 练习库表结构注入 + SQL Server 方言 + metabase 清理）
-summary: 本轮把模式 B 服务器题必然 502 的老问题换成「提交作业→轮询取结果」的异步通道（外层平台网关 20 秒硬截断，加长站内超时无效），实测 lx-d5 在模式 B 下 12/12 步全过、最慢一步 78 秒且全程无 502；新增练习库 8 张表真实表结构注入数据库题提示词并加漂移测试，模型生成 SQL 的臆造列名归零；练习库导出补 SQL Server 方言与灌库分支（容器 E2E 因磁盘余量不足主动暂缓）；按授权删除 metabase（先备份卷内数据），根分区可用空间 2.6GB→5.1GB。单测 34 文件 723 用例全过，已推 today-dev。
+title: today-dev 开发说明（孤儿卷清理 + 销毁泄漏修复 + SQL Server 模式 B 端到端跑通）
+summary: 本轮先按授权清掉 47 个匿名孤儿卷，根分区可用空间 4.7GB→9.1GB（释放约 4.4GB），并定位到泄漏根因：镜像自带 VOLUME 声明，而销毁只用了 docker rm -f。修复为 rm -fv 并加 mes-lab- 前缀护栏，口令改走子进程环境、不再进 argv；顺带修出三个真 bug：labenv.mjs 漏 import fs 导致作业通道建环境必然失败、dblab.mjs 的 mssql CJS 导入取不到 connect、SQL Server 灌库的 IDENTITY/幂等/事务问题。新增 12 个回归用例，单测 34 文件 735 用例全过。模式 B SQL Server 一次性容器端到端跑通：230 行练习库、6/6 步全过、题目口径判分 PASS、臆造列名 0、销毁后卷与端口归零；四类 E2E 回归全程无 502。
 ---
 
 # today-dev 开发说明
@@ -1290,3 +1290,124 @@ E2E（真实上游 `mimo-v2.6-pro` 生成 → 站内作业通道执行 → 判�
 
 - 推送目标：`today-dev` 分支，显式 refspec `refs/heads/today-dev:refs/heads/today-dev`，`--no-follow-tags --no-force`；**没有**推 main / wabi-dev，没有打标签，没有删远端引用。
 - 远端不变量复核：`main`、12 个 v1.x 标签、`wabi-dev` 的指向与对象 SHA 都保持不变，只有 `today-dev` 前移。
+
+## 十八、本轮：孤儿卷清理 + 销毁泄漏修复 + SQL Server 模式 B 端到端跑通（2026-10-31 下午）
+
+### 18.1 结论先说
+
+1. **47 个匿名孤儿卷已按授权清掉，根分区可用空间 4.7 GB → 9.1 GB**（已用 11 GB → 5.8 GB，占用率 69% → 39%），实际释放约 4.4 GB。清理前逐个核对过：全部是 `com.docker.volume.anonymous` 标签的随机 64 位十六进制卷名、0 个具名卷、0 个容器引用、站点数据（`pb_data`、`practice.db`）都在普通目录里不在卷里。
+2. **销毁泄漏的根因修掉了**：容器销毁从 `docker rm -f` 改成 `docker rm -fv`（连同匿名卷一起删），并加了「只准销毁 `mes-lab-` 前缀容器」的护栏。实测：SQL Server 一次性容器销毁后 `docker volume ls` 计数 **0**，端口不再监听，连接登记清空。
+3. **修的过程里挖出三个真 bug**（都不是测试写错，是真会坏）��
+   - `server/labenv.mjs` 用了 `fs.readFileSync` 却**没有 import fs** → 作业通道的 `@文件` 传参路径必然失败，前端「创建一次性演练环境」按钮走作业通道时必然报「未知 action: undefined」。上一轮 E2E 直接打了 API、绕过了作业通道，所以没发现。
+   - `server/dblab.mjs` 里 `await import("mssql")` 拿到的是 CJS 模块命名空间，`mssql.connect` 不存在 → **SQL Server 模式下所有数据库步骤都执行不了**（报 `mssql.connect is not a function`）。改成 `(await import("mssql")).default` 后正常。
+   - SQL Server 灌库有三处方言坑：IDENTITY 自增列不能显式给值、建表语句不幂等导致重试撞「表已存在」、灌库不是原子的（半截失败会留下脏表）。逐条修掉（见 18.3）。
+4. **SQL Server 模式 B 端到端跑通了**：站点一次性起 `mcr.microsoft.com/mssql/server:2022-latest`（只发布 127.0.0.1、端口落在 14200–14249 段），灌入练习库，真实上游 `mimo-v2.6-pro` 生成脚本 → 站内解析 → 作业通道逐条执行 → 题目口径判分 → 销毁并复核干净。
+5. **口令不再进 argv**：演练环境的数据库/SSH 口令改为经子进程环境传给 docker（`docker run -e VAR`，值从客户端环境取），实测 `ps -eo args` 里搜不到任何明文口令；口令仍然只回显一次、不落盘。
+
+### 18.2 47 个孤儿卷：来源、清理与实测
+
+清理前快照（2026-10-31T07:53:41Z，目标机时钟为 UTC）：
+
+| 项 | 清理前 | 清理后 |
+| --- | --- | --- |
+| 根分区 `/dev/root`（16 GB） | 已用 11 GB，可用 4.7 GB（69%） | 已用 5.8 GB，可用 9.1 GB（39%） |
+| `docker system df` Local Volumes | 47 个，ACTIVE 0，SIZE 4.73 GB，RECLAIMABLE 100% | **0 个** |
+| `docker volume ls` | 47 个（mysql-datadir 22 个 / openssh-config 23 个 / postgres-pgdata 2 个） | 空 |
+| 镜像 | 4 个（未动） | 4 个（未动） |
+
+清理动作：对每个卷校验「64 位十六进制随机名 + `com.docker.volume.anonymous` 标签 + 无任何容器引用」三条后才执行 `docker volume rm`，**没有**用 `docker system prune`，没有重启 docker、没有改 data-root。结果：**删除成功 47、失败 0、跳过 0**。
+
+这 47 个卷的来历（上一轮只读调查的结论）：镜像 `mysql:8.0`、`linuxserver/openssh-server:latest`、`postgres:16-alpine` 都自带 VOLUME 声明，而 `server/labenv.mjs` 销毁容器时用的是 `docker rm -f`（**不带 `-v`**）→ 每次模式 B 演练都漏一个匿名卷；其中 18 个卷的创建时间和 nginx 访问日志里的 18 次 `labenv/create` 请求**逐一配对误差 ≤ 9 秒**，另外 19 个来自历轮 E2E 直接 `docker run` 的临时容器。
+
+清理后复核：`mes-pocketbase` / `mes-edge-proxy` / `nginx` 三服务均 active；未认证 `/mes/` = 401、已认证 = 200；`/mes/delivery` 与 `/mes/content/labs/db-c1.md` 同样是 401 / 200；`player_progress` 仍 1 条、受监控 12 个字段逐条一致（`deploy/progress-guard.mjs` 比较结果 `changed:[] missing:[] added:[]`）。
+
+### 18.3 销毁泄漏修复（改了什么、为什么这么改）
+
+**改法**：`server/labenv.mjs` 的销毁入口从 `docker rm -f` 改成 `docker rm -fv`，并把参数拼装抽成可单测的 `removeArgs()`。
+
+| 方案 | 结论 |
+| --- | --- |
+| `docker run --rm` | **不采用**。容器一退出就被守护进程抹掉，「就绪失败 → 读 `docker logs` 定位 → 再销毁」的排查链路会拿不到日志；TTL 清扫、离页兜底销毁还会和守护进程的自动删除撞车、报 `no such container`。 |
+| `docker rm -fv` | **采用**。容器生命周期仍由本模块显式掌控（作业通道、2 小时 TTL 清扫、离页兜底销毁都走这一个入口），容器无论在跑还是已退出，匿名卷都会被一并回收。 |
+
+护栏与配套改动：
+
+- `removeArgs()` 只接受 `mes-lab-` 前缀的容器名，其余一律拒绝，避免误伤现网服务（单测覆盖）。
+- 全仓只有这一处容器销毁调用点（`server/labenv.mjs`），建容器失败的回滚、就绪探测失败的回滚、灌库失败的回滚、显式销毁、TTL 清扫**全部收敛到同一个销毁入口**，所以改一处即止住全部泄漏。
+- **口令不再进 argv**：`docker(args, timeout, extraEnv)` 把口令放进子进程环境，命令行走 `docker run -e MSSQL_SA_PASSWORD`（不写 `=值`，由 docker 从客户端环境取值）。实测（探针脚本）：`ps -eo args` 搜 `MSSQL_SA_PASSWORD` → **未出现明文口令**。mysql / postgres / sshd 三条路径同样改。
+- `server/labenv.mjs` 补上漏掉的 `import fs`（见 18.1 第 3 条），并把 `readRequestJson()` 导出、参数化，便于单测。
+
+**顺带修掉的 SQL Server 方言坑**（`server/seed-practice-db.mjs` + `server/labenv.mjs`）：
+
+| 坑 | 现象 | 修法 |
+| --- | --- | --- |
+| IDENTITY 自增列不能显式给值 | `Cannot insert explicit value for identity column` | sqlserver 方言的插入语句去掉自增列（`IDENTITY` 按插入顺序从 1 递增，与源库行号一致） |
+| 建表语句不幂等 | 重试时 `There is already an object named 'bom'` | mysql/postgres 用 `CREATE TABLE IF NOT EXISTS`，sqlserver 用 `IF OBJECT_ID('x','U') IS NULL CREATE TABLE x` |
+| 灌库不是原子的 | 半截失败会留下建了一半的表 | sqlserver 灌库整体放进一个事务（建表 + 插入一起提交/回滚） |
+
+**SQL Server 的平台语义限制（如实记录）**：SQL Server 比较与主键忽略尾随空格（ANSI 填充），练习库里刻意造的「一物两码」脏码（`STL-Q235-10` 与 `STL-Q235-10 `）在 SQL Server 上**存不下**——实测连 SQL Server 2022 的宽度敏感排序规则（`Latin1_General_100_CI_AS_WS` 等）也救不了：表能建上，插第二行照样撞主键。因此 sqlserver 方言会跳过这一行（`items` 24 → 23 行，全库 231 → **230 行**），并在 `exportPracticeSql` 的返回值里如实报告跳过了哪一行。影响范围：模式 B + SQL Server 下，`db-c5`（尾随空格归并）那道题的口径不成立；`db-c1`（单位归一）等其余题目不受影响。
+
+### 18.4 新增回归测试
+
+`server/__tests__/labenv.test.ts`（3 → 8 个用例）：
+
+- 销毁命令必须同时带 `-f` 与 `-v`（断言参数数组本身，不只是看源码）。
+- 只允许销毁 `mes-lab-` 前缀的容器：`nginx` / `mes-pocketbase` / 空串 / `undefined` 一律返回 `null`。
+- **集成级**：真的 `docker create` 一个带 VOLUME 声明的容器（用 `docker create` 不启动，几秒完成）→ 记下它自动生成的匿名卷 → 走真实销毁入口 → 断言容器和匿名卷**都不复存在**（没有 docker 时自动跳过）。
+- `@文件` 传参：写一个临时 JSON 文件、用 `@` 前缀读回来内容正确；文件不存在时返回空串而不是抛错。
+
+`server/__tests__/practiceSchema.test.ts`（6 → 12 个用例）：
+
+- mysql / postgres 仍是完整 231 行；sqlserver 230 行并断言跳过的是 `items` 的那一条尾随空格脏码。
+- sqlserver 的插入语句不带 IDENTITY 自增列、items 里不再有带尾随空格的脏码。
+- 三种方言的建表语句幂等（灌库重试不会撞「表已存在」）。
+
+### 18.5 本轮实测结果
+
+**孤儿卷清理**（实测值见 18.2）：47 个卷全部删除成功，根分区可用 4.7 GB → **9.1 GB**，实际释放约 **4.4 GB**；清理后 `docker volume ls` 为空；三个服务 active；`/mes/`、`/mes/delivery`、`/mes/content/labs/db-c1.md` 未认证 401 / 已认证 200；`player_progress` 仍 1 条、12 个受监控字段逐条一致。
+
+**单测**（目标机）：`npx vitest run` = **34 个文件 / 735 个用例全过**（上一轮基线 34 文件 / 723 用例，本轮新增 12 个用例，全部在 `server/__tests__/labenv.test.ts` 与 `server/__tests__/practiceSchema.test.ts`）；`npx tsc -b` 无错误。
+
+**E2E · 模式 B SQL Server 一次性容器（本轮新跑通的那条链路）**：
+
+| 项 | 实测 |
+| --- | --- |
+| 镜像 / 引擎 | `mcr.microsoft.com/mssql/server:2022-latest`（SQL Server 2022 RTM-CU27-GDR 16.0.4305.5），只发布 `127.0.0.1:14205`（落在 14200–14249 段，避开 1433 与现网端口） |
+| 建环境 | 容器就绪 + 灌库完成 **3752 ms**（作业通道，端口分配、就绪探测、灌库全部在作业里跑完） |
+| 灌库 | 练习库 **230 行**（SQL Server 存不下那条尾随空格脏码，见 18.3）；抽查 `items/employees/equipment` = 26 / 18 / 10 行（items 比种子多 3 行是模型脚本自己插的脏数据，归一后仍在） |
+| 生成 | 真实上游 `mimo-v2.6-pro` 出脚本 → 站内 `parseLabScriptResponse` 真实解析：**3 个准备步 + 3 个执行步** |
+| 执行 | 作业通道逐条执行，**6/6 步全过**，单步约 1.27 秒，**无 502** |
+| 臆造列名 | **0** |
+| 题目口径判分 | **PASS** —— 验收 SQL `SELECT COUNT(*) AS n FROM items WHERE unit IN ('PCS','pcs')` 返回 `[[0]]` |
+| 销毁复核 | 容器已销毁（`destroyed`）、端口不再监听、`db-connections.json` 回到 `{}`、**容器匿名卷随之消失**（`docker volume ls` 归零） |
+
+**E2E · 四类回归（模式 A / 模式 B × 数据库题 / 服务器题）**：
+
+| 场景 | 步数 | 通过 | 题目口径 | 备注 |
+| --- | --- | --- | --- | --- |
+| 模式 A / 数据库题 `db-c1` | 12 | 11 | PASS | 与上一轮同口径；未过 1 步是断言与中文输出不匹配（见 18.7-1） |
+| 模式 B / 数据库题 `db-c5`（PostgreSQL 一次性容器） | 19 | 11 | PASS | 「预置脏数据」写步与种子数据里的既有脏码冲突而失败，其余为断言不匹配 |
+| 模式 A / 服务器题 `lx-d5` | 16 | 14 | 命中 4/6 | 未过 2 步：一步是模型用了 `sudo`（模式 A 演练账号没有免密 sudo）、一步是 `find` 写法的正则不匹配 |
+| 模式 B / 服务器题 `lx-d5`（一次性容器 + 作业通道） | **13** | **13** | 口径快检 2/6（见下） | **0 步超过 20 秒**（最慢一步 3746 ms）→ **全程无 502**；容器端口 14339，销毁后容器、卷、端口全部归零 |
+
+关于最后一行口径要说清楚：本轮机器快检用的是临时写的 6 条近似正则（不是文档第 6 节的正式验收条件），得到 2/6，**与上一轮按文档正式条件得到的 4/6 不可直接比较**。硬指标是：13 步全部执行成功、0 步被断言判失败、没有任何一步超过网关的 20 秒硬截断、销毁后无残留。上一轮同一链路的实测是 12/12、最慢一步 77.989 秒、无 502——本轮模型的脚本没有生成同样重的「造满 inode」命令，所以最慢步只有 3.7 秒。
+
+### 18.7 本轮已知缺口（如实，不藏）
+
+1. **「命令成功执行但步骤被判失败」的口径问题**（沿用上一轮，未改）：站内执行器输出是中文（「执行成功，影响 5 行」），而模型给的验收正则多是英文（`Query OK`、`affected`），两边对不上 → 步骤实际成功，界面记「未命中验收正则」。本轮仍**没有**动判分语义。顺带说明：E2E 统计里有一层兜底（`matchLabAssert(步骤, 命令)`），它会让「命令文本本身命中正则」的步骤算通过，所以上表的「通过步数」偏乐观，题目口径判分（直接查库比对期望值）才是硬指标。
+2. **模式 A 服务器题没有免密 sudo**：模型在步骤里写 `sudo bash -c '...'` 时，演练账号会回 `sudo: a terminal is required to read the password`，该步失败。模式 B 由站点起容器时有免密 sudoers，模式 A 是用户自己的机器，文档应当写明「需要提权请用用户自己的提权方式」。
+3. **`db-c5`（尾随空格归并）这道题在 SQL Server 模式下不成立**：SQL Server 忽略尾随空格（ANSI 填充），练习库那条脏码存不下，sqlserver 方言跳过了它（230 行）。这道题在 MySQL / PostgreSQL / 内置 SQLite 上照常。
+4. **模式 A 服务器题的口径分只有 4/6**：文档第 6 节的 6 条命令正则，模型脚本只命中一部分（等价写法不匹配），不是执行失败。
+5. **SQL Server 模式 B 的性能余量**：mssql 2022 镜像常驻约 2.35 GB，容器数据卷再加约 1.5–2 GB；本轮清理后根分区可用 9.1 GB，跑一条 SQL Server 题目后仍有 6.9 GB。若后续要并发多条 SQL Server 演练，需要另备机器或把数据库卷挪到 `/data`（本轮没改 data-root，按约定不动）。
+
+### 18.8 本轮改动清单（都在 today-dev 上）
+
+| 文件 | 改动 |
+| --- | --- |
+| `server/labenv.mjs` | 销毁改 `rm -fv` + 前缀护栏（`removeArgs`/`removeContainer` 导出可测）；补 `import fs`（作业通道 `@文件` 传参原本必然失败）；口令改走子进程环境（不进 argv）；SQL Server 灌库放进事务；`readRequestJson` 导出并参数化 |
+| `server/dblab.mjs` | `await import("mssql")` → `.default`（否则 SQL Server 下所有数据库步骤都执行不了） |
+| `server/seed-practice-db.mjs` | sqlserver 方言：去掉 IDENTITY 自增列的显式值、插入跳过尾随空格重复行并如实报告；三种方言建表语句幂等 |
+| `server/__tests__/labenv.test.ts` | 3 → 8 个用例（销毁参数、前缀护栏、docker 集成级「容器与卷都不复存在」、`@文件` 传参） |
+| `server/__tests__/practiceSchema.test.ts` | 6 → 12 个用例（三方言插入条数、IDENTITY 列、幂等 DDL、尾随空格跳过行） |
+| `today-dev-开发说明.md` | 本节 |
+

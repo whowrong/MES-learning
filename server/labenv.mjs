@@ -12,6 +12,7 @@
 //   - 就绪探测以「容器内服务真的能连」为准，超时即销毁并报错（可重试）。
 import { spawnSync } from "node:child_process"
 import crypto from "node:crypto"
+import fs from "node:fs"
 import net from "node:net"
 
 const CONTAINER_PREFIX = "mes-lab-"
@@ -32,12 +33,24 @@ function fail(error, native) {
   out({ ok: false, error, native: native ? String(native).slice(0, 400) : undefined })
 }
 
-function run(cmd, args, timeout = 120000) {
-  const r = spawnSync(cmd, args, { encoding: "utf8", timeout, maxBuffer: 8 * 1024 * 1024 })
+function run(cmd, args, timeout = 120000, env) {
+  const r = spawnSync(cmd, args, {
+    encoding: "utf8",
+    timeout,
+    maxBuffer: 8 * 1024 * 1024,
+    ...(env ? { env } : {}),
+  })
   return { code: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || "", error: r.error }
 }
-function docker(args, timeout = 120000) {
-  return run("docker", args, timeout)
+/**
+ * 调 docker。extraEnv 里的变量只进子进程的环境，**不进 argv**。
+ * 演练环境的口令（数据库 root/sa 口令、sshd 账号口令）一律走这条路：
+ * `docker run -e VAR`（不写 =值）时 docker 会从客户端环境取值，
+ * 于是 `ps` 看到的命令行里不会有任何明文口令。
+ */
+function docker(args, timeout = 120000, extraEnv) {
+  const env = extraEnv ? { ...process.env, ...extraEnv } : undefined
+  return run("docker", args, timeout, env)
 }
 function randToken(len = 16) {
   return crypto.randomBytes(len).toString("base64url")
@@ -81,10 +94,37 @@ function containerCreatedMs(name) {
   return Number.isFinite(t) ? t : 0
 }
 
-function removeContainer(name) {
-  if (!containerExists(name)) return false
-  docker(["rm", "-f", name], 60000)
-  return true
+/**
+ * 销毁一次性环境时用的 docker 参数。
+ *
+ * 必须带 -v：mysql / postgres / openssh-server 三个镜像都自带 VOLUME 声明
+ * （/var/lib/mysql、/var/lib/postgresql/data、/config），docker run 每次都会
+ * 生成一个匿名卷；只 `rm -f` 容器的话卷会留在磁盘上——实测一次模式 B 数据库
+ * 演练就漏一个约 200MB 的卷，一轮 E2E 能攒下 4.7GB。`-v` 在删容器的同时删掉
+ * 它的匿名卷；具名卷不受影响（本项目不使用具名卷）。
+ *
+ * 这里不用 `docker run --rm`：--rm 会让容器一退出就被守护进程抹掉，
+ * 「就绪失败 → 读 docker logs 定位 → 再销毁」的排查链路会因此拿不到日志，
+ * TTL 清扫与离页兜底销毁也会和守护进程的自动删除撞车、报 no such container。
+ * 用 `rm -fv` 则容器生命周期仍由本模块显式掌控（作业通道、2 小时 TTL 清扫、
+ * 离页兜底销毁都走这一个销毁入口），而容器无论还在跑还是已退出，卷都会被一并回收。
+ */
+export function removeArgs(name) {
+  const n = String(name || "")
+  // 只允许销毁本模块自己创建的容器，绝不碰现网服务
+  if (!n.startsWith(CONTAINER_PREFIX)) return null
+  return ["rm", "-fv", n]
+}
+
+/** 销毁一次性环境（含其匿名卷）。返回容器此前是否存在。 */
+export function removeContainer(name) {
+  const args = removeArgs(name)
+  if (!args) return false
+  const existed = containerExists(name)
+  // 容器可能已被守护进程或人工删掉，此时 rm 会报 no such container；
+  // 无所谓：卷已经不在了，继续忽略错误即可。
+  docker(args, 60000)
+  return existed
 }
 
 /** 扫掉超时未销毁的一次性环境 */
@@ -206,8 +246,18 @@ async function seedDatabase(engine, connection) {
     requestTimeout: 60000,
   })
   try {
-    for (const stmt of ddl) await pool.request().query(stmt)
-    for (const stmt of inserts) await pool.request().query(stmt)
+    // 建表 + 灌数据放进同一个事务：要么全成、要么全回滚。
+    // 这样「灌库失败后重试」不会撞上「表已存在」或「主键重复」。
+    const tx = new mssql.Transaction(pool)
+    await tx.begin()
+    try {
+      for (const stmt of ddl) await tx.request().query(stmt)
+      for (const stmt of inserts) await tx.request().query(stmt)
+      await tx.commit()
+    } catch (e) {
+      await tx.rollback().catch(() => {})
+      throw e
+    }
   } finally {
     await pool.close().catch(() => {})
   }
@@ -223,22 +273,27 @@ async function createDbEnv(dbType) {
   const password = randToken(12)
   let args
   let connection
+  // 口令只经子进程环境传递，不出现在 docker 命令行里
+  let secretEnv = null
   if (engine === "mysql") {
-    args = ["run", "-d", "--name", name, "-e", `MYSQL_ROOT_PASSWORD=${password}`, "-e", "MYSQL_DATABASE=lab",
+    args = ["run", "-d", "--name", name, "-e", "MYSQL_ROOT_PASSWORD", "-e", "MYSQL_DATABASE=lab",
       "-p", `127.0.0.1:${port}:3306`, "mysql:8.0"]
+    secretEnv = { MYSQL_ROOT_PASSWORD: password }
     connection = { type: "mysql", host: "127.0.0.1", port, database: "lab", username: "root", password }
   } else if (engine === "postgres") {
-    args = ["run", "-d", "--name", name, "-e", `POSTGRES_PASSWORD=${password}`, "-e", "POSTGRES_USER=lab",
+    args = ["run", "-d", "--name", name, "-e", "POSTGRES_PASSWORD", "-e", "POSTGRES_USER=lab",
       "-e", "POSTGRES_DB=lab", "-p", `127.0.0.1:${port}:5432`, "postgres:16-alpine"]
+    secretEnv = { POSTGRES_PASSWORD: password }
     connection = { type: "postgres", host: "127.0.0.1", port, database: "lab", username: "lab", password }
   } else {
     // SQL Server 的 sa 口令有复杂度要求：必须含大写、小写、数字、符号
     const mssqlPassword = "Aa1!" + password
-    args = ["run", "-d", "--name", name, "-e", "ACCEPT_EULA=Y", "-e", `MSSQL_SA_PASSWORD=${mssqlPassword}`,
+    args = ["run", "-d", "--name", name, "-e", "ACCEPT_EULA=Y", "-e", "MSSQL_SA_PASSWORD",
       "-p", `127.0.0.1:${port}:1433`, "mcr.microsoft.com/mssql/server:2022-latest"]
+    secretEnv = { MSSQL_SA_PASSWORD: mssqlPassword }
     connection = { type: "sqlserver", host: "127.0.0.1", port, database: "master", username: "sa", password: mssqlPassword }
   }
-  const r = docker(args, 300000)
+  const r = docker(args, 300000, secretEnv)
   if (r.code !== 0) {
     removeContainer(name)
     return fail("创建一次性数据库容器失败（可重试）", r.stderr || r.stdout)
@@ -290,10 +345,11 @@ async function createServerEnv() {
   const name = containerName(id)
   const password = randToken(12)
   const username = "lab"
-  const args = ["run", "-d", "--name", name, "-e", `USER_NAME=${username}`, "-e", `USER_PASSWORD=${password}`,
+  const args = ["run", "-d", "--name", name, "-e", `USER_NAME=${username}`, "-e", "USER_PASSWORD",
     "-e", "TEXT_PASSWORD=yes", "-e", "PASSWORD_ACCESS=true", "-e", "SUDO_ACCESS=true",
     "-p", `127.0.0.1:${port}:2222`, "linuxserver/openssh-server:latest"]
-  const r = docker(args, 300000)
+  // 账号口令只经子进程环境传递，不出现在 docker 命令行里
+  const r = docker(args, 300000, { USER_PASSWORD: password })
   if (r.code !== 0) {
     removeContainer(name)
     return fail("创建一次性 sshd 容器失败（可重试）", r.stderr || r.stdout)
@@ -355,8 +411,7 @@ function statusAll() {
  * 请求体来源：argv[2] 直接给 JSON，或以 @ 开头时从文件读（作业通道用文件传参，
  * 避免口令出现在进程命令行里）。
  */
-function readRequestJson() {
-  const arg = process.argv[2] ?? ""
+export function readRequestJson(arg = process.argv[2] ?? "") {
   if (arg.startsWith("@")) {
     try {
       return fs.readFileSync(arg.slice(1), "utf8")

@@ -182,22 +182,53 @@ export function exportPracticeSql(dialect) {
       .all()
     const ddl = []
     const inserts = []
+    // 被跳过的行（只有 sqlserver 方言会有：主键忽略尾随空格造成的重复行）
+    const skipped = []
     for (const t of tables) {
       ddl.push(translateDdl(t.sql, dialect))
-      const cols = db.prepare(`PRAGMA table_info(${t.name})`).all().map((c) => c.name)
+      const info = db.prepare(`PRAGMA table_info(${t.name})`).all()
+      const cols = info.map((c) => c.name)
+      const pkCols = info.filter((c) => c.pk === 1).map((c) => c.name)
+      // SQL Server 的自增列（IDENTITY）不能显式给值：插入时必须把这列从列清单里去掉，
+      // 否则会报 "Cannot insert explicit value for identity column"。
+      // 去掉之后 IDENTITY 会按插入顺序从 1 递增，与源库的行号一致。
+      const insertCols = dialect === "sqlserver" ? cols.filter((c) => c !== identityColumn(t.sql)) : cols
       const rows = db.prepare(`SELECT * FROM ${t.name}`).all()
+      // SQL Server 的比较与主键忽略尾随空格（ANSI 填充）：
+      // 'STL-Q235-10' 与 'STL-Q235-10 ' 会被判成同一个主键，
+      // 练习库那份「一物两码（带尾随空格）」在 SQL Server 上存不下。
+      // 实测（SQL Server 2022 CU27）：连宽度敏感排序规则（_WS）也救不了——
+      // 建表能建上，插第二行照样撞主键。sqlserver 方言下这类行只能跳过。
+      const seen = new Set()
       for (const row of rows) {
-        const values = cols.map((c) => sqlLiteral(row[c], dialect))
-        const colList = cols.map((c) => quoteIdent(c, dialect)).join(", ")
+        if (dialect === "sqlserver" && pkCols.length) {
+          const key = pkCols
+            .map((c) => String(row[c] ?? "").replace(/\s+$/g, "").toLowerCase())
+            .join("\u0000")
+          if (seen.has(key)) {
+            skipped.push({ 表: t.name, 主键: key })
+            continue
+          }
+          seen.add(key)
+        }
+        const values = insertCols.map((c) => sqlLiteral(row[c], dialect))
+        const colList = insertCols.map((c) => quoteIdent(c, dialect)).join(", ")
         inserts.push(`INSERT INTO ${t.name} (${colList}) VALUES (${values.join(", ")});`)
       }
       db.exec("SELECT 1")
     }
     db.close()
-    return { ddl, inserts }
+    return { ddl, inserts, skipped }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   }
+}
+
+/** SQLite 建表语句里的自增列名（AUTOINCREMENT 的那一列），没有则返回 null */
+function identityColumn(sql) {
+  if (!/AUTOINCREMENT/i.test(String(sql))) return null
+  const m = String(sql).match(/\(\s*([A-Za-z_][A-Za-z0-9_]*)\s/)
+  return m ? m[1] : null
 }
 
 /** T-SQL 保留字：这些列名在 SQL Server 里必须加方括号 */
@@ -217,19 +248,23 @@ function translateDdl(sql, dialect) {
   if (dialect === "postgres") {
     s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "SERIAL PRIMARY KEY")
     s = s.replace(/REAL/gi, "DOUBLE PRECISION")
+    s = s.replace(/CREATE TABLE\s+([A-Za-z_][A-Za-z0-9_]*)/gi, "CREATE TABLE IF NOT EXISTS $1")
     return s
   }
   if (dialect === "sqlserver") {
     // SQL Server：自增列用 IDENTITY，文本用 NVARCHAR，主键要带长度
+    // 建表语句做成幂等的（IF OBJECT_ID IS NULL），配合事务让重试安全
     s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT IDENTITY(1,1) PRIMARY KEY")
     s = s.replace(/REAL/gi, "FLOAT")
     s = s.replace(/TEXT PRIMARY KEY/gi, "NVARCHAR(191) PRIMARY KEY")
     s = s.replace(/\bTEXT\b/gi, "NVARCHAR(255)")
     // 保留字列名加方括号（只动列名位置，这里练习库的列名都是单个词）
     s = s.replace(/\b(role|shift)\b/gi, (m) => `[${m}]`)
+    s = s.replace(/^CREATE TABLE\s+([A-Za-z_][A-Za-z0-9_]*)/i, "IF OBJECT_ID('$1', 'U') IS NULL CREATE TABLE $1")
     return s
   }
   // MySQL: TEXT 列不能直接做主键，需要换成带长度的 VARCHAR
+  s = s.replace(/CREATE TABLE\s+([A-Za-z_][A-Za-z0-9_]*)/gi, "CREATE TABLE IF NOT EXISTS $1")
   s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT AUTO_INCREMENT PRIMARY KEY")
   s = s.replace(/REAL/gi, "REAL")
   s = s.replace(/TEXT PRIMARY KEY/gi, "VARCHAR(191) PRIMARY KEY")
