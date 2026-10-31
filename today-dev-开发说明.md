@@ -1180,3 +1180,113 @@ sshd 容器端口 14320–14341 段，容器就绪后由站点写入免密 sudo 
   PostgreSQL 路径同样只做了代码实现，未单独跑 E2E。
 - 站内单步执行有 120 秒上限，超时返回 502——造满 inode、批量导入这类重活需要拆成多步。
 - 一次性环境的服务端 TTL 是 2 小时；用户如果直接关掉页面，靠前端的兜底销毁 + 服务端扫描回收。
+
+## 十七、本轮：异步作业通道（修模式 B 的 502）+ 练习库表结构注入 + SQL Server 方言 + 清理 metabase（2026-10-31）
+
+### 17.1 结论先说
+
+1. **模式 B 服务器题的 502 是真的修好了**：根因不是站内超时设置，而是**外层平台网关会在单个 HTTP 请求约 20 秒时硬截断**。站内同步执行器再快也没用——重活步必然 502。本轮改成「提交作业 → 轮询取结果」的异步通道后，同一道 `lx-d5`（造满 inode，需要连续创建数万个小文件）在模式 B 下 **12/12 步全过，最慢一步 77.989 秒，全程无 502**。
+2. **模型臆造列名的问题从根上堵住了**：把练习库真实表结构（8 张表、列名/类型/行数）做成常量并注入数据库题的提示词，同时加硬规则「只能使用表结构里列出的表名与列名」。两轮真实上游生成实测里，生成的 SQL **臆造列名 = 0**（上一轮有 2 步把 `items` 的列写成不存在的 `name`）。
+3. **PostgreSQL 模式 B 端到端跑通了**：站点一次性起 `postgres:16-alpine` 容器，灌入练习库 231 行，题目口径判分 PASS（脏码计数 0 / 0）。
+4. **SQL Server 只做完了代码路径，没做容器端到端**：删掉 metabase 后根分区可用空间 5.1 GB，而 mssql 2022 镜像解包约 2.7 GB、峰值约 4.3 GB，余量不足以安全跑完，按刘先生「空间不足就别搞太多」的口径**主动暂缓**，代码（方言转换 + `mssql` 驱动灌库）已写好并通过单测。
+5. **metabase 已按授权删除**，卷内数据先备份再删；根分区可用空间从 2.6 GB 升到 5.1 GB。
+
+### 17.2 502 的根因与为什么改成异步通道
+
+站内执行器原本是同步的：前端发一个请求 → 站点起子进程跑命令 → 命令结束才回包。而**外层平台网关会在单个 HTTP 请求约 20 秒时硬截断**，回包超时对用户表现为 502。
+
+上一轮的实测口径：站内同步执行器上限 120 秒，模式 B 的「造满 inode」两步连续创建数万个小文件，必然超过 20 秒 → 必然 502。**延长站内超时无效**（网关先断），所以本轮没有去调 `timeoutMs`，而是把执行改成异步：
+
+| 环节 | 实现 |
+| --- | --- |
+| 服务端作业队列 | 新增 `server/labjobs.mjs`：`submit` 落载荷并立刻返回 `jobId`；`work` 子进程跑执行器；`poll` 返回 pending/done；`sweep` 清理过期作业 |
+| 站内路由 | 新增 `templates/pb_hooks/lab_job.pb.js`：`POST /api/labjob/submit`、`POST /api/labjob/poll`，只允许普通 MES 应用账号调用 |
+| 前端封装 | `src/lib/labApi.ts` 新增 `labJobApi.submit/poll` 与 `runLabJob(kind, payload, {timeoutMs, intervalMs})` |
+| 面板接线 | `src/components/lab/LabScriptPanel.tsx` 的 `runSql / runSqlInline / runShell / runShellInline / createSiteEnv` 全部改走作业通道 |
+
+安全边界（都做了实测，不是设计意图）：
+
+- 作业目录 `0700`、结果文件 `0600`（单测断言过实际权限位）。
+- **一次性环境口令不落盘**：载荷走 `command.env` 的 `MES_LAB_JOB_PAYLOAD`，执行器读完立即删掉载荷文件；作业目录里只剩 `result.json`（单测「执行完就不再留载荷文件」）。
+- 作业 TTL 30 分钟，`sweep` 清扫过期目录（单测用改 mtime 的老目录验证）。
+- 执行器请求改用 `@文件` 传参，数据库口令不进 argv。
+- 子进程环境走白名单（`PATH`/`HOME`/可选 `MES_LAB_DATA`），不把应用密钥传给执行器。
+- 单步硬上限：db 60 秒 / server 300 秒 / labenv 600 秒，超时 SIGKILL。
+
+### 17.3 练习库表结构注入（治「臆造列名」）
+
+- 新增 `src/game/practiceSchema.ts`：把练习库 8 张表（items / bom / employees / equipment / work_orders / work_reports / inventory / sales_orders）的**列名、类型、主键、行数**做成常量，并生成提示词片段。
+- `src/game/labScripts.ts`：数据库题的提示词里插入「## 练习库真实表结构（必须严格照用，禁止臆造列名）」，并在硬规则里加一条「只能使用表结构里列出的表名与列名，一个字都不能改」；服务器题不注入这块内容。
+- 新增 `server/__tests__/practiceSchema.test.ts`：**漂移测试**——解析 `server/seed-practice-db.mjs` 里的建表语句逐表逐列比对，再用 `PRAGMA table_info` 跟真实建出来的库再比一遍，最后把行数也比一遍。表结构一变而常量没跟上，测试直接红。
+
+### 17.4 SQL Server 方言（本轮只做代码，没做容器 E2E）
+
+`server/seed-practice-db.mjs` 的 `exportPracticeSql` 从只支持 mysql / postgres 扩到 **sqlserver**：
+
+| SQLite 原型 | SQL Server |
+| --- | --- |
+| `INTEGER PRIMARY KEY AUTOINCREMENT` | `INT IDENTITY(1,1) PRIMARY KEY` |
+| `REAL` | `FLOAT` |
+| `TEXT PRIMARY KEY` | `NVARCHAR(191) PRIMARY KEY` |
+| `TEXT` | `NVARCHAR(255)` |
+| 保留字列名 `role` / `shift` | `[role]` / `[shift]` |
+| 字符串字面量 | `N'...'`（Unicode） |
+
+`server/labenv.mjs` 的 `seedDatabase()` 补了 sqlserver 分支（走 `mssql` 驱动灌库），SQL Server 的 sa 口令按复杂度要求补齐大小写+数字+符号。
+
+**没做的部分（如实）**：sqlserver 容器端到端没跑——删 metabase 后根分区只剩 5.1 GB 可用，mssql 2022 解包约 2.7 GB、峰值约 4.3 GB，余量不足以保证不影响站点（根分区同时跑着 PocketBase / docker data-root）。按刘先生「空间不足就别搞太多、需要新服务器可以给」的口径**主动暂缓**，不是失败。
+
+### 17.5 metabase 清理（已授权，一次性删除）
+
+刘先生原话：「metabase 其实可以停了删了它，我当初就是想体验下数据成图的感觉」。
+
+删除前的盘点与依赖复核（逐项确认没有别的服务依赖它）：
+
+| 项 | 处置前的实际情况 |
+| --- | --- |
+| 容器 | `metabase`（镜像 `metabase/metabase:latest`，发布端口 3000，restart=unless-stopped，compose 项目在 `/data/home/metabase/compose.yml`） |
+| 镜像 | 1.91 GB（容器层另占 746 MB） |
+| 卷 | `metabase_metabase-data`（18 MB，内含 `metabase.db.mv.db` 17.7 MB） |
+| nginx | 只有 `/etc/nginx/sites-enabled/metabase.conf` 引用 `metabase_backend`（127.0.0.1:3000）；`sites-available/default` 与 `00-mes.conf` 都没有 metabase / 3000 的引用 |
+| 依赖复核 | `mes-pocketbase` / `mes-edge-proxy` / `nginx` 三个服务都不指向 metabase；删除后三者仍 active |
+
+处置顺序（按「先保数据、再删东西」）：**先把卷内数据备份到 `/data/home/metabase-db-backup-2026-10-31/`（18 MB）→ 停容器 → 删容器 → 删卷 → 删镜像 → 删 nginx 站点并 `nginx -t && reload` → 删 `/data/home/metabase`**。
+
+复核结果：没有 metabase 容器 / 镜像 / 卷残留，nginx 无残留引用，三个服务 active。
+
+空间变化：根分区 `/dev/root` 16 GB 从「已用 13 GB、可用 2.6 GB（83%）」变为「已用 9.7 GB、可用 5.1 GB（66%）」。
+
+**顺带发现（未擅自处理，留给刘先生决定）**：docker 里还有约 40 个 210 MB 级的 mysql 孤儿卷（约 4.6 GB），是历次 E2E 留下的、没有容器引用。清理它们可以再腾出约 4.6 GB，但本轮没有授权，**没有动**。
+
+### 17.6 本轮实测结果
+
+单测（目标机 `npx vitest run`）：**34 个文件 / 723 个用例全过**（上一轮基线 31 文件 / 704 用例；本轮新增 3 个文件、19 个用例）。`npx tsc -b` 无错误。
+
+E2E（真实上游 `mimo-v2.6-pro` 生成 → 站内作业通道执行 → 判分）：
+
+| 场景 | 步数 | 通过 | 题目口径判分 | 备注 |
+| --- | --- | --- | --- | --- |
+| 模式 A / 数据库题 `db-c1`（第 1 轮） | 12 | 11 | **PASS**（`COUNT(*) FROM items WHERE unit IN ('PCS','pcs')` → `[[0]]`） | 单步约 1.28 秒 |
+| 模式 A / 数据库题 `db-c5`（第 3 轮） | 12 | 10 | **PASS**（脏码计数 `[[0,0]]`） | 臆造列名 **0**；未过 2 步是断言与输出格式不匹配（见 17.8） |
+| 模式 B / 数据库题 `db-c5`（PostgreSQL 一次性容器） | 13 | 13 | **PASS**（`[["0","0"]]`） | 容器端口 14243，灌库 **231 行**；单步约 1.28 秒 |
+| 模式 B / 数据库题 `db-c5`（PostgreSQL，第 2 轮） | 19 | 11 | **PASS** | 19 步里 8 步是「预置脏数据 / 归并引用」的写步，未过原因同上（断言不匹配），非执行失败 |
+| 模式 A / 服务器题 `lx-d5` | 23 | 20 | 题目口径命中 3/6 | 未过 3 步是模型用了 `sudo` 而演练账号免密 sudo 未就位 |
+| 模式 A / 服务器题 `lx-d5`（第 2 轮） | 13 | 11 | 题目口径命中 5/6 | 未过 2 步同样是 `sudo` 交互提示（`sudo: a terminal is required to read the password`） |
+| **模式 B / 服务器题 `lx-d5`** | **12** | **12** | 题目口径命中 4/6 | **最慢一步 77.989 秒，全程无 502**；这就是异步通道要解决的问题 |
+
+基线复核（部署后）：未认证 `/mes/` = 401、已认证 = 200；`/mes/delivery` 与 `/mes/content/labs/*.md` 同样是 401 / 200；`mes-pocketbase` / `mes-edge-proxy` / `nginx` 均 active；`player_progress` 仍 1 条、受监控 12 个字段逐条一致（部署脚本自带校验通过）；部署走既有 `deploy/mes-deploy.sh`，`DEPLOY_EXIT=0`。
+
+部署过程里踩到并修掉的一个真实缺陷：第一次构建漏了 `--base=/mes/`，产物里的资源路径是 `/assets/...`，部署脚本的「入口脚本」校验 404 触发**自动回滚**（回滚机制按设计生效）。重新用 `VITE_MES_SELF_AUTH=true VITE_MES_SELF_HOSTED_AUTH=true npx vite build --base=/mes/` 构建后部署通过。
+
+### 17.7 本轮的已知缺口（如实，不藏）
+
+1. **「命令成功执行但步骤被判失败」的口径问题**：站内执行器的输出是中文（「执行成功，影响 5 行」；查询只回值不回列名），而模型给的验收正则多是英文（`Query OK`、`affected`、`dirty_items\|dirty_inventory`），两边对不上 → 步骤实际执行成功，界面却记「未命中验收正则」。本轮**没有**改判分口径（不想在收尾阶段动判分语义），建议下一轮二选一：执行器输出补标准标记（`Query OK` / `N rows affected` / 列名行），或判分时把「退出码 0 且无错误」也算通过。
+2. **模式 A 服务器题里模型的 `sudo` 用法**：演练账号的免密 sudo 只有站点自己起容器那条路径（模式 B）写好了，模式 A 是用户自己的机器，模型不能假设有免密 sudo——题目文档里应当写明「若需要 sudo 请用用户自己的提权方式」。
+3. **SQL Server 容器 E2E 未跑**（空间，见 17.4）；**MySQL 容器 E2E** 本轮也没重跑（上一轮已跑通，代码路径未变）。
+4. **模式 A 服务器题的口径分只有 3/6 ~ 5/6**：文档第 6 节的 6 条命令正则，模型脚本只命中一部分（模型常把 `du --inodes` 写成 `du -x --inodes` 或别的等价写法）。这属于文档正则与模型写法的匹配问题，不是执行失败。
+5. **孤儿 mysql 卷约 4.6 GB 未清理**（见 17.5），根分区仍只有 5.1 GB 可用。
+
+### 17.8 推送与远端复核
+
+- 推送目标：`today-dev` 分支，显式 refspec `refs/heads/today-dev:refs/heads/today-dev`，`--no-follow-tags --no-force`；**没有**推 main / wabi-dev，没有打标签，没有删远端引用。
+- 远端不变量复核：`main`、12 个 v1.x 标签、`wabi-dev` 的指向与对象 SHA 都保持不变，只有 `today-dev` 前移。

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, Bot, CheckCircle2, Container, Loader2, Play, ShieldAlert, Trash2, XCircle } from "lucide-react"
 import { getBasename } from "@/lib/pb"
-import { dblabApi, sshlabApi, labEnvApi, type LabEnvConnection, type LabEnvInfo } from "@/lib/labApi"
+import {
+  labEnvApi,
+  runLabJob,
+  LAB_STEP_TIMEOUT_MS,
+  type LabEnvConnection,
+  type LabEnvInfo,
+} from "@/lib/labApi"
 import { callLlmWithFallback } from "@/lib/llm"
 import { LAB_ENV_MODES, labEnvModeSpec, type LabEnvMode } from "@/game/labEnv"
 import {
@@ -91,9 +97,14 @@ export function LabScriptPanel({
     setEnvBusy(true)
     setEnvError("")
     try {
-      const res = await labEnvApi.create(kind, kind === "db" ? dbType ?? "mysql" : undefined)
-      if (!res.ok || !res.env) {
-        setEnvError(res.error || "创建一次性演练环境失败，可重试。")
+      // 建容器要拉镜像、等就绪，耗时常常超过网关的单请求上限，所以走作业通道
+      const job = await runLabJob(
+        { kind: "labenv", action: "create", envKind: kind, dbType: kind === "db" ? dbType ?? "mysql" : undefined },
+        { timeoutMs: LAB_STEP_TIMEOUT_MS * 2 + 60000 },
+      )
+      const res = (job.result ?? {}) as { ok?: boolean; env?: LabEnvInfo; error?: string }
+      if (!job.ok || !res.ok || !res.env) {
+        setEnvError(res.error || job.error || "创建一次性演练环境失败，可重试。")
         return
       }
       setEnv(res.env)
@@ -530,10 +541,16 @@ export function LabScriptPanel({
   )
 }
 
+/**
+ * 四种执行入口统一走作业通道：
+ * 网关对单个 HTTP 请求约 20 秒硬截断，同步执行长步骤必然 502；
+ * 作业通道把执行搬出请求生命周期，浏览器轮询取结果。
+ */
 async function runSql(connectionId: string, sql: string): Promise<{ ok: boolean; text: string; error?: string }> {
   try {
-    const r = await dblabApi.exec(connectionId, sql)
-    if (!r.ok) return { ok: false, text: "", error: r.error || "SQL 执行失败" }
+    const job = await runLabJob({ kind: "db", connectionId, sql }, { timeoutMs: 120000 })
+    const r = (job.result ?? {}) as { ok?: boolean; rows?: unknown[][]; affectedRows?: number; error?: string }
+    if (!job.ok || r.ok === false) return { ok: false, text: "", error: r.error || job.error || "SQL 执行失败" }
     const text = (r.rows ?? []).map((row) => row.map((c) => String(c)).join(" | ")).join("\n")
     return { ok: true, text: text || `执行成功${r.affectedRows !== undefined ? `，影响 ${r.affectedRows} 行` : ""}` }
   } catch (e) {
@@ -543,8 +560,9 @@ async function runSql(connectionId: string, sql: string): Promise<{ ok: boolean;
 
 async function runSqlInline(connection: LabEnvConnection, sql: string): Promise<{ ok: boolean; text: string; error?: string }> {
   try {
-    const r = await dblabApi.execInline(connection, sql)
-    if (!r.ok) return { ok: false, text: "", error: r.error || "SQL 执行失败" }
+    const job = await runLabJob({ kind: "db", connection, sql }, { timeoutMs: 120000 })
+    const r = (job.result ?? {}) as { ok?: boolean; rows?: unknown[][]; affectedRows?: number; error?: string }
+    if (!job.ok || r.ok === false) return { ok: false, text: "", error: r.error || job.error || "SQL 执行失败" }
     const text = (r.rows ?? []).map((row) => row.map((c) => String(c)).join(" | ")).join("\n")
     return { ok: true, text: text || `执行成功${r.affectedRows !== undefined ? `，影响 ${r.affectedRows} 行` : ""}` }
   } catch (e) {
@@ -554,9 +572,13 @@ async function runSqlInline(connection: LabEnvConnection, sql: string): Promise<
 
 async function runShell(connectionId: string, command: string): Promise<{ ok: boolean; text: string; error?: string }> {
   try {
-    const r = await sshlabApi.exec(connectionId, command, 120000)
+    const job = await runLabJob(
+      { kind: "server", connectionId, command, timeoutMs: LAB_STEP_TIMEOUT_MS },
+      { timeoutMs: LAB_STEP_TIMEOUT_MS + 30000 },
+    )
+    const r = (job.result ?? {}) as { ok?: boolean; stdout?: string; stderr?: string; error?: string; message?: string }
     const text = [r.stdout ?? "", r.stderr ?? ""].filter(Boolean).join("\n")
-    if (!r.ok) return { ok: false, text, error: r.error || r.message || "命令执行失败" }
+    if (!job.ok || r.ok === false) return { ok: false, text, error: r.error || r.message || job.error || "命令执行失败" }
     return { ok: true, text }
   } catch (e) {
     return { ok: false, text: "", error: e instanceof Error ? e.message : "命令执行失败" }
@@ -565,9 +587,13 @@ async function runShell(connectionId: string, command: string): Promise<{ ok: bo
 
 async function runShellInline(connection: LabEnvConnection, command: string): Promise<{ ok: boolean; text: string; error?: string }> {
   try {
-    const r = await sshlabApi.execInline(connection, command, 120000)
+    const job = await runLabJob(
+      { kind: "server", connection, command, timeoutMs: LAB_STEP_TIMEOUT_MS },
+      { timeoutMs: LAB_STEP_TIMEOUT_MS + 30000 },
+    )
+    const r = (job.result ?? {}) as { ok?: boolean; stdout?: string; stderr?: string; error?: string; message?: string }
     const text = [r.stdout ?? "", r.stderr ?? ""].filter(Boolean).join("\n")
-    if (!r.ok) return { ok: false, text, error: r.error || r.message || "命令执行失败" }
+    if (!job.ok || r.ok === false) return { ok: false, text, error: r.error || r.message || job.error || "命令执行失败" }
     return { ok: true, text }
   } catch (e) {
     return { ok: false, text: "", error: e instanceof Error ? e.message : "命令执行失败" }

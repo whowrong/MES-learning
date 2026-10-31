@@ -6,6 +6,7 @@
 // - 步骤是否达标由 accept 正则判定，不采信模型自述的「已完成」；
 // - 危险命令沿用站内既有拦截清单（GLOBAL_DANGER），不另起一套标准。
 import { GLOBAL_DANGER } from "./opsTerminal"
+import { buildPracticeSchemaPrompt } from "./practiceSchema"
 
 /** 站内 AI 用的上游模型（与站内其它 AI 功能同一个通道） */
 export const LAB_LLM_MODEL = "mimo-v2.6-pro"
@@ -77,10 +78,12 @@ export function buildLabScriptPrompt(opts: {
   const kindRules =
     connection.kind === "db"
       ? [
-          "6. 数据库题的 command 必须是**纯 SQL 语句**（一条一步，可直接交给数据库执行）：",
+          "6. 只能使用「练习库真实表结构」里列出的表名与列名，一个字都不能改，也不能臆造新列；",
+          "   题目要的列若库里没有，改用已有列或聚合函数达成目标。",
+          "7. 数据库题的 command 必须是**纯 SQL 语句**（一条一步，可直接交给数据库执行）：",
           "   不要写 mysql/psql 命令行，不要写 shell 管道，不要把 SQL 包在引号或 -e 参数里。",
-          "7. 查询类题目只做只读查询：除非文档明确要求，不要 INSERT/UPDATE/DELETE/DROP/TRUNCATE 题目涉及的表。",
-          "8. 需要多条 SQL 时按依赖顺序拆成多步，前一步的结果要在下一步里用得上。",
+          "8. 查询类题目只做只读查询：除非文档明确要求，不要 INSERT/UPDATE/DELETE/DROP/TRUNCATE 题目涉及的表。",
+          "9. 需要多条 SQL 时按依赖顺序拆成多步，前一步的结果要在下一步里用得上。",
         ]
       : [
           "6. 服务器题的 command 必须是**单条 shell 命令**（可直接在 SSH 上执行），不要写交互式脚本块或多行 heredoc。",
@@ -103,6 +106,9 @@ export function buildLabScriptPrompt(opts: {
     "## 题目文档",
     doc,
     "",
+    ...(connection.kind === "db"
+      ? ["## 练习库真实表结构（必须严格照用，禁止臆造列名）", buildPracticeSchemaPrompt(), ""]
+      : []),
     "## 输出要求",
     "只输出一个 JSON 对象，不要输出解释文字、不要用 Markdown 代码块包裹。结构如下：",
     JSON.stringify(
@@ -136,7 +142,7 @@ export function buildLabScriptPrompt(opts: {
       1,
     ),
     "硬性约束：",
-    "1. 每条命令都要能在上面的连接描述里落地；不要臆造不存在的路径、服务名或表名。",
+    "1. 每条命令都要能在上面的连接描述里落地；不要臆造不存在的路径、服务名、表名或列名。",
     "2. 每个步骤都必须给 assert（验收正则数组），命中任意一条即算这一步达标；" +
       "   正则优先匹配命令输出里出现的关键内容（如 df -h 的输出含 Filesystem），" +
       "   命令本身能说明问题时也可以匹配命令关键片段（如 ^find\\b.*-mtime），不要两种混着写。",

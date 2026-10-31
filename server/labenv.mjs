@@ -154,9 +154,9 @@ function portReachable(port, timeoutMs = 8000) {
  * 不灌同一份确定性数据的话题目脚本会直接报表不存在，判分口径也对不上。
  */
 async function seedDatabase(engine, connection) {
-  if (engine !== "mysql" && engine !== "postgres") return 0
+  if (engine !== "mysql" && engine !== "postgres" && engine !== "sqlserver") return 0
   const { exportPracticeSql } = await import("./seed-practice-db.mjs")
-  const { ddl, inserts } = exportPracticeSql(engine === "postgres" ? "postgres" : "mysql")
+  const { ddl, inserts } = exportPracticeSql(engine === "postgres" ? "postgres" : engine === "sqlserver" ? "sqlserver" : "mysql")
   if (engine === "mysql") {
     const mysql = (await import("mysql2/promise")).default
     const conn = await mysql.createConnection({
@@ -175,20 +175,41 @@ async function seedDatabase(engine, connection) {
     }
     return inserts.length
   }
-  const { Client } = await import("pg")
-  const client = new Client({
-    host: connection.host,
+  if (engine === "postgres") {
+    const { Client } = await import("pg")
+    const client = new Client({
+      host: connection.host,
+      port: connection.port,
+      user: connection.username,
+      password: connection.password,
+      database: connection.database,
+    })
+    await client.connect()
+    try {
+      for (const stmt of ddl) await client.query(stmt)
+      for (const stmt of inserts) await client.query(stmt)
+    } finally {
+      await client.end().catch(() => {})
+    }
+    return inserts.length
+  }
+  // SQL Server
+  const mssql = (await import("mssql")).default
+  const pool = await mssql.connect({
+    server: connection.host,
     port: connection.port,
     user: connection.username,
     password: connection.password,
     database: connection.database,
+    options: { trustServerCertificate: true },
+    connectionTimeout: 30000,
+    requestTimeout: 60000,
   })
-  await client.connect()
   try {
-    for (const stmt of ddl) await client.query(stmt)
-    for (const stmt of inserts) await client.query(stmt)
+    for (const stmt of ddl) await pool.request().query(stmt)
+    for (const stmt of inserts) await pool.request().query(stmt)
   } finally {
-    await client.end().catch(() => {})
+    await pool.close().catch(() => {})
   }
   return inserts.length
 }
@@ -211,9 +232,11 @@ async function createDbEnv(dbType) {
       "-e", "POSTGRES_DB=lab", "-p", `127.0.0.1:${port}:5432`, "postgres:16-alpine"]
     connection = { type: "postgres", host: "127.0.0.1", port, database: "lab", username: "lab", password }
   } else {
-    args = ["run", "-d", "--name", name, "-e", "ACCEPT_EULA=Y", "-e", `MSSQL_SA_PASSWORD=${password}`,
+    // SQL Server 的 sa 口令有复杂度要求：必须含大写、小写、数字、符号
+    const mssqlPassword = "Aa1!" + password
+    args = ["run", "-d", "--name", name, "-e", "ACCEPT_EULA=Y", "-e", `MSSQL_SA_PASSWORD=${mssqlPassword}`,
       "-p", `127.0.0.1:${port}:1433`, "mcr.microsoft.com/mssql/server:2022-latest"]
-    connection = { type: "sqlserver", host: "127.0.0.1", port, database: "master", username: "sa", password }
+    connection = { type: "sqlserver", host: "127.0.0.1", port, database: "master", username: "sa", password: mssqlPassword }
   }
   const r = docker(args, 300000)
   if (r.code !== 0) {
@@ -328,10 +351,26 @@ function statusAll() {
   return envs
 }
 
+/**
+ * 请求体来源：argv[2] 直接给 JSON，或以 @ 开头时从文件读（作业通道用文件传参，
+ * 避免口令出现在进程命令行里）。
+ */
+function readRequestJson() {
+  const arg = process.argv[2] ?? ""
+  if (arg.startsWith("@")) {
+    try {
+      return fs.readFileSync(arg.slice(1), "utf8")
+    } catch {
+      return ""
+    }
+  }
+  return arg
+}
+
 async function main() {
   let req
   try {
-    req = JSON.parse(process.argv[2])
+    req = JSON.parse(readRequestJson() || "{}")
   } catch (e) {
     return fail("请求解析失败", e)
   }

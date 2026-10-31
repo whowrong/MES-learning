@@ -134,3 +134,34 @@ describe("生产环境识别与环境不符", () => {
     expect(environmentMismatch(doc, { kind: "server" })).toBeNull()
   })
 })
+
+describe("数据库题提示词带练习库真实表结构", () => {
+  const dbPrompt = buildLabScriptPrompt({
+    title: "洗数据：合并一物两码",
+    doc: "### 题目\n把同物两码合并成一条",
+    connection: { kind: "db", type: "mysql", host: "10.0.0.9", port: 3306, database: "drill", username: "drill" },
+  })
+
+  it("注入表结构块，并给出真实列名", () => {
+    expect(dbPrompt).toContain("练习库真实表结构")
+    expect(dbPrompt).toContain("item_name")
+    expect(dbPrompt).toContain("employee_no")
+    expect(dbPrompt).toContain("qty_book")
+    expect(dbPrompt).toContain("work_reports")
+  })
+
+  it("明确禁止臆造列名，且不出现臆造出来的 items.name", () => {
+    expect(dbPrompt).toContain("臆造")
+    expect(dbPrompt).not.toMatch(/items\.name\b/)
+  })
+
+  it("服务器题不注入表结构块", () => {
+    const serverPrompt = buildLabScriptPrompt({
+      title: "磁盘打满",
+      doc: "### 题目\n把 inode 用满再清理",
+      connection: { kind: "server", host: "10.0.0.8", port: 22, username: "ops" },
+    })
+    expect(serverPrompt).not.toContain("练习库真实表结构")
+    expect(serverPrompt).not.toContain("item_name")
+  })
+})

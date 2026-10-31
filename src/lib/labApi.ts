@@ -164,6 +164,140 @@ export const labEnvApi = {
     post<{ ok: boolean; envs?: LabEnvStatusEntry[]; swept?: string[]; error?: string }>("/api/labenv/status", {}),
 }
 
+// ---------- 演练作业通道（异步提交 + 轮询） ----------
+
+/**
+ * 为什么走作业通道：站点外层平台网关对单个 HTTP 请求约 20 秒硬截断
+ * （实测 sleep 25s 必返 502），放宽服务端内部超时救不了 502。
+ * 所以长耗时的演练步骤一律「提交即返回 jobId，再轮询取结果」。
+ */
+export type LabJobKind = "db" | "server" | "labenv"
+
+export interface LabJobPayload {
+  kind: LabJobKind
+  /** labenv 用：create / destroy / status */
+  action?: "create" | "destroy" | "status"
+  /** labenv 用：一次性环境是数据库还是服务器 */
+  envKind?: "db" | "server"
+  dbType?: "mysql" | "postgres" | "sqlserver"
+  connectionId?: string
+  connection?: LabEnvConnection
+  sql?: string
+  command?: string
+  /** 单步执行上限（服务端会再兜一层硬上限） */
+  timeoutMs?: number
+  id?: string
+}
+
+export interface LabJobResult {
+  ok?: boolean
+  error?: string
+  message?: string
+  stdout?: string
+  stderr?: string
+  code?: number
+  rows?: unknown[][]
+  affectedRows?: number
+  columns?: string[]
+  env?: LabEnvInfo
+  [k: string]: unknown
+}
+
+export interface LabJobSubmitResponse {
+  ok: boolean
+  jobId?: string
+  expiresAt?: string
+  error?: string
+}
+
+export interface LabJobPollResponse {
+  ok: boolean
+  status?: "pending" | "done"
+  result?: LabJobResult
+  durationMs?: number
+  error?: string
+}
+
+export const labJobApi = {
+  submit: (payload: LabJobPayload) => post<LabJobSubmitResponse>("/api/labjob/submit", payload),
+  poll: (jobId: string) => post<LabJobPollResponse>("/api/labjob/poll", { jobId }),
+}
+
+/** 轮询间隔 */
+export const LAB_JOB_POLL_INTERVAL_MS = 1500
+/** 单步硬上限：5 分钟（服务端同值兜底，避免出现无上限的挂死） */
+export const LAB_STEP_TIMEOUT_MS = 300000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export interface LabJobOutcome {
+  ok: boolean
+  result?: LabJobResult
+  error?: string
+  elapsedMs: number
+}
+
+/**
+ * 提交一个演练作业并轮询到结束。
+ * 连续多次轮询失败才判失败（偶发网络抖动不该让整步作废）。
+ */
+export async function runLabJob(
+  payload: LabJobPayload,
+  opts?: { timeoutMs?: number; intervalMs?: number },
+): Promise<LabJobOutcome> {
+  const started = Date.now()
+  const timeoutMs = opts?.timeoutMs ?? LAB_STEP_TIMEOUT_MS + 30000
+  const intervalMs = opts?.intervalMs ?? LAB_JOB_POLL_INTERVAL_MS
+  let submit: LabJobSubmitResponse
+  try {
+    submit = await labJobApi.submit(payload)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "作业提交失败", elapsedMs: Date.now() - started }
+  }
+  if (!submit.ok || !submit.jobId) {
+    return { ok: false, error: submit.error || "作业提交失败", elapsedMs: Date.now() - started }
+  }
+  let consecutiveErrors = 0
+  for (;;) {
+    await sleep(intervalMs)
+    let polled: LabJobPollResponse | null = null
+    try {
+      polled = await labJobApi.poll(submit.jobId)
+    } catch {
+      polled = null
+    }
+    if (!polled) {
+      consecutiveErrors += 1
+      if (consecutiveErrors >= 3) {
+        return { ok: false, error: "作业查询连续失败", elapsedMs: Date.now() - started }
+      }
+      continue
+    }
+    consecutiveErrors = 0
+    if (!polled.ok) {
+      return { ok: false, error: polled.error || "作业查询失败", elapsedMs: Date.now() - started }
+    }
+    if (polled.status === "done") {
+      const result = polled.result ?? {}
+      return {
+        ok: result.ok !== false,
+        result,
+        error: result.ok !== false ? undefined : result.error || "作业执行失败",
+        elapsedMs: Date.now() - started,
+      }
+    }
+    if (Date.now() - started > timeoutMs) {
+      return {
+        ok: false,
+        error: `作业超过 ${Math.round(timeoutMs / 1000)} 秒仍未结束，已放弃等待`,
+        elapsedMs: Date.now() - started,
+      }
+    }
+  }
+}
+
 // ---------- 部署文档库（MCP collection deploy_docs 的自定义 REST 路由） ----------
 
 export interface DeployDoc {

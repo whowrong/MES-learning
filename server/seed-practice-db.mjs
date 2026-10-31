@@ -162,13 +162,13 @@ if (process.argv[1] && process.argv[1].endsWith("seed-practice-db.mjs")) {
 
 
 /**
- * 把内置练习库导出成 MySQL / PostgreSQL 可执行的建表 + 插入语句。
+ * 把内置练习库导出成 MySQL / PostgreSQL / SQL Server 可执行的建表 + 插入语句。
  *
  * 模式 B（站点一次性 Docker 演练环境）里的数据库容器是空的，
  * 而数据库实操营的题目都跑在这套练习库的表上——所以容器就绪后要先把
  * 同一份确定性数据灌进去，题目脚本才能原样跑通、判分口径才对得上。
  *
- * @param {"mysql"|"postgres"} dialect
+ * @param {"mysql"|"postgres"|"sqlserver"} dialect
  * @returns {{ ddl: string[], inserts: string[] }}
  */
 export function exportPracticeSql(dialect) {
@@ -188,7 +188,8 @@ export function exportPracticeSql(dialect) {
       const rows = db.prepare(`SELECT * FROM ${t.name}`).all()
       for (const row of rows) {
         const values = cols.map((c) => sqlLiteral(row[c], dialect))
-        inserts.push(`INSERT INTO ${t.name} (${cols.join(", ")}) VALUES (${values.join(", ")});`)
+        const colList = cols.map((c) => quoteIdent(c, dialect)).join(", ")
+        inserts.push(`INSERT INTO ${t.name} (${colList}) VALUES (${values.join(", ")});`)
       }
       db.exec("SELECT 1")
     }
@@ -199,13 +200,38 @@ export function exportPracticeSql(dialect) {
   }
 }
 
+/** T-SQL 保留字：这些列名在 SQL Server 里必须加方括号 */
+const SQLSERVER_RESERVED = new Set(["role", "shift"])
+
+/** 标识符按方言加引号（SQL Server 的保留字列名要加方括号） */
+export function quoteIdent(name, dialect) {
+  if (dialect === "sqlserver" && SQLSERVER_RESERVED.has(String(name).toLowerCase())) {
+    return `[${name}]`
+  }
+  return String(name)
+}
+
 /** SQLite 的建表语句转成目标方言 */
 function translateDdl(sql, dialect) {
   let s = String(sql).trim()
-  s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, dialect === "postgres" ? "SERIAL PRIMARY KEY" : "INT AUTO_INCREMENT PRIMARY KEY")
-  s = s.replace(/REAL/gi, dialect === "postgres" ? "DOUBLE PRECISION" : "REAL")
-  if (dialect === "postgres") return s
+  if (dialect === "postgres") {
+    s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "SERIAL PRIMARY KEY")
+    s = s.replace(/REAL/gi, "DOUBLE PRECISION")
+    return s
+  }
+  if (dialect === "sqlserver") {
+    // SQL Server：自增列用 IDENTITY，文本用 NVARCHAR，主键要带长度
+    s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT IDENTITY(1,1) PRIMARY KEY")
+    s = s.replace(/REAL/gi, "FLOAT")
+    s = s.replace(/TEXT PRIMARY KEY/gi, "NVARCHAR(191) PRIMARY KEY")
+    s = s.replace(/\bTEXT\b/gi, "NVARCHAR(255)")
+    // 保留字列名加方括号（只动列名位置，这里练习库的列名都是单个词）
+    s = s.replace(/\b(role|shift)\b/gi, (m) => `[${m}]`)
+    return s
+  }
   // MySQL: TEXT 列不能直接做主键，需要换成带长度的 VARCHAR
+  s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT AUTO_INCREMENT PRIMARY KEY")
+  s = s.replace(/REAL/gi, "REAL")
   s = s.replace(/TEXT PRIMARY KEY/gi, "VARCHAR(191) PRIMARY KEY")
   s = s.replace(/\bTEXT\b/gi, "VARCHAR(255)")
   return s
@@ -217,5 +243,6 @@ function sqlLiteral(v, dialect) {
   if (typeof v === "number" && Number.isFinite(v)) return String(v)
   if (typeof v === "bigint") return String(v)
   const s = String(v).replace(/'/g, "''")
-  return `'${s}'`
+  // SQL Server 用 Unicode 字符串字面量
+  return dialect === "sqlserver" ? `N'${s}'` : `'${s}'`
 }

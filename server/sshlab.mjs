@@ -8,7 +8,7 @@ import path from "node:path"
 import { Client } from "ssh2"
 import { asciiSafeJson } from "./asciiJson.mjs"
 
-const LAB_DATA = "/workspace/pocketbase-bin/lab-data"
+const LAB_DATA = process.env.MES_LAB_DATA || "/workspace/pocketbase-bin/lab-data"
 const CONN_FILE = path.join(LAB_DATA, "server-connections.json")
 const CONNECT_TIMEOUT = 15000
 const EXEC_TIMEOUT = 60000
@@ -106,10 +106,26 @@ function execOn(c, command, timeoutMs) {
   })
 }
 
+/**
+ * 请求体来源：argv[2] 直接给 JSON，或以 @ 开头时从文件读（作业通道用文件传参，
+ * 避免口令出现在进程命令行里）。
+ */
+function readRequestJson() {
+  const arg = process.argv[2] ?? ""
+  if (arg.startsWith("@")) {
+    try {
+      return fs.readFileSync(arg.slice(1), "utf8")
+    } catch {
+      return ""
+    }
+  }
+  return arg
+}
+
 async function main() {
   let req
   try {
-    req = JSON.parse(process.argv[2])
+    req = JSON.parse(readRequestJson() || "{}")
   } catch (e) {
     return fail("请求解析失败", e)
   }

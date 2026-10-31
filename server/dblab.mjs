@@ -9,7 +9,7 @@ import path from "node:path"
 import { seedPracticeDb } from "./seed-practice-db.mjs"
 import { asciiSafeJson } from "./asciiJson.mjs"
 
-const LAB_DATA = "/workspace/pocketbase-bin/lab-data"
+const LAB_DATA = process.env.MES_LAB_DATA || "/workspace/pocketbase-bin/lab-data"
 const CONN_FILE = path.join(LAB_DATA, "db-connections.json")
 const PRACTICE_DB = path.join(LAB_DATA, "practice.db")
 const MAX_ROWS = 500 // 结果集截断上限（防打爆前端）
@@ -212,10 +212,26 @@ async function execMssql(conn, statements, action) {
 }
 
 // ---------- 主入口 ----------
+/**
+ * 请求体来源：argv[2] 直接给 JSON，或以 @ 开头时从文件读（作业通道用文件传参，
+ * 避免口令出现在进程命令行里）。
+ */
+function readRequestJson() {
+  const arg = process.argv[2] ?? ""
+  if (arg.startsWith("@")) {
+    try {
+      return fs.readFileSync(arg.slice(1), "utf8")
+    } catch {
+      return ""
+    }
+  }
+  return arg
+}
+
 async function main() {
   let req
   try {
-    req = JSON.parse(process.argv[2])
+    req = JSON.parse(readRequestJson() || "{}")
   } catch (e) {
     return fail("请求解析失败", e)
   }
