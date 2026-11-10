@@ -12,6 +12,8 @@ import ch1Json from "../../../../public/content/levels/ch1.json"
 import ch2Json from "../../../../public/content/levels/ch2.json"
 import ch3Json from "../../../../public/content/levels/ch3.json"
 import ch4Json from "../../../../public/content/levels/ch4.json"
+import ch5Json from "../../../../public/content/levels/ch5.json"
+import levelIndexJson from "../../../../public/content/levels/index.json"
 import termsJson from "../../../../public/content/terms.json"
 import type { ReactNode } from "react"
 
@@ -19,6 +21,7 @@ const ch1: unknown = ch1Json
 const ch2: unknown = ch2Json
 const ch3: unknown = ch3Json
 const ch4: unknown = ch4Json
+const ch5: unknown = ch5Json
 const termsData: unknown = termsJson
 
 function jsonRes(data: unknown): Response {
@@ -68,6 +71,21 @@ function playMatchAllCorrect() {
   expect(latest.matchAllPlaced).toBe(true)
   act(() => latest.submitMatch())
   expect(latest.matchCorrect).toBe(round.length)
+}
+
+/** 按完整正确顺序整理流程卡并提交 */
+function playSortAllCorrect() {
+  const expected = latest.sortStage!.steps.map((step) => step.id)
+  for (let target = 0; target < expected.length; target++) {
+    let current = latest.sortStepViews.findIndex((step) => step.stepId === expected[target])
+    while (current > target) {
+      act(() => latest.moveStep(current, -1))
+      current -= 1
+    }
+  }
+  act(() => latest.submitSort())
+  expect(latest.sortRevealed).toBe(true)
+  expect(latest.sortWrongCount).toBe(0)
 }
 
 /** 本局真假鉴定全部答对并推进（每题按 isMatch 判断 yes/no） */
@@ -125,17 +143,9 @@ beforeEach(() => {
   const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)
     if (url.includes("terms.json")) return jsonRes(termsData)
-    if (url.includes("levels/index.json")) {
-      return jsonRes({
-        levels: [
-          { chapter: 1, file: "ch1.json" },
-          { chapter: 2, file: "ch2.json" },
-          { chapter: 3, file: "ch3.json" },
-          { chapter: 4, file: "ch4.json" },
-        ],
-      })
-    }
+    if (url.includes("levels/index.json")) return jsonRes(levelIndexJson)
     if (url.includes("levels/ch4.json")) return jsonRes(ch4)
+    if (url.includes("levels/ch5.json")) return jsonRes(ch5)
     if (url.includes("levels/ch3.json")) return jsonRes(ch3)
     if (url.includes("levels/ch2.json")) return jsonRes(ch2)
     if (url.includes("levels/ch1.json")) return jsonRes(ch1)
@@ -489,6 +499,39 @@ describe("第四章全流程（执行与报工）", () => {
     expect(latest.chapterState["5"]).toBe("open")
     const patched = fetchMockCalls().filter((c) => c.method === "PATCH")
     expect(patched.length).toBeGreaterThan(0)
+  })
+})
+
+describe("第五章内容加载", () => {
+  it("从内容索引加载可玩的质量与库存关卡及所有阶段", async () => {
+    await bootstrap(5)
+    expect(latest.level?.chapter).toBe(5)
+    expect(latest.level?.title).toBe("质量与库存")
+    expect(latest.phase).toBe("story")
+    expect(latest.level?.stages.map((stage) => stage.type)).toEqual(["match", "judge", "quiz", "fill", "sort"])
+    expect(latest.level?.stages.find((stage) => stage.type === "match")?.quotes.length).toBe(16)
+    expect(latest.level?.stages.find((stage) => stage.type === "sort")?.steps.length).toBe(7)
+  })
+
+  it("完成第五章全部题型后正常结算并保存通关状态", async () => {
+    await bootstrap(5)
+    await playStory()
+    playMatchAllCorrect()
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "进入下一关：真假鉴定" }))
+    })
+    await playJudgeAllCorrect()
+    await playQuizAllCorrect()
+    await playFillAllCorrect()
+    expect(latest.phase).toBe("sort")
+
+    playSortAllCorrect()
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /完成本章 · 查看结算/ }))
+    })
+    await waitFor(() => expect(latest.phase).toBe("result"))
+    expect(latest.chapterState["5"]).toBe("cleared")
+    expect(fetchMockCalls().some((call) => call.method === "PATCH")).toBe(true)
   })
 })
 

@@ -1,1 +1,24 @@
-{ "levels": [ { "chapter": 1, "file": "ch1.json" }, { "chapter": 2, "file": "ch2.json" }, { "chapter": 3, "file": "ch3.json" }, { "chapter": 4, "file": "ch4.json" } ] }
+{
+  "levels": [
+    {
+      "chapter": 1,
+      "file": "ch1.json"
+    },
+    {
+      "chapter": 2,
+      "file": "ch2.json"
+    },
+    {
+      "chapter": 3,
+      "file": "ch3.json"
+    },
+    {
+      "chapter": 4,
+      "file": "ch4.json"
+    },
+    {
+      "chapter": 5,
+      "file": "ch5.json"
+    }
+  ]
+}
