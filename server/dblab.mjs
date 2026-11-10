@@ -76,7 +76,62 @@ function truncateRows(rows) {
 // ---------- 内置练习库（SQLite） ----------
 function ensurePracticeDb() {
   fs.mkdirSync(LAB_DATA, { recursive: true })
-  if (!fs.existsSync(PRACTICE_DB)) seedPracticeDb(PRACTICE_DB)
+  if (fs.existsSync(PRACTICE_DB)) return
+
+  // 作业通道会为并发请求派生多个 Node 进程；首次访问时必须跨进程串行建库。
+  // 否则两个进程可能同时执行种子脚本，SQLite 会报 database is locked。
+  const lockFile = `${PRACTICE_DB}.init.lock`
+  const deadline = Date.now() + 20000
+  let lockFd = null
+  const pause = new Int32Array(new SharedArrayBuffer(4))
+  while (!fs.existsSync(PRACTICE_DB)) {
+    try {
+      lockFd = fs.openSync(lockFile, "wx", 0o600)
+      fs.writeSync(lockFd, String(process.pid))
+      break
+    } catch (e) {
+      if (e?.code !== "EEXIST") throw e
+
+      // 上次若在初始化中途崩溃，允许后来者清掉已死亡进程留下的锁。
+      try {
+        const ownerPid = Number(fs.readFileSync(lockFile, "utf8").trim())
+        if (Number.isSafeInteger(ownerPid) && ownerPid > 0) {
+          try {
+            process.kill(ownerPid, 0)
+          } catch (probeError) {
+            if (probeError?.code === "ESRCH") fs.unlinkSync(lockFile)
+          }
+        } else if (Date.now() - fs.statSync(lockFile).mtimeMs > 5000) {
+          fs.unlinkSync(lockFile)
+        }
+      } catch (lockError) {
+        if (lockError?.code !== "ENOENT") throw lockError
+      }
+      if (Date.now() >= deadline) throw new Error("等待内置练习库初始化超时")
+      Atomics.wait(pause, 0, 0, 20)
+    }
+  }
+
+  // 另一进程已建好数据库，不再持锁。
+  if (lockFd === null) return
+  let tempDir = ""
+  try {
+    if (!fs.existsSync(PRACTICE_DB)) {
+      tempDir = fs.mkdtempSync(path.join(LAB_DATA, ".practice-init-"))
+      const tempDb = path.join(tempDir, "practice.db")
+      seedPracticeDb(tempDb)
+      // 临时库和目标库在同一文件系统；rename 原子发布完整数据库。
+      fs.renameSync(tempDb, PRACTICE_DB)
+    }
+  } finally {
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true })
+    fs.closeSync(lockFd)
+    try {
+      fs.unlinkSync(lockFile)
+    } catch {
+      // 若锁已被清理，交给后续请求即可
+    }
+  }
 }
 
 function execBuiltin(statements) {

@@ -28,9 +28,9 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-async function waitDone(jobId: string, tries = 60): Promise<any> {
+async function waitDone(jobId: string, tries = 60, dataDir = tmpDir): Promise<any> {
   for (let i = 0; i < tries; i++) {
-    const p = runLabjobs(["poll"], { MES_LAB_JOB_ID: jobId })
+    const p = runLabjobs(["poll"], { MES_LAB_JOB_ID: jobId, MES_LAB_DATA: dataDir })
     if (p.ok && p.status === "done") return p
     await sleep(250)
   }
@@ -63,6 +63,31 @@ describe("演练作业通道", () => {
     expect(fs.statSync(path.join(dir, "payload.json")).mode & 0o777).toBe(0o600)
   })
 
+  it("并发首次访问内置练习库不会争抢初始化", async () => {
+    const isolatedData = fs.mkdtempSync(path.join(os.tmpdir(), "mes-labjobs-race-test-"))
+    try {
+      const first = runLabjobs(["submit"], {
+        MES_LAB_DATA: isolatedData,
+        MES_LAB_JOB_PAYLOAD: JSON.stringify({ kind: "db", sql: "SELECT 1 AS c" }),
+      })
+      const second = runLabjobs(["submit"], {
+        MES_LAB_DATA: isolatedData,
+        MES_LAB_JOB_PAYLOAD: JSON.stringify({ kind: "db", sql: "SELECT COUNT(*) AS c FROM items" }),
+      })
+      expect(first.ok).toBe(true)
+      expect(second.ok).toBe(true)
+      const [a, b] = await Promise.all([
+        waitDone(first.jobId as string, 60, isolatedData),
+        waitDone(second.jobId as string, 60, isolatedData),
+      ])
+      expect(a.result.ok).toBe(true)
+      expect(b.result.ok).toBe(true)
+      expect(JSON.stringify(b.result)).toContain("24")
+    } finally {
+      fs.rmSync(isolatedData, { recursive: true, force: true })
+    }
+  })
+
   it("轮询能拿到执行结果（内置练习库 SELECT）", async () => {
     const res = runLabjobs(["submit"], {
       MES_LAB_JOB_PAYLOAD: JSON.stringify({ kind: "db", sql: "SELECT COUNT(*) AS c FROM items" }),
@@ -79,12 +104,14 @@ describe("演练作业通道", () => {
     const res = runLabjobs(["submit"], {
       MES_LAB_JOB_PAYLOAD: JSON.stringify({
         kind: "server",
-        connection: { host: "127.0.0.1", port: 22, username: "lab", password: "s3cret" },
+        connection: { host: "127.0.0.1", port: 9, username: "lab", password: "s3cret" },
         command: "echo hi",
+        timeoutMs: 1000,
       }),
     })
     expect(res.ok).toBe(true)
-    await waitDone(res.jobId as string)
+    const done = await waitDone(res.jobId as string)
+    expect(done.status).toBe("done")
     const dir = path.join(jobsDir, res.jobId as string)
     expect(fs.existsSync(path.join(dir, "payload.json"))).toBe(false)
     expect(fs.existsSync(path.join(dir, "request.json"))).toBe(false)
