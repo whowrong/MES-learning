@@ -9,7 +9,10 @@ interface ChapterMapProps {
 }
 
 function stateOf(ch: ChapterDef, chapterState: Record<string, ChapterState>): ChapterState {
-  return chapterState[String(ch.id)] ?? (ch.playable ? "open" : "locked")
+  const saved = chapterState[String(ch.id)]
+  if (saved === "cleared") return "cleared"
+  if (!ch.playable) return "locked"
+  return saved ?? "open"
 }
 
 export function ChapterMap({ chapters, chapterState, onOpen }: ChapterMapProps) {
