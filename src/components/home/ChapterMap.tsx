@@ -9,9 +9,13 @@ interface ChapterMapProps {
 }
 
 function stateOf(ch: ChapterDef, chapterState: Record<string, ChapterState>): ChapterState {
-  // 独立模块（route）不受关卡解锁链约束：内容建好了就能进，不再显示「施工中」。
+  // 有独立内容路由的模块不受章节解锁链约束。
   if (ch.route) return "open"
-  return chapterState[String(ch.id)] ?? (ch.playable ? "open" : "locked")
+  const saved = chapterState[String(ch.id)]
+  if (saved === "cleared") return "cleared"
+  // 避免旧存档中遗留的 open 状态把未上线章节误报为可进入。
+  if (!ch.playable) return "locked"
+  return saved ?? "open"
 }
 
 export function ChapterMap({ chapters, chapterState, onOpen }: ChapterMapProps) {
@@ -56,16 +60,11 @@ export function ChapterMap({ chapters, chapterState, onOpen }: ChapterMapProps) 
                     >
                       {st === "cleared" ? <Star className="h-4 w-4" /> : ch.id}
                     </span>
-                    {st === "cleared" && (
-                      <Badge className="rounded-full bg-primary/15 text-primary">已通关</Badge>
-                    )}
-                    {st === "open" && (
-                      <Badge className="rounded-full bg-primary text-primary-foreground">可进入</Badge>
-                    )}
+                    {st === "cleared" && <Badge className="rounded-full bg-primary/15 text-primary">已通关</Badge>}
+                    {st === "open" && <Badge className="rounded-full bg-primary text-primary-foreground">可进入</Badge>}
                     {st === "locked" && (
                       <Badge variant="outline" className="rounded-full text-muted-foreground">
-                        <Lock className="mr-1 h-3 w-3" />
-                        施工中
+                        <Lock className="mr-1 h-3 w-3" />施工中
                       </Badge>
                     )}
                   </div>
@@ -73,11 +72,7 @@ export function ChapterMap({ chapters, chapterState, onOpen }: ChapterMapProps) 
                   <p className="font-mono text-xs tracking-wide text-primary">{ch.scene}</p>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{ch.story}</p>
                   <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
-                    {ch.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="rounded-full font-normal">
-                        {tag}
-                      </Badge>
-                    ))}
+                    {ch.tags.map((tag) => <Badge key={tag} variant="secondary" className="rounded-full font-normal">{tag}</Badge>)}
                   </div>
                 </button>
               </div>

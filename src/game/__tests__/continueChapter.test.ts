@@ -18,8 +18,15 @@ describe("getContinueChapter", () => {
     expect(getContinueChapter(CHAPTERS, state)?.id).toBe(3)
   })
 
+  it("第五章已开放，但新存档仍需通关前置章节后才解锁", () => {
+    const progress = buildDefaultProgress()
+    expect(CHAPTERS.find((chapter) => chapter.id === 5)?.playable).toBe(true)
+    expect(progress.chapter_status["5"]).toBe("locked")
+    expect(getContinueChapter(CHAPTERS, progress.chapter_status)?.id).toBe(1)
+  })
+
   it("所有已开放玩法通关后回到最后一章", () => {
-    const state = { "1": "cleared" as const, "2": "cleared" as const, "3": "cleared" as const, "4": "cleared" as const }
-    expect(getContinueChapter(CHAPTERS, state)?.id).toBe(4)
+    const state = { "1": "cleared" as const, "2": "cleared" as const, "3": "cleared" as const, "4": "cleared" as const, "5": "cleared" as const }
+    expect(getContinueChapter(CHAPTERS, state)?.id).toBe(5)
   })
 })

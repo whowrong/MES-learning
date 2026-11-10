@@ -524,7 +524,7 @@ export function useLevel() {
     const nextChapterState = { ...chapterState }
     nextChapterState[String(level.chapter)] = "cleared"
     const nextCh = CHAPTERS.find((c) => Number(c.id) === Number(level.chapter) + 1)
-    if (nextCh && (nextChapterState[String(nextCh.id)] ?? "locked") === "locked") {
+    if (nextCh?.playable && (nextChapterState[String(nextCh.id)] ?? "locked") === "locked") {
       nextChapterState[String(nextCh.id)] = "open"
     }
 

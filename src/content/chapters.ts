@@ -11,7 +11,7 @@ export interface ChapterDef {
   tags: string[]
   /** 点击锁定卡片时弹出的「本章将学到什么」提示 */
   lockedTip: string
-  /** 当前版本是否已开放游玩（第一周仅第一章） */
+  /** 当前版本是否已开放游玩 */
   playable: boolean
   /**
    * 独立模块路由：有值时首页路线卡片直接跳这个模块，不走关卡引擎，
@@ -69,7 +69,7 @@ export const CHAPTERS: ChapterDef[] = [
       "质检不合格的批次怎么处理？库位盘点账对不上实物，差异出在哪？原料耗尽突然停线——还要查清库存为什么会变成负数。",
     tags: ["质检", "安全库存", "盘点", "库位"],
     lockedTip: "这一章教你质检三选一（退货 / 返工 / 让步接收）、安全库存怎么设、盘点差异怎么查，以及负库存事故的复盘。",
-    playable: false,
+    playable: true,
   },
   {
     id: 6,
