@@ -57,6 +57,21 @@ describe("内容红线：题干不漏答案", () => {
   }
 })
 
+describe("ch4 工单与报工边界练习", () => {
+  const chapter4 = levels.find(({ level }) => level.chapter === 4)?.level
+  const question = chapter4?.stages.find((stage) => stage.id === "quiz")?.questions?.find((item) => item.id === "z12")
+
+  it("用计划量与班次实绩区分工单、报工，并保留未解释差额", () => {
+    expect(question).toBeTruthy()
+    expect(question!.prompt).toContain("目标 100 件")
+    expect(question!.prompt).toContain("合格 80 件、报废 5 件")
+    const correct = question!.options.find((option) => option.id === question!.answer)
+    expect(correct?.text).toContain("工单记录计划任务及目标量")
+    expect(correct?.text).toContain("报工记录实际执行结果")
+    expect(correct?.text).toContain("余下 15 件的去向还要核对")
+  })
+})
+
 describe("内容红线：结构完整性", () => {
   for (const { level } of levels) {
     it(`ch${level.chapter} story 标注的术语都存在`, () => {

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   authStore: {
     isValid: false as boolean,
     model: null as { collectionName?: string } | null,
-    onChange: vi.fn((_callback: () => void, _immediate?: boolean) => () => {}),
+    onChange: vi.fn(() => () => {}),
     clear: vi.fn(),
   },
   authWithPassword: vi.fn(),
