@@ -1,5 +1,6 @@
 import { ArrowRight, Clapperboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ILLUSTRATIONS } from "@/components/illustrations"
 import type { LevelDef, TermDef } from "@/content/loader"
 import { renderStoryText } from "./StoryText"
 
@@ -28,6 +29,38 @@ export function StoryIntro({ level, terms, storyIdx, storyTotal, onNext, onOpenT
         >
           {renderStoryText(level.story[storyIdx] ?? "", terms, onOpenTerm)}
         </p>
+        {level.chapter === 5 && (
+          <div className="mt-7 rounded-2xl border border-border bg-background/65 p-4 sm:p-5">
+            <div className="mb-3">
+              <h2 className="font-semibold text-foreground">本章记忆图</h2>
+              <p className="mt-1 text-xs text-muted-foreground">点标题打开术语卡，配合图示记住现场处理逻辑。</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                { id: "inventory", caption: "先核账实" },
+                { id: "lot_batch", caption: "沿批次追溯" },
+                { id: "rework", caption: "返工要复检" },
+              ].map(({ id, caption }) => {
+                const term = terms[id]
+                const Illustration = term?.illustration ? ILLUSTRATIONS[term.illustration] : undefined
+                if (!term) return null
+                return (
+                  <article key={id} className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => onOpenTerm(id)}
+                      className="rounded-sm text-left text-sm font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {term.term}
+                    </button>
+                    <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
+                    {Illustration && <div className="mt-2"><Illustration /></div>}
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <div className="mt-6 flex items-center justify-between gap-3">
           <div className="flex gap-1.5" aria-hidden>
             {level.story.map((_, i) => (

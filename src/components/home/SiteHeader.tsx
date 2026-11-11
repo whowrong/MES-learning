@@ -1,6 +1,7 @@
 import { BookOpen, FlaskConical, Hammer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { MesAuthTrigger } from "@/components/MesAuthGate"
 
 interface SiteHeaderProps {
   reviewCount: number
@@ -45,6 +46,7 @@ export function SiteHeader({ reviewCount, onGlossary, onSandbox }: SiteHeaderPro
             <FlaskConical className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">自由沙盘</span>
           </Button>
+          <MesAuthTrigger />
         </nav>
       </div>
     </header>

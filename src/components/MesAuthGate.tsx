@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react"
+import { createContext, FormEvent, useContext, useEffect, useState } from "react"
 import { LogIn, UserRound } from "lucide-react"
 import { pb } from "@/lib/pb"
 import { Button } from "@/components/ui/button"
@@ -8,10 +8,11 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 
 type AuthState = { valid: boolean; revision: number }
+type MesAuthContextValue = { valid: boolean; setOpen: (open: boolean) => void }
+const MesAuthContext = createContext<MesAuthContextValue | null>(null)
 
 function hasMesAuth(): boolean {
   return pb.authStore.isValid && pb.authStore.model?.collectionName === "mes_users"
@@ -45,21 +46,9 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
+    <MesAuthContext.Provider value={{ valid: auth.valid, setOpen }}>
       {children}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={auth.valid ? "打开账户面板" : "打开登录面板"}
-            className="fixed right-2 top-16 z-40 rounded-full border-border/70 bg-background/90 px-3 shadow-md backdrop-blur transition-all hover:-translate-y-0.5 hover:shadow-lg sm:right-3"
-          >
-            {auth.valid ? <UserRound aria-hidden="true" /> : <LogIn aria-hidden="true" />}
-            <span>{auth.valid ? "账户" : "登录"}</span>
-          </Button>
-        </DialogTrigger>
         <DialogContent
           overlayClassName="bg-black/40 backdrop-blur-[2px]"
           className="max-w-[calc(100vw-2rem)] rounded-2xl border-border/70 bg-card/95 p-6 shadow-2xl backdrop-blur sm:max-w-sm"
@@ -115,6 +104,25 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </MesAuthContext.Provider>
+  )
+}
+
+/** Compact account action for the site navigation; the dialog itself remains owned by the gate. */
+export function MesAuthTrigger() {
+  const context = useContext(MesAuthContext)
+  if (!context) return null
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      aria-label={context.valid ? "打开账户面板" : "打开登录面板"}
+      onClick={() => context.setOpen(true)}
+      className="shrink-0 border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 focus-visible:shadow-[var(--focus-ring)]"
+    >
+      {context.valid ? <UserRound aria-hidden="true" className="h-4 w-4 sm:mr-2" /> : <LogIn aria-hidden="true" className="h-4 w-4 sm:mr-2" />}
+      <span className="hidden sm:inline">{context.valid ? "账户" : "登录"}</span>
+    </Button>
   )
 }

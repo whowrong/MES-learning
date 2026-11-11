@@ -19,7 +19,7 @@ vi.mock("@/lib/pb", () => ({
   },
 }))
 
-import { MesAuthGate } from "../MesAuthGate"
+import { MesAuthGate, MesAuthTrigger } from "../MesAuthGate"
 
 afterEach(() => cleanup())
 beforeEach(() => {
@@ -31,14 +31,14 @@ beforeEach(() => {
 })
 
 describe("MesAuthGate", () => {
-  it("keeps the page unobstructed until the login panel is opened below the header", () => {
-    render(<MesAuthGate><main>学习内容</main></MesAuthGate>)
+  it("keeps the page unobstructed until the navigation login entry is opened", () => {
+    render(<MesAuthGate><nav><MesAuthTrigger /></nav><main>学习内容</main></MesAuthGate>)
     expect(screen.getByText("学习内容")).toBeTruthy()
     expect(screen.queryByRole("dialog")).toBeNull()
     expect(screen.queryByLabelText("账号")).toBeNull()
     const trigger = screen.getByRole("button", { name: "打开登录面板" })
-    expect(trigger.className).toContain("top-16")
-    expect(trigger.className).not.toContain("top-4")
+    expect(trigger.className).toContain("border-primary/40")
+    expect(trigger.className).not.toContain("fixed")
     fireEvent.click(trigger)
     expect(screen.getByRole("dialog")).toBeTruthy()
     expect(screen.getByLabelText("账号")).toBeTruthy()
@@ -46,7 +46,7 @@ describe("MesAuthGate", () => {
 
   it("authenticates by username and closes the dialog on success", async () => {
     mocks.authWithPassword.mockResolvedValueOnce({})
-    render(<MesAuthGate><main>学习内容</main></MesAuthGate>)
+    render(<MesAuthGate><nav><MesAuthTrigger /></nav><main>学习内容</main></MesAuthGate>)
     fireEvent.click(screen.getByRole("button", { name: "打开登录面板" }))
     fireEvent.change(screen.getByLabelText("账号"), { target: { value: " monika " } })
     fireEvent.change(screen.getByLabelText("密码"), { target: { value: "example-password" } })

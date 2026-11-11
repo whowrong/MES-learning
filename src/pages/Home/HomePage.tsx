@@ -7,6 +7,7 @@ import { ChapterMap } from "@/components/home/ChapterMap"
 import { ModuleEntries } from "@/components/home/ModuleEntries"
 import { HomeDialogs } from "@/components/home/HomeDialogs"
 import { ProjectLifecycle } from "@/components/illustrations"
+import { SiteFeedback } from "@/components/home/SiteFeedback"
 import type { useHome } from "./useHome"
 
 export function HomePage(p: ReturnType<typeof useHome>) {
@@ -62,8 +63,9 @@ export function HomePage(p: ReturnType<typeof useHome>) {
         />
       </main>
       <footer className="border-t border-border py-8">
-        <div className="mx-auto max-w-6xl px-6 text-center text-sm text-muted-foreground">
-          四章剧情关卡可玩 · 关卡、术语、讲解图与决策后果均由内容文件驱动，照着示例就能加新关卡
+        <div className="mx-auto max-w-6xl px-4 text-center text-sm text-muted-foreground sm:px-6">
+          剧情关卡、术语卡和讲解图持续更新，让车间问题更容易学会、记住。
+          <SiteFeedback />
         </div>
       </footer>
       <HomeDialogs
