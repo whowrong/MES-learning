@@ -74,31 +74,57 @@ export interface SshExecResult {
   ok: boolean
   stdout?: string
   stderr?: string
-  code?: number
+  code?: number | string
+  panelUrl?: string
   message?: string
   error?: string
   native?: string
 }
 
+export type ServerConnType = "ssh" | "api-cli" | "manual"
+export type ServerPlatform = "generic" | "instabox" | "cloady" | "bohrium" | "uppcoder"
+export type ServerTransport = "direct" | "jump" | "tailscale"
+export type ServerAuthType = "password" | "key" | "none"
+
 export interface NewServerConnection {
   id?: string
   label: string
-  host: string
+  connType?: ServerConnType
+  platform?: ServerPlatform
+  transport?: ServerTransport
+  host?: string
   port?: number
-  username: string
-  /** 密码与私钥二选一；编辑时留空 = 保留原值 */
+  username?: string
+  authType?: ServerAuthType
+  /** 密码、私钥和 API key 仅在提交时出现；编辑留空 = 保留原值 */
   password?: string
   privateKey?: string
+  apiKey?: string
+  machine?: string
+  cliPath?: string
+  panelUrl?: string
+  /** secretRef 指向已登记的跳板 SSH 连接，不在此重复存储凭据 */
+  jump?: { host?: string; port?: number; username?: string; secretRef?: string }
 }
 
 export interface ServerConnectionView {
   id: string
   label: string
+  connType: ServerConnType
+  platform: ServerPlatform
+  transport: ServerTransport
   host: string
   port: number
   username: string
-  authType: "password" | "key"
+  authType: ServerAuthType
   hasSecret: boolean
+  machine?: string
+  cliPath?: string
+  panelUrl?: string
+  jump?: { host: string; port: number; username: string; secretRef: string }
+  canExec: boolean
+  canUpload: boolean
+  persistence: string
   createdAt?: string
 }
 

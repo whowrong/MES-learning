@@ -10,6 +10,10 @@ import {
   type NewServerConnection,
   type ServerConnectionView,
   type SshExecResult,
+  type ServerConnType,
+  type ServerPlatform,
+  type ServerTransport,
+  type ServerAuthType,
 } from "@/lib/labApi"
 
 /** 预置部署文档模板（内容驱动，public/content/ops-training/deploy-docs.json） */
@@ -25,15 +29,26 @@ export interface DeployDocTemplate {
 export interface ServerForm {
   id?: string
   label: string
+  connType: ServerConnType
+  platform: ServerPlatform
+  transport: ServerTransport
   host: string
   port: string
   username: string
-  authType: "password" | "key"
+  authType: ServerAuthType
   password: string
   privateKey: string
+  apiKey: string
+  machine: string
+  cliPath: string
+  panelUrl: string
+  jumpSecretRef: string
 }
 
-const EMPTY_SERVER_FORM: ServerForm = { label: "", host: "", port: "22", username: "root", authType: "password", password: "", privateKey: "" }
+const EMPTY_SERVER_FORM: ServerForm = {
+  label: "", connType: "ssh", platform: "generic", transport: "direct", host: "", port: "22", username: "root",
+  authType: "password", password: "", privateKey: "", apiKey: "", machine: "dev", cliPath: "", panelUrl: "", jumpSecretRef: "",
+}
 
 /** 待确认的真实操作（危险命令 / 上传 / 部署命令） */
 export interface PendingAction {
@@ -66,7 +81,7 @@ export function useRealServer() {
   const [serverConns, setServerConns] = useState<ServerConnectionView[]>([])
   const [srvForm, setSrvForm] = useState<ServerForm>(EMPTY_SERVER_FORM)
   const [srvDialogOpen, setSrvDialogOpen] = useState(false)
-  const [srvTestResult, setSrvTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [srvTestResult, setSrvTestResult] = useState<{ ok: boolean; message: string; panelUrl?: string } | null>(null)
   const [srvBusy, setSrvBusy] = useState(false)
   const [srvNotice, setSrvNotice] = useState("")
 
@@ -126,14 +141,23 @@ export function useRealServer() {
   const openSrvDialog = useCallback((existing?: ServerConnectionView) => {
     if (existing) {
       setSrvForm({
+        ...EMPTY_SERVER_FORM,
         id: existing.id,
         label: existing.label,
-        host: existing.host,
-        port: String(existing.port ?? 22),
-        username: existing.username,
-        authType: existing.authType === "key" ? "key" : "password",
+        connType: existing.connType || "ssh",
+        platform: existing.platform || "generic",
+        transport: existing.transport || "direct",
+        host: existing.host || "",
+        port: String(existing.port || (existing.platform === "uppcoder" ? 2222 : 22)),
+        username: existing.username || (existing.platform === "bohrium" ? "root" : ""),
+        authType: existing.authType || "password",
+        machine: existing.machine || "dev",
+        cliPath: existing.cliPath || "",
+        panelUrl: existing.panelUrl || "",
+        jumpSecretRef: existing.jump?.secretRef || "",
         password: "",
         privateKey: "",
+        apiKey: "",
       })
     } else {
       setSrvForm(EMPTY_SERVER_FORM)
@@ -150,34 +174,33 @@ export function useRealServer() {
   }, [])
 
   const buildInlineSrv = useCallback((): NewServerConnection | null => {
-    if (!srvForm.label.trim() || !srvForm.host.trim() || !srvForm.username.trim()) return null
+    if (!srvForm.label.trim()) return null
     const conn: NewServerConnection = {
-      id: srvForm.id,
-      label: srvForm.label.trim(),
-      host: srvForm.host.trim(),
-      port: srvForm.port ? Number(srvForm.port) : 22,
-      username: srvForm.username.trim(),
+      id: srvForm.id, label: srvForm.label.trim(), connType: srvForm.connType, platform: srvForm.platform,
+      transport: srvForm.transport, host: srvForm.host.trim(), port: srvForm.port ? Number(srvForm.port) : 22,
+      username: srvForm.username.trim(), authType: srvForm.authType, machine: srvForm.machine.trim(),
+      cliPath: srvForm.cliPath.trim(), panelUrl: srvForm.panelUrl.trim(),
     }
-    if (srvForm.authType === "key") {
-      if (srvForm.privateKey.trim()) conn.privateKey = srvForm.privateKey
-      else if (!srvForm.id) return null
-    } else {
-      if (srvForm.password) conn.password = srvForm.password
-      else if (!srvForm.id) return null
+    if (srvForm.transport === "jump") {
+      const jump = serverConns.find((item) => item.id === srvForm.jumpSecretRef)
+      conn.jump = { host: jump?.host || "", port: jump?.port || 22, username: jump?.username || "", secretRef: srvForm.jumpSecretRef }
     }
+    if (srvForm.authType === "key" && srvForm.privateKey.trim()) conn.privateKey = srvForm.privateKey
+    if (srvForm.authType === "password" && srvForm.password) conn.password = srvForm.password
+    if (srvForm.connType === "api-cli" && srvForm.apiKey) conn.apiKey = srvForm.apiKey
     return conn
-  }, [srvForm])
+  }, [srvForm, serverConns])
 
   const testSrvForm = useCallback(async () => {
     const inline = buildInlineSrv()
     if (!inline) {
-      setSrvTestResult({ ok: false, message: "名称、主机、用户名和凭据必填（编辑时凭据留空 = 用已存的）" })
+      setSrvTestResult({ ok: false, message: "请补齐此连接方式要求的名称、地址与凭据；编辑时凭据留空会保留已存值。" })
       return
     }
     setSrvBusy(true)
     try {
-      const r = await sshlabApi.test(inline.id && !inline.password && !inline.privateKey ? inline.id : undefined, inline)
-      setSrvTestResult({ ok: Boolean(r.ok), message: r.ok ? "连接成功：" + (r.stdout || "").split("\n").filter(Boolean).slice(0, 2).join(" | ") : (r.error || "连接失败") })
+      const r = await sshlabApi.test(inline.id && !inline.password && !inline.privateKey && !inline.apiKey ? inline.id : undefined, inline)
+      setSrvTestResult({ ok: Boolean(r.ok), message: r.ok ? "连接成功：" + (r.stdout || "").split("\n").filter(Boolean).slice(0, 2).join(" | ") : (r.error || "连接失败"), panelUrl: r.panelUrl })
     } catch (e) {
       setSrvTestResult({ ok: false, message: e instanceof Error ? e.message : "连接失败" })
     } finally {
@@ -188,7 +211,7 @@ export function useRealServer() {
   const saveSrvForm = useCallback(async () => {
     const inline = buildInlineSrv()
     if (!inline) {
-      setSrvTestResult({ ok: false, message: "名称、主机、用户名和凭据必填" })
+      setSrvTestResult({ ok: false, message: "请补齐此连接方式要求的名称、地址与凭据" })
       return
     }
     setSrvBusy(true)
@@ -230,9 +253,15 @@ export function useRealServer() {
       const conn = serverConns.find((c) => c.id === connId)
       if (!conn) return
       setActiveConnId(connId)
+      if (!conn.canExec) {
+        setSrvNotice("此连接仅支持人工操作；已选为当前部署目标，自动部署会跳过。")
+        setRealLines([])
+        return
+      }
       setSrvNotice("")
+      const target = conn.connType === "api-cli" ? `Instabox 机器 ${conn.machine}` : `${conn.username}@${conn.host}:${conn.port}`
       setRealLines([
-        { kind: "info", text: `已连接 ${conn.username}@${conn.host}:${conn.port}（${conn.label}）` },
+        { kind: "info", text: `已连接 ${target}（${conn.label}）` },
         { kind: "warn", text: "⚠ 这是真实服务器：每条命令都会实际执行。危险命令会先弹确认。" },
       ])
     },
@@ -390,6 +419,7 @@ export function useRealServer() {
   /** 发送文档到服务器：先预览确认上传，再（可选）逐条确认执行部署命令 */
   const sendDocToServer = useCallback(() => {
     if (!activeDoc || !activeConnId) return
+    if (!activeConn?.canUpload) { setSrvNotice("此连接不支持自动上传，请使用平台网页终端。"); return }
     const fileName = uploadPath.replace(/\/$/, "") + "/" + activeDoc.title.replace(/[\\/:*?"<>|\s]+/g, "_") + ".md"
     setPendingAction({
       kind: "upload",
@@ -407,12 +437,12 @@ export function useRealServer() {
         }
       },
     })
-  }, [activeDoc, activeConnId, uploadPath])
+  }, [activeDoc, activeConnId, activeConn, uploadPath])
 
   /** 一键部署：逐条预览确认执行文档附带的命令 */
   const runDeployStep = useCallback(
     (index: number) => {
-      if (!activeDoc || !activeConnId) return
+      if (!activeDoc || !activeConnId || !activeConn?.canExec) return
       const step = activeDoc.commands[index]
       if (!step) return
       setPendingAction({
@@ -437,15 +467,19 @@ export function useRealServer() {
         },
       })
     },
-    [activeDoc, activeConnId],
+    [activeDoc, activeConnId, activeConn],
   )
 
   /** 组「部署任务包」markdown：给 AI agent 的完整上下文 */
   const buildTaskPack = useCallback((): string => {
     if (!activeDoc) return ""
     const connDesc = activeConn
-      ? `目标服务器：${activeConn.username}@${activeConn.host}:${activeConn.port}（${activeConn.label}，SSH 可登录）`
-      : "目标服务器：未在本页连接（请把服务器信息补充给 agent）"
+      ? activeConn.connType === "manual"
+        ? `目标平台：${activeConn.platform}（${activeConn.label}，仅人工网页终端：${activeConn.panelUrl}；必须跳过 AI 自动执行与上传，由用户在面板手动操作）`
+        : activeConn.connType === "api-cli"
+          ? `目标服务器：${activeConn.platform} 机器 ${activeConn.machine}（${activeConn.label}，平台 CLI 可执行）`
+          : `目标服务器：${activeConn.username}@${activeConn.host}:${activeConn.port}（${activeConn.label}，${activeConn.transport === "tailscale" ? "Tailscale SSH" : "SSH 可登录"}）`
+      : "目标服务器：未在本页选择；先选择已登记服务器。若目标是人工模式，必须跳过自动执行与上传。"
     const cmdSection =
       activeDoc.commands.length > 0
         ? "\n\n## 建议命令序列（按顺序执行，每步确认输出再继续）\n" + activeDoc.commands.map((c, i) => `${i + 1}. ${c.label}\n   \`\`\`bash\n   ${c.cmd}\n   \`\`\``).join("\n")
