@@ -20,13 +20,60 @@ function out(obj) {
 function fail(error, native, code) {
   out({ ok: false, error, native: native ? String(native).slice(0, 2000) : undefined, code })
 }
-function loadConns() {
+const STORE_VERSION = 2
+function readConnStore() {
   try { return JSON.parse(fs.readFileSync(CONN_FILE, "utf8")) } catch { return {} }
 }
-function saveConns(map) {
+function writeConnStore(store) {
   fs.mkdirSync(LAB_DATA, { recursive: true })
-  fs.writeFileSync(CONN_FILE, JSON.stringify(map, null, 2), { mode: 0o600 })
+  fs.writeFileSync(CONN_FILE, JSON.stringify(store, null, 2), { mode: 0o600 })
   try { fs.chmodSync(CONN_FILE, 0o600) } catch {}
+}
+function hasEntries(value) {
+  return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0
+}
+function loadConns(ownerId, migrateLegacy = false) {
+  const raw = readConnStore()
+  const owner = String(ownerId || "")
+  if (!owner) return {}
+  if (raw?.version === STORE_VERSION && raw.owners && typeof raw.owners === "object") {
+    const store = { version: STORE_VERSION, owners: raw.owners, legacyUnassigned: raw.legacyUnassigned || {} }
+    // The PB hook allows this only while exactly one MES app account exists.
+    // Unassigned legacy rows are never exposed to an arbitrary first requester.
+    if (migrateLegacy && Object.keys(store.owners).length === 0 && hasEntries(store.legacyUnassigned)) {
+      store.owners[owner] = store.legacyUnassigned
+      store.legacyUnassigned = {}
+      writeConnStore(store)
+    }
+    return store.owners[owner] || {}
+  }
+  if (!hasEntries(raw)) return {}
+  if (migrateLegacy) {
+    writeConnStore({ version: STORE_VERSION, owners: { [owner]: raw }, legacyUnassigned: {} })
+    return raw
+  }
+  return {}
+}
+function saveConns(ownerId, map, migrateLegacy = false) {
+  const owner = String(ownerId || "")
+  if (!owner) throw new Error("authenticated MES account required")
+  const raw = readConnStore()
+  let store
+  if (raw?.version === STORE_VERSION && raw.owners && typeof raw.owners === "object") {
+    store = { version: STORE_VERSION, owners: raw.owners, legacyUnassigned: raw.legacyUnassigned || {} }
+  } else if (hasEntries(raw)) {
+    store = migrateLegacy
+      ? { version: STORE_VERSION, owners: { [owner]: raw }, legacyUnassigned: {} }
+      : { version: STORE_VERSION, owners: {}, legacyUnassigned: raw }
+  } else {
+    store = { version: STORE_VERSION, owners: {}, legacyUnassigned: {} }
+  }
+  if (migrateLegacy && Object.keys(store.owners).length === 0 && hasEntries(store.legacyUnassigned)) {
+    store.owners[owner] = store.legacyUnassigned
+    store.legacyUnassigned = {}
+  }
+  store.owners[owner] = map
+  writeConnStore(store)
 }
 function redactSecret(text, conn) {
   let value = String(text ?? "")
@@ -218,11 +265,14 @@ async function main() {
   let req
   try { req = JSON.parse(requestJson() || "{}") } catch (e) { return fail("请求解析失败", e) }
   const { action } = req
+  const ownerId = String(req.ownerId || "")
+  const migrateLegacy = req.migrateLegacy === true
   let conn
   try {
-    if (action === "list") return out({ ok: true, connections: Object.values(loadConns()).map(maskConn) })
+    if (!ownerId) return fail("MES account scope is required")
+    if (action === "list") return out({ ok: true, connections: Object.values(loadConns(ownerId, migrateLegacy)).map(maskConn) })
     if (action === "save") {
-      const c = req.connection || {}, map = loadConns(), id = c.id || "srv-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), prev = map[id]
+      const c = req.connection || {}, map = loadConns(ownerId, migrateLegacy), id = c.id || "srv-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), prev = map[id]
       const validation = validateNewConnection(c, prev)
       if (validation) return fail(validation)
       const connType = c.connType || "ssh", platform = c.platform || "generic"
@@ -244,14 +294,14 @@ async function main() {
       }
       if (authType === "password" && connType === "ssh" && !map[id].password) return fail("请填写密码")
       if (authType === "key" && connType === "ssh" && !map[id].privateKey) return fail("请填写私钥")
-      saveConns(map)
+      saveConns(ownerId, map, migrateLegacy)
       return out({ ok: true, connection: maskConn(map[id]) })
     }
     if (action === "delete") {
-      const map = loadConns(); delete map[req.id]; saveConns(map); return out({ ok: true })
+      const map = loadConns(ownerId, migrateLegacy); delete map[req.id]; saveConns(ownerId, map, migrateLegacy); return out({ ok: true })
     }
 
-    const map = loadConns()
+    const map = loadConns(ownerId, migrateLegacy)
     if (req.connectionId) {
       const saved = map[req.connectionId]
       if (saved && req.connection) {

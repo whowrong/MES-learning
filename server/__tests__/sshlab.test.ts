@@ -13,7 +13,7 @@ function sandbox() {
   return dir
 }
 function invoke(dataDir: string, request: Record<string, unknown>) {
-  const result = spawnSync(process.execPath, [executor, JSON.stringify(request)], {
+  const result = spawnSync(process.execPath, [executor, JSON.stringify({ ownerId: "owner-a", migrateLegacy: true, ...request })], {
     encoding: "utf8",
     timeout: 10000,
     env: { ...process.env, MES_LAB_DATA: dataDir },
@@ -40,6 +40,24 @@ describe("真实服务器连接类型", () => {
       platform: "generic", transport: "direct", canExec: true, canUpload: true,
     })
     expect(JSON.stringify(result)).not.toContain("legacy-secret")
+    const stored = JSON.parse(fs.readFileSync(path.join(dir, "server-connections.json"), "utf8"))
+    expect(stored).toMatchObject({ version: 2, owners: { "owner-a": { old: { password: "legacy-secret" } } } })
+    expect(invoke(dir, { action: "list", ownerId: "owner-b", migrateLegacy: false }).connections).toHaveLength(0)
+  })
+
+
+  it("连接列表、执行和删除都按认证账号隔离；缺少服务端账号范围时拒绝", () => {
+    const dir = sandbox()
+    const saved = invoke(dir, { action: "save", connection: {
+      id: "private-to-a", label: "A 的服务器", connType: "manual", platform: "generic",
+      panelUrl: "https://example.test/terminal",
+    } })
+    expect(saved.ok).toBe(true)
+    expect(invoke(dir, { action: "list", ownerId: "owner-b", migrateLegacy: false }).connections).toHaveLength(0)
+    expect(invoke(dir, { action: "exec", ownerId: "owner-b", migrateLegacy: false, connectionId: "private-to-a", command: "whoami" })).toMatchObject({ ok: false, error: "服务器连接不存在或已删除" })
+    expect(invoke(dir, { action: "delete", ownerId: "owner-b", migrateLegacy: false, id: "private-to-a" }).ok).toBe(true)
+    expect(invoke(dir, { action: "list", ownerId: "owner-a" }).connections).toHaveLength(1)
+    expect(invoke(dir, { action: "list", ownerId: "" })).toMatchObject({ ok: false, error: "MES account scope is required" })
   })
 
   it("Instabox API key 仅存服务端权限受限文件，不从保存或列表回传", () => {

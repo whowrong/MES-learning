@@ -115,6 +115,8 @@ function buildExecutorRequest(payload) {
         action: "exec",
         connectionId: payload.connectionId,
         connection: payload.connection,
+        ownerId: payload.ownerId,
+        migrateLegacy: payload.migrateLegacy === true,
         sql: payload.sql,
       },
       limit: EXEC_LIMITS.db,
@@ -129,6 +131,8 @@ function buildExecutorRequest(payload) {
         action: "exec",
         connectionId: payload.connectionId,
         connection: payload.connection,
+        ownerId: payload.ownerId,
+        migrateLegacy: payload.migrateLegacy === true,
         command: payload.command,
         timeoutMs,
       },
@@ -194,6 +198,7 @@ function runExecutor(script, requestFile, limitMs) {
 /** 提交作业：落载荷 → 派生脱离父进程的执行者 → 立刻返回 jobId */
 function submit(payload) {
   if (!payload || typeof payload !== "object") return { ok: false, error: "作业载荷为空" }
+  if (!String(payload.ownerId || "")) return { ok: false, error: "MES account scope is required" }
   const plan = buildExecutorRequest(payload)
   if (!plan) return { ok: false, error: "未知的作业类型: " + String(payload.kind) }
   ensureJobsDir()
@@ -207,6 +212,7 @@ function submit(payload) {
     // 同上
   }
   writeJsonSecure(path.join(dir, "payload.json"), payload)
+  writeJsonSecure(path.join(dir, "owner.json"), { ownerId: String(payload.ownerId) })
   // 执行者脱离父进程：stdout/stderr 全部丢弃，避免管道被孙进程占住导致父进程不退出
   let child
   try {
@@ -261,9 +267,11 @@ async function work(id) {
 }
 
 /** 查询作业结果 */
-function poll(id) {
+function poll(id, ownerId) {
   const dir = jobDir(id)
   if (!dir) return { ok: false, error: "作业 id 非法" }
+  const owner = readJson(path.join(dir, "owner.json"))
+  if (!owner || !ownerId || owner.ownerId !== String(ownerId)) return { ok: false, error: "作业不存在或无权查看" }
   const resultFile = path.join(dir, "result.json")
   const result = readJson(resultFile)
   if (result) return { ok: true, status: "done", result: result.result ?? { ok: false, error: "作业没有结果" }, durationMs: result.durationMs }
@@ -295,7 +303,7 @@ async function main() {
     }
     if (cmd === "poll") {
       sweepJobs()
-      return out(poll(process.env.MES_LAB_JOB_ID || ""))
+      return out(poll(process.env.MES_LAB_JOB_ID || "", process.env.MES_LAB_JOB_OWNER_ID || ""))
     }
     if (cmd === "work") {
       const r = await work(process.argv[3] || "")

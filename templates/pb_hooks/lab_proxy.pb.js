@@ -60,9 +60,21 @@ function requireMesUser(e) {
   }
   return e.next()
 }
-
-
 routerAdd("GET", "/api/dblab/connections", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -106,13 +118,23 @@ routerAdd("GET", "/api/dblab/connections", function (e) {
     return JSON.parse(text)
   }
   try {
-    return e.json(200, runLab("dblab.mjs", { action: "list" }))
+    return e.json(200, runLab("dblab.mjs", Object.assign({ action: "list" }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/dblab/connections", function (e) {
+  // Derive per-account scope from PocketBase authentication, never request JSON.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -157,13 +179,27 @@ routerAdd("POST", "/api/dblab/connections", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("dblab.mjs", { action: "save", connection: body.connection || {} }))
+    return e.json(200, runLab("dblab.mjs", Object.assign({ action: "save", connection: body.connection || {} }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/dblab/connections/delete", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -208,13 +244,27 @@ routerAdd("POST", "/api/dblab/connections/delete", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("dblab.mjs", { action: "delete", id: body.id }))
+    return e.json(200, runLab("dblab.mjs", Object.assign({ action: "delete", id: body.id }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/dblab/test", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -259,13 +309,27 @@ routerAdd("POST", "/api/dblab/test", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("dblab.mjs", { action: "test", connectionId: body.connectionId, connection: body.connection }))
+    return e.json(200, runLab("dblab.mjs", Object.assign({ action: "test", connectionId: body.connectionId, connection: body.connection }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/dblab/exec", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -311,7 +375,7 @@ routerAdd("POST", "/api/dblab/exec", function (e) {
   try {
     var body = e.requestInfo().body || {}
     // connection 走 inline 时是一次性演练环境（模式 B）：不落连接登记文件，口令只在本进程内存里
-    return e.json(200, runLab("dblab.mjs", { action: "exec", connectionId: body.connectionId, connection: body.connection, sql: body.sql }))
+    return e.json(200, runLab("dblab.mjs", Object.assign({ action: "exec", connectionId: body.connectionId, connection: body.connection, sql: body.sql }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
@@ -372,6 +436,20 @@ routerAdd("POST", "/api/dblab/reset-builtin", function (e) {
 // ---------------------------------------------------------------------------
 
 routerAdd("GET", "/api/sshlab/connections", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -415,13 +493,23 @@ routerAdd("GET", "/api/sshlab/connections", function (e) {
     return JSON.parse(text)
   }
   try {
-    return e.json(200, runLab("sshlab.mjs", { action: "list" }))
+    return e.json(200, runLab("sshlab.mjs", Object.assign({ action: "list" }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/connections", function (e) {
+  // Derive per-account scope from PocketBase authentication, never request JSON.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -466,13 +554,27 @@ routerAdd("POST", "/api/sshlab/connections", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("sshlab.mjs", { action: "save", connection: body.connection || {} }))
+    return e.json(200, runLab("sshlab.mjs", Object.assign({ action: "save", connection: body.connection || {} }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/connections/delete", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -517,13 +619,27 @@ routerAdd("POST", "/api/sshlab/connections/delete", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("sshlab.mjs", { action: "delete", id: body.id }))
+    return e.json(200, runLab("sshlab.mjs", Object.assign({ action: "delete", id: body.id }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/test", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -568,13 +684,27 @@ routerAdd("POST", "/api/sshlab/test", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("sshlab.mjs", { action: "test", connectionId: body.connectionId, connection: body.connection }))
+    return e.json(200, runLab("sshlab.mjs", Object.assign({ action: "test", connectionId: body.connectionId, connection: body.connection }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/exec", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -619,16 +749,30 @@ routerAdd("POST", "/api/sshlab/exec", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("sshlab.mjs", {
+    return e.json(200, runLab("sshlab.mjs", Object.assign({
       action: "exec", connectionId: body.connectionId, connection: body.connection,
       command: body.command, timeoutMs: body.timeoutMs,
-    }))
+    }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }
 }, requireMesUser)
 
 routerAdd("POST", "/api/sshlab/upload", function (e) {
+  // Derive per-account scope from PocketBase's authenticated record, never request JSON.
+  // Legacy connection rows are claimed only when the existing single-account invariant
+  // is currently true; otherwise they remain unassigned and invisible.
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -673,10 +817,10 @@ routerAdd("POST", "/api/sshlab/upload", function (e) {
   }
   try {
     var body = e.requestInfo().body || {}
-    return e.json(200, runLab("sshlab.mjs", {
+    return e.json(200, runLab("sshlab.mjs", Object.assign({
       action: "upload", connectionId: body.connectionId,
       remotePath: body.remotePath, content: body.content,
-    }))
+    }, labOwnerContext(e))))
   } catch (err) {
     return e.json(200, { ok: false, error: "lab 执行器调用失败", native: String(err && err.message || err).slice(0, 500) })
   }

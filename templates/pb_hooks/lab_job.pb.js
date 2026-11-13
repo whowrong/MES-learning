@@ -23,8 +23,17 @@ function requireMesUser(e) {
   }
   return e.next()
 }
-
 routerAdd("POST", "/api/labjob/submit", function (e) {
+  function labOwnerContext(e) {
+    var ownerId = String(e.auth && e.auth.id || "")
+    var migrateLegacy = false
+    try {
+      var users = $app.findCollectionByNameOrId("mes_users")
+      migrateLegacy = Boolean(ownerId) && $app.countRecords(users) === 1
+    } catch (_) {}
+    return { ownerId: ownerId, migrateLegacy: migrateLegacy }
+  }
+
   function decodeUtf8Bytes(bytes) {
     var out = ""
     var i = 0
@@ -65,6 +74,10 @@ routerAdd("POST", "/api/labjob/submit", function (e) {
       timeoutMs: body.timeoutMs,
       id: body.id,
     }
+    // Identity is injected from PocketBase auth, never copied from the client body.
+    var owner = labOwnerContext(e)
+    payload.ownerId = owner.ownerId
+    payload.migrateLegacy = owner.migrateLegacy
     var command = $os.cmd(nodeBin, serverDir + "/labjobs.mjs", "submit")
     // 子进程环境只放白名单变量 + 作业载荷，绝不继承应用登录或 InstaBox 密钥。
     var childEnv = ["PATH=" + ($os.getenv("PATH") || "")]
@@ -119,6 +132,7 @@ routerAdd("POST", "/api/labjob/poll", function (e) {
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
     childEnv.push("MES_LAB_JOB_ID=" + jobId)
+    childEnv.push("MES_LAB_JOB_OWNER_ID=" + String(e.auth && e.auth.id || ""))
     command.env = childEnv
     var out = command.output()
     var text = decodeUtf8Bytes(out)

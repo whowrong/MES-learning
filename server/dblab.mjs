@@ -25,16 +25,58 @@ function fail(error, native) {
 }
 
 // ---------- 凭据存取（本进程内完成，明文凭据永不出现在输出里） ----------
-function loadConns() {
-  try {
-    return JSON.parse(fs.readFileSync(CONN_FILE, "utf8"))
-  } catch {
-    return {}
-  }
+const STORE_VERSION = 2
+function readConnStore() {
+  try { return JSON.parse(fs.readFileSync(CONN_FILE, "utf8")) } catch { return {} }
 }
-function saveConns(map) {
+function writeConnStore(store) {
   fs.mkdirSync(LAB_DATA, { recursive: true })
-  fs.writeFileSync(CONN_FILE, JSON.stringify(map, null, 2), { mode: 0o600 })
+  fs.writeFileSync(CONN_FILE, JSON.stringify(store, null, 2), { mode: 0o600 })
+  try { fs.chmodSync(CONN_FILE, 0o600) } catch {}
+}
+function hasEntries(value) {
+  return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0
+}
+function loadConns(ownerId, migrateLegacy = false) {
+  const raw = readConnStore()
+  const owner = String(ownerId || "")
+  if (!owner) return {}
+  if (raw?.version === STORE_VERSION && raw.owners && typeof raw.owners === "object") {
+    const store = { version: STORE_VERSION, owners: raw.owners, legacyUnassigned: raw.legacyUnassigned || {} }
+    if (migrateLegacy && Object.keys(store.owners).length === 0 && hasEntries(store.legacyUnassigned)) {
+      store.owners[owner] = store.legacyUnassigned
+      store.legacyUnassigned = {}
+      writeConnStore(store)
+    }
+    return store.owners[owner] || {}
+  }
+  if (!hasEntries(raw)) return {}
+  if (migrateLegacy) {
+    writeConnStore({ version: STORE_VERSION, owners: { [owner]: raw }, legacyUnassigned: {} })
+    return raw
+  }
+  return {}
+}
+function saveConns(ownerId, map, migrateLegacy = false) {
+  const owner = String(ownerId || "")
+  if (!owner) throw new Error("authenticated MES account required")
+  const raw = readConnStore()
+  let store
+  if (raw?.version === STORE_VERSION && raw.owners && typeof raw.owners === "object") {
+    store = { version: STORE_VERSION, owners: raw.owners, legacyUnassigned: raw.legacyUnassigned || {} }
+  } else if (hasEntries(raw)) {
+    store = migrateLegacy
+      ? { version: STORE_VERSION, owners: { [owner]: raw }, legacyUnassigned: {} }
+      : { version: STORE_VERSION, owners: {}, legacyUnassigned: raw }
+  } else {
+    store = { version: STORE_VERSION, owners: {}, legacyUnassigned: {} }
+  }
+  if (migrateLegacy && Object.keys(store.owners).length === 0 && hasEntries(store.legacyUnassigned)) {
+    store.owners[owner] = store.legacyUnassigned
+    store.legacyUnassigned = {}
+  }
+  store.owners[owner] = map
+  writeConnStore(store)
 }
 function maskConn(c) {
   return {
@@ -296,13 +338,18 @@ async function main() {
   const { action } = req
 
   try {
+    const ownerId = String(req.ownerId || "")
+    const migrateLegacy = req.migrateLegacy === true
+    if (["list", "save", "delete", "test", "exec"].includes(action) && !ownerId) {
+      return fail("MES account scope is required")
+    }
     if (action === "list") {
-      return out({ ok: true, connections: Object.values(loadConns()).map(maskConn) })
+      return out({ ok: true, connections: Object.values(loadConns(ownerId, migrateLegacy)).map(maskConn) })
     }
     if (action === "save") {
       const c = req.connection || {}
       if (!c.label || !c.type) return fail("缺少连接名称或类型")
-      const map = loadConns()
+      const map = loadConns(ownerId, migrateLegacy)
       const id = c.id || "db-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
       const prev = map[id]
       map[id] = {
@@ -317,13 +364,13 @@ async function main() {
         password: c.password !== undefined && c.password !== "" ? String(c.password) : prev?.password ?? "",
         createdAt: prev?.createdAt || new Date().toISOString(),
       }
-      saveConns(map)
+      saveConns(ownerId, map, migrateLegacy)
       return out({ ok: true, connection: maskConn(map[id]) })
     }
     if (action === "delete") {
-      const map = loadConns()
+      const map = loadConns(ownerId, migrateLegacy)
       delete map[req.id]
-      saveConns(map)
+      saveConns(ownerId, map, migrateLegacy)
       return out({ ok: true })
     }
     if (action === "reset-builtin") {
@@ -335,7 +382,7 @@ async function main() {
     // test / exec：解析连接
     let conn = { type: "builtin" }
     if (req.connectionId && req.connectionId !== "builtin") {
-      const found = loadConns()[req.connectionId]
+      const found = loadConns(ownerId, migrateLegacy)[req.connectionId]
       if (!found) return fail("连接不存在或已删除")
       conn = found
     } else if (req.connection) {
