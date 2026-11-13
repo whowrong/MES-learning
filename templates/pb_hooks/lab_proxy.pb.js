@@ -904,7 +904,7 @@ routerAdd("POST", "/api/labenv/create", function (e) {
   }
   var body = e.requestInfo().body || {}
   return e.json(200, runLab("labenv.mjs", { action: "create", kind: body.kind, dbType: body.dbType }))
-})
+}, requireMesUser)
 
 // ---------------------------------------------------------------------------
 // labenv：模式 B 一次性 Docker 演练环境（销毁：删除容器、释放端口）
@@ -950,7 +950,7 @@ routerAdd("POST", "/api/labenv/destroy", function (e) {
   }
   var body = e.requestInfo().body || {}
   return e.json(200, runLab("labenv.mjs", { action: "destroy", id: body.id }))
-})
+}, requireMesUser)
 
 // ---------------------------------------------------------------------------
 // labenv：模式 B 一次性 Docker 演练环境（状态：列出当前一次性环境并扫掉超时的）
@@ -996,4 +996,4 @@ routerAdd("POST", "/api/labenv/status", function (e) {
   }
   var body = e.requestInfo().body || {}
   return e.json(200, runLab("labenv.mjs", { action: "status" }))
-})
+}, requireMesUser)
