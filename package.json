@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:instabox:dev": "tsc -b && vite build --base=/mes/",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"

@@ -73,6 +73,8 @@ function rhSourcePlugin() {
 }
 
 export default defineConfig({
+  // Match the mounted path when deploying to InstaBox dev; keep root builds as the general default.
+  base: process.env.VITE_MES_BASE || '/',
   plugins: [rhSourcePlugin(), react()],
   resolve: {
     alias: {
