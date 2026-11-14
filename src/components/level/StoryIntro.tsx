@@ -35,7 +35,7 @@ export function StoryIntro({ level, terms, storyIdx, storyTotal, onNext, onOpenT
               <h2 className="font-semibold text-foreground">本章记忆图</h2>
               <p className="mt-1 text-xs text-muted-foreground">点标题打开术语卡，配合图示记住现场处理逻辑。</p>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {[
                 { id: "inventory", caption: "先核账实" },
                 { id: "lot_batch", caption: "沿批次追溯" },
@@ -45,7 +45,7 @@ export function StoryIntro({ level, terms, storyIdx, storyTotal, onNext, onOpenT
                 const Illustration = term?.illustration ? ILLUSTRATIONS[term.illustration] : undefined
                 if (!term) return null
                 return (
-                  <article key={id} className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-sm">
+                  <article key={id} className="min-w-0 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm">
                     <button
                       type="button"
                       onClick={() => onOpenTerm(id)}
@@ -54,7 +54,7 @@ export function StoryIntro({ level, terms, storyIdx, storyTotal, onNext, onOpenT
                       {term.term}
                     </button>
                     <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
-                    {Illustration && <div className="mt-2"><Illustration /></div>}
+                    {Illustration && <div className="mt-2 min-w-0"><Illustration /></div>}
                   </article>
                 )
               })}
