@@ -33,14 +33,27 @@ describe("交付闭环内容结构", () => {
     }
   })
 
-  it("判分题 12 道，题型配比齐全", () => {
-    expect(mod.questions.length).toBe(12)
+  it("判分题 28 道，题型配比齐全且八个模块各有练习", () => {
+    expect(mod.questions.length).toBe(28)
     const singles = mod.questions.filter((q) => q.type === "single")
     const multiples = mod.questions.filter((q) => q.type === "multiple")
     const judges = mod.questions.filter((q) => q.type === "judge")
-    expect(singles.length).toBeGreaterThanOrEqual(5)
-    expect(multiples.length).toBeGreaterThanOrEqual(4)
-    expect(judges.length).toBeGreaterThanOrEqual(2)
+    expect(singles.length).toBeGreaterThanOrEqual(14)
+    expect(multiples.length).toBeGreaterThanOrEqual(8)
+    expect(judges.length).toBeGreaterThanOrEqual(6)
+    const moduleSources = [
+      "交付闭环 · 操作手册讲解卡",
+      "交付闭环 · 需求调研讲解卡",
+      "交付闭环 · 上线验收讲解卡",
+      "交付闭环 · 培训课件讲解卡",
+      "交付闭环 · 实施九步交付卡",
+      "交付闭环 · 上线切换讲解卡",
+      "交付闭环 · 上线巡检讲解卡",
+      "交付闭环 · 回滚方案讲解卡",
+    ]
+    for (const source of moduleSources) {
+      expect(mod.questions.filter((q) => q.source_hint === source).length, `${source} 练习题太少`).toBeGreaterThanOrEqual(2)
+    }
   })
 
   it("每道题有参考答案、至少一条加分点、选项不少于 2 个", () => {
