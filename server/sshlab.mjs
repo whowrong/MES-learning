@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // 真实服务器连接执行器：SSH、Instabox CLI 与仅人工网页终端。
-// 凭据仅写入仓库外 LAB_DATA/server-connections.json (0600)，永不由 list/save 返回。
+// 凭据文件采用 AES-256-GCM 加密并以 0600 原子写入；密钥由服务端凭据管理器提供。
 import fs from "node:fs"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { Client } from "ssh2"
 import { asciiSafeJson } from "./asciiJson.mjs"
+import { readCredentialStore, writeCredentialStore } from "./credentialStore.mjs"
 
 const LAB_DATA = process.env.MES_LAB_DATA || "/workspace/pocketbase-bin/lab-data"
 const CONN_FILE = path.join(LAB_DATA, "server-connections.json")
@@ -22,12 +23,10 @@ function fail(error, native, code) {
 }
 const STORE_VERSION = 2
 function readConnStore() {
-  try { return JSON.parse(fs.readFileSync(CONN_FILE, "utf8")) } catch { return {} }
+  return readCredentialStore(CONN_FILE, "server-connections")
 }
 function writeConnStore(store) {
-  fs.mkdirSync(LAB_DATA, { recursive: true })
-  fs.writeFileSync(CONN_FILE, JSON.stringify(store, null, 2), { mode: 0o600 })
-  try { fs.chmodSync(CONN_FILE, 0o600) } catch {}
+  writeCredentialStore(CONN_FILE, store, "server-connections")
 }
 function hasEntries(value) {
   return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0

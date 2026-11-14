@@ -109,7 +109,25 @@ $http.send 转发, 不经执行器。
    `/workspace/pocketbase-bin/lab-data`), 凭据文件权限 600、接口输出
    脱敏; 部署时保证该目录存在且可写, 或改这两个文件顶部的 LAB_DATA
    常量为你的路径(这是部署配置, 不是业务逻辑)。
-4. ⚠️ 安全: dblab/sshlab 本质是「任意 SQL / 任意 SSH 命令」执行面,
+4. 凭证加密：`server-connections.json` 与 `db-connections.json` 使用 AES-256-GCM。给每个独立部署配置不同的 32 字节密钥；推荐由 systemd 加密保存，并通过 `LoadCredentialEncrypted` 只交给对应 PocketBase 服务。示例（在目标主机由管理员执行；不要把生成的密钥写进仓库、普通环境文件或聊天）：
+
+   ```bash
+   sudo install -d -m 0700 /etc/credstore.encrypted
+   sudo systemd-creds setup  # 仅在该主机初始化 systemd 的本机凭据密钥
+   openssl rand -base64 32 | sudo systemd-creds encrypt --name=MES_LAB_ENCRYPTION_KEY - /etc/credstore.encrypted/mes-lab-key.cred
+   sudo chmod 0600 /etc/credstore.encrypted/mes-lab-key.cred
+   sudo systemd-creds decrypt --name=MES_LAB_ENCRYPTION_KEY /etc/credstore.encrypted/mes-lab-key.cred - >/dev/null
+   ```
+
+   在该 PocketBase 服务的 systemd drop-in 中加入：
+
+   ```ini
+   [Service]
+   LoadCredentialEncrypted=MES_LAB_ENCRYPTION_KEY:/etc/credstore.encrypted/mes-lab-key.cred
+   ```
+
+   保存 drop-in 后执行 `sudo systemctl daemon-reload` 并按发布流程重启该服务。systemd 会设置 `CREDENTIALS_DIRECTORY`；PB hook 只把这个目录路径传给执行器，不传密钥值。此保护降低磁盘明文暴露，但不能隔离同一服务进程、服务账号或主机 root；密钥丢失会导致凭证不可读，因此需安全备份加密凭据文件和本机解密材料。若用其他服务管理器，必须提供等效的仅服务可读凭据文件目录。首次有密钥地读取旧版明文连接文件时，会原子加密迁移且保留数据；旧文件继续可读，但未配置密钥时新的连接保存/修改会明确失败，绝不再写明文。升级前先备份两份连接文件并确认服务可读到密钥；丢失密钥会使加密文件无法解密。不要在生产环境直接试验密钥或迁移。
+5. ⚠️ 安全: dblab/sshlab 本质是「任意 SQL / 任意 SSH 命令」执行面,
   只允许在对业务 API 强制原生应用认证的部署中使用，不得将高权限接口暴露给匿名公网访客。
 
 ## 5. 已知未覆盖的平台专有路由

@@ -102,6 +102,8 @@ export function sweepJobs(ttlMs = JOB_TTL_MS) {
 function childEnv() {
   const env = { PATH: process.env.PATH || "", HOME: process.env.HOME || "" }
   if (process.env.MES_LAB_DATA) env.MES_LAB_DATA = process.env.MES_LAB_DATA
+  // Forward only the systemd credential directory path; never copy the secret itself.
+  if (process.env.CREDENTIALS_DIRECTORY) env.CREDENTIALS_DIRECTORY = process.env.CREDENTIALS_DIRECTORY
   return env
 }
 

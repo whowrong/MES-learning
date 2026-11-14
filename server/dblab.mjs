@@ -2,12 +2,13 @@
 // dblab.mjs — 数据库实操营服务端执行器（由 pb_hooks 经 $os.cmd 调用）
 // 输入: argv[2] = JSON 字符串  输出: stdout 单行 JSON，永远 exit 0（错误也在 JSON 里）
 // 支持: builtin(node:sqlite 内置练习库) / mysql(mysql2) / sqlserver(mssql) / postgres(pg)
-// 凭据文件: LAB_DATA/db-connections.json —— 明文只落此文件（仓库外，chmod 600），列表/回显一律脱敏
+// 凭据文件: LAB_DATA/db-connections.json —— AES-256-GCM 加密保存，列表/回显一律脱敏
 import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
 import { seedPracticeDb } from "./seed-practice-db.mjs"
 import { asciiSafeJson } from "./asciiJson.mjs"
+import { readCredentialStore, writeCredentialStore } from "./credentialStore.mjs"
 
 const LAB_DATA = process.env.MES_LAB_DATA || "/workspace/pocketbase-bin/lab-data"
 const CONN_FILE = path.join(LAB_DATA, "db-connections.json")
@@ -27,12 +28,10 @@ function fail(error, native) {
 // ---------- 凭据存取（本进程内完成，明文凭据永不出现在输出里） ----------
 const STORE_VERSION = 2
 function readConnStore() {
-  try { return JSON.parse(fs.readFileSync(CONN_FILE, "utf8")) } catch { return {} }
+  return readCredentialStore(CONN_FILE, "db-connections")
 }
 function writeConnStore(store) {
-  fs.mkdirSync(LAB_DATA, { recursive: true })
-  fs.writeFileSync(CONN_FILE, JSON.stringify(store, null, 2), { mode: 0o600 })
-  try { fs.chmodSync(CONN_FILE, 0o600) } catch {}
+  writeCredentialStore(CONN_FILE, store, "db-connections")
 }
 function hasEntries(value) {
   return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0

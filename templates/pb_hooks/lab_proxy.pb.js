@@ -110,6 +110,8 @@ routerAdd("GET", "/api/dblab/connections", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -170,6 +172,8 @@ routerAdd("POST", "/api/dblab/connections", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -235,6 +239,8 @@ routerAdd("POST", "/api/dblab/connections/delete", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -300,6 +306,8 @@ routerAdd("POST", "/api/dblab/test", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -365,6 +373,8 @@ routerAdd("POST", "/api/dblab/exec", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -417,6 +427,8 @@ routerAdd("POST", "/api/dblab/reset-builtin", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -485,6 +497,8 @@ routerAdd("GET", "/api/sshlab/connections", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -545,6 +559,8 @@ routerAdd("POST", "/api/sshlab/connections", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -610,6 +626,8 @@ routerAdd("POST", "/api/sshlab/connections/delete", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -675,6 +693,8 @@ routerAdd("POST", "/api/sshlab/test", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -740,6 +760,8 @@ routerAdd("POST", "/api/sshlab/exec", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -808,6 +830,8 @@ routerAdd("POST", "/api/sshlab/upload", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     // 子进程 stdout 是 UTF-8 字节流：必须按 UTF-8 解码，不能按 latin1 拼字符串，
@@ -897,6 +921,8 @@ routerAdd("POST", "/api/labenv/create", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     var text = decodeUtf8Bytes(out)
@@ -943,6 +969,8 @@ routerAdd("POST", "/api/labenv/destroy", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     var text = decodeUtf8Bytes(out)
@@ -989,6 +1017,8 @@ routerAdd("POST", "/api/labenv/status", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     command.env = childEnv
     var out = command.output()
     var text = decodeUtf8Bytes(out)

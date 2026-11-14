@@ -6,17 +6,18 @@ import path from "node:path"
 
 const executor = path.resolve("server/sshlab.mjs")
 const tempDirs: string[] = []
+const TEST_KEY = Buffer.alloc(32, 7).toString("base64")
 
 function sandbox() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sshlab-test-"))
   tempDirs.push(dir)
   return dir
 }
-function invoke(dataDir: string, request: Record<string, unknown>) {
+function invoke(dataDir: string, request: Record<string, unknown>, extraEnv: Record<string, string> = {}) {
   const result = spawnSync(process.execPath, [executor, JSON.stringify({ ownerId: "owner-a", migrateLegacy: true, ...request })], {
     encoding: "utf8",
     timeout: 10000,
-    env: { ...process.env, MES_LAB_DATA: dataDir },
+    env: { ...process.env, MES_LAB_DATA: dataDir, MES_LAB_ENCRYPTION_KEY: TEST_KEY, ...extraEnv },
   })
   if (result.error) throw result.error
   expect(result.status, result.stderr).toBe(0)
@@ -41,7 +42,8 @@ describe("真实服务器连接类型", () => {
     })
     expect(JSON.stringify(result)).not.toContain("legacy-secret")
     const stored = JSON.parse(fs.readFileSync(path.join(dir, "server-connections.json"), "utf8"))
-    expect(stored).toMatchObject({ version: 2, owners: { "owner-a": { old: { password: "legacy-secret" } } } })
+    expect(stored).toMatchObject({ format: "mes-credential-store", version: 1, algorithm: "aes-256-gcm" })
+    expect(JSON.stringify(stored)).not.toContain("legacy-secret")
     expect(invoke(dir, { action: "list", ownerId: "owner-b", migrateLegacy: false }).connections).toHaveLength(0)
   })
 
@@ -70,7 +72,8 @@ describe("真实服务器连接类型", () => {
     expect(JSON.stringify(saved)).not.toContain(apiKey)
     const connectionFile = path.join(dir, "server-connections.json")
     expect(fs.statSync(connectionFile).mode & 0o777).toBe(0o600)
-    expect(fs.readFileSync(connectionFile, "utf8")).toContain(apiKey)
+    expect(fs.readFileSync(connectionFile, "utf8")).not.toContain(apiKey)
+    expect(JSON.parse(fs.readFileSync(connectionFile, "utf8"))).toMatchObject({ format: "mes-credential-store", algorithm: "aes-256-gcm" })
 
     const listed = invoke(dir, { action: "list" })
     expect(JSON.stringify(listed)).not.toContain(apiKey)

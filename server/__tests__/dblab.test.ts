@@ -6,14 +6,15 @@ import path from "node:path"
 
 const executor = path.resolve("server/dblab.mjs")
 const tempDirs: string[] = []
+const TEST_KEY = Buffer.alloc(32, 7).toString("base64")
 function sandbox() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dblab-test-"))
   tempDirs.push(dir)
   return dir
 }
-function invoke(dataDir: string, request: Record<string, unknown>) {
+function invoke(dataDir: string, request: Record<string, unknown>, extraEnv: Record<string, string> = {}) {
   const result = spawnSync(process.execPath, [executor, JSON.stringify({ ownerId: "owner-a", migrateLegacy: true, ...request })], {
-    encoding: "utf8", timeout: 10000, env: { ...process.env, MES_LAB_DATA: dataDir },
+    encoding: "utf8", timeout: 10000, env: { ...process.env, MES_LAB_DATA: dataDir, MES_LAB_ENCRYPTION_KEY: TEST_KEY, ...extraEnv },
   })
   if (result.error) throw result.error
   expect(result.status, result.stderr).toBe(0)
@@ -33,7 +34,8 @@ describe("数据库连接账号隔离", () => {
     expect(JSON.stringify(saved)).not.toContain(password)
     const file = path.join(dir, "db-connections.json")
     expect(fs.statSync(file).mode & 0o777).toBe(0o600)
-    expect(fs.readFileSync(file, "utf8")).toContain(password)
+    expect(fs.readFileSync(file, "utf8")).not.toContain(password)
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject({ format: "mes-credential-store", algorithm: "aes-256-gcm" })
     expect(invoke(dir, { action: "list" }).connections).toHaveLength(1)
     expect(JSON.stringify(invoke(dir, { action: "list", ownerId: "owner-b", migrateLegacy: false } )).toLowerCase()).not.toContain(password)
     expect(invoke(dir, { action: "list", ownerId: "owner-b", migrateLegacy: false }).connections).toHaveLength(0)
@@ -52,7 +54,8 @@ describe("数据库连接账号隔离", () => {
     const migrated = invoke(dir, { action: "list", ownerId: "owner-a", migrateLegacy: true })
     expect(migrated.connections).toMatchObject([{ id: "legacy", label: "旧数据库", hasSecret: true }])
     expect(JSON.stringify(migrated)).not.toContain("old-secret")
-    expect(JSON.parse(fs.readFileSync(path.join(dir, "db-connections.json"), "utf8"))).toMatchObject({ version: 2, owners: { "owner-a": { legacy: { password: "old-secret" } } } })
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "db-connections.json"), "utf8"))).toMatchObject({ format: "mes-credential-store", algorithm: "aes-256-gcm" })
+    expect(fs.readFileSync(path.join(dir, "db-connections.json"), "utf8")).not.toContain("old-secret")
     expect(invoke(dir, { action: "list", ownerId: "owner-b", migrateLegacy: false }).connections).toHaveLength(0)
   })
 })

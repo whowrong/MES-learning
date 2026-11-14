@@ -85,6 +85,8 @@ routerAdd("POST", "/api/labjob/submit", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     childEnv.push("MES_LAB_JOB_PAYLOAD=" + JSON.stringify(payload))
     command.env = childEnv
     var out = command.output()
@@ -131,6 +133,8 @@ routerAdd("POST", "/api/labjob/poll", function (e) {
     var childTmp = $os.getenv("TMPDIR") || ""
     if (childHome) childEnv.push("HOME=" + childHome)
     if (childTmp) childEnv.push("TMPDIR=" + childTmp)
+    var credentialsDir = $os.getenv("CREDENTIALS_DIRECTORY") || ""
+    if (credentialsDir) childEnv.push("CREDENTIALS_DIRECTORY=" + credentialsDir)
     childEnv.push("MES_LAB_JOB_ID=" + jobId)
     childEnv.push("MES_LAB_JOB_OWNER_ID=" + String(e.auth && e.auth.id || ""))
     command.env = childEnv
