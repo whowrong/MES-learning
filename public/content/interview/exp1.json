@@ -380,6 +380,215 @@
       ],
       "term_ids": [],
       "source_hint": "考察 nginx 配置生效机制"
+    },
+    {
+      "id": "e1-sql-4",
+      "type": "short",
+      "category": "sql",
+      "prompt": "面试官：「表 work_order(id, product_code) 是工单表，report(id, work_order_id, qty, status) 是报工表。请写 SQL：统计每张工单的报工总数和合格数；无报工工单也要显示，有报工的工单只保留总报工数不少于 10 的。」",
+      "options": [],
+      "answer": "",
+      "reference": "一种可接受写法：SELECT w.id, w.product_code, COALESCE(SUM(r.qty), 0) AS total_qty, COALESCE(SUM(CASE WHEN r.status = '合格' THEN r.qty ELSE 0 END), 0) AS good_qty FROM work_order w LEFT JOIN report r ON r.work_order_id = w.id GROUP BY w.id, w.product_code HAVING COUNT(r.id) = 0 OR COALESCE(SUM(r.qty), 0) >= 10; LEFT JOIN 保留无报工工单；COUNT(r.id) 可区分无匹配记录，COALESCE 处理空聚合结果；WHERE 过滤明细，HAVING 过滤聚合后的组。若还需按产品合并多张工单，应先确认想保留的粒度，并调整 GROUP BY。",
+      "bonus_points": [
+        "能解释 LEFT JOIN 与 INNER JOIN 对无报工工单的差异",
+        "能区分 WHERE 过滤明细和 HAVING 过滤聚合结果"
+      ],
+      "term_ids": [],
+      "source_hint": "手写多表连接、分组聚合与聚合条件"
+    },
+    {
+      "id": "e1-sql-5",
+      "type": "short",
+      "category": "sql",
+      "prompt": "面试官：「请写一条 SQL，找出至少存在一条未关闭质量异常的工单。再说明这种查询里 EXISTS 与 NOT IN 有什么需要留意的区别。」",
+      "options": [],
+      "answer": "",
+      "reference": "例如：SELECT w.id FROM work_order w WHERE EXISTS (SELECT 1 FROM quality_issue q WHERE q.work_order_id = w.id AND q.closed_at IS NULL); EXISTS 检查相关子查询是否至少返回一行，表达“存在关联异常”很直接。IN 也可表达成员匹配；但用 NOT IN 排除子查询结果时，如果子查询含 NULL，结果可能变成 UNKNOWN 而漏行，常用 NOT EXISTS 并明确关联条件。CTE（WITH）适合给复杂分步查询命名；窗口函数如 ROW_NUMBER() OVER (PARTITION BY work_order_id ORDER BY created_at DESC) 可在保留明细行的同时排名，需按目标数据库版本确认支持。",
+      "bonus_points": [
+        "能写出正确的相关 EXISTS 条件而非只背定义",
+        "能指出 NOT IN 遇到 NULL 的陷阱并给出替代方案"
+      ],
+      "term_ids": [],
+      "source_hint": "练习相关子查询并辨析 IN 与 EXISTS"
+    },
+    {
+      "id": "e1-sql-6",
+      "type": "single",
+      "category": "sql",
+      "prompt": "面试官：「慢查询按 status 精确筛选，再按 report_time 做时间范围筛选。已有联合索引 (status, report_time, work_order_id)。看 EXPLAIN 时 possible_keys 有该索引、key 却为 NULL，最准确的说法是什么？」",
+      "options": [
+        {
+          "id": "o1",
+          "text": "possible_keys 为空才说明优化器没有列出可考虑的索引；这里 key 为 NULL 表示这次执行计划没有选用该索引，需继续看访问类型、条件和成本，不能说表里一定没有索引"
+        },
+        {
+          "id": "o2",
+          "text": "key 为 NULL 说明表里根本不存在任何索引"
+        },
+        {
+          "id": "o3",
+          "text": "possible_keys 有值就代表查询一定会使用它"
+        },
+        {
+          "id": "o4",
+          "text": "联合索引的列顺序无关紧要，优化器总会自动重排"
+        }
+      ],
+      "answer": "o1",
+      "reference": "possible_keys 是优化器认为可能有用的候选索引；key 是本次计划实际采用的索引。possible_keys 为空只表示这条查询没有列出候选索引，不证明整张表完全没有索引；有候选但 key 为 NULL，则要结合 type、筛选条件、数据量和成本判断为何没选。ref 展示索引查找所用的比较值，JOIN 中可能显示另一表的列；NULL 不等于“表没有索引”。等值列在前、范围列在后常是联合索引的起点，但最终列序要由实际查询模式、选择性和其他查询共同决定。 覆盖索引是索引本身已含查询所需列，MySQL EXPLAIN 的 Extra 常见提示为 Using index；不要把 Using index condition 当成同一含义。每多一个索引，相关写入都要维护它并占用存储，增加写入成本但不是指数级增长，因此索引要按实际查询验证和取舍。",
+      "bonus_points": [
+        "能区分候选索引 possible_keys 和实际采用的 key",
+        "能用真实 EXPLAIN 验证索引，而不是只凭 key 值下结论"
+      ],
+      "term_ids": [],
+      "source_hint": "实战解读 EXPLAIN 与联合索引访问计划"
+    },
+    {
+      "id": "e1-sql-7",
+      "type": "multiple",
+      "category": "sql",
+      "prompt": "面试官：「下面关于 MySQL 视图、存储过程/函数、触发器和事件的说法，哪些正确？」",
+      "options": [
+        {
+          "id": "o1",
+          "text": "普通视图保存查询定义，查询时按定义取数；它本身通常不保存一份独立结果数据"
+        },
+        {
+          "id": "o2",
+          "text": "存储过程由调用方显式调用；存储函数返回值，可用于表达式（具体限制看数据库规则）"
+        },
+        {
+          "id": "o3",
+          "text": "触发器由关联表上的指定数据操作自动触发；事件按调度时间执行，需确认事件调度器已启用"
+        },
+        {
+          "id": "o4",
+          "text": "四种对象完全一样，只是名字不同"
+        }
+      ],
+      "answer": [
+        "o1",
+        "o2",
+        "o3"
+      ],
+      "reference": "MySQL 普通视图是封装查询的对象，并不等于一份自动刷新的物化结果表；存储过程主要通过 CALL 显式执行，函数返回值可用于表达式但有使用约束；触发器关联到表和 INSERT/UPDATE/DELETE 等事件，在数据操作时自动执行；EVENT 是按计划时间运行的数据库事件，受 event_scheduler 等配置影响。它们的权限、事务边界、可维护性和适用场景不同，不能互相替代。",
+      "bonus_points": [
+        "能按调用方式和触发时机区分四类数据库对象",
+        "能提醒生产使用前确认权限、事务行为和调度器配置"
+      ],
+      "term_ids": [],
+      "source_hint": "数据库对象从概念名词转向场景辨析"
+    },
+    {
+      "id": "e1-ops-4",
+      "type": "multiple",
+      "category": "ops",
+      "prompt": "面试官：「MES 所在服务器本机能连 MySQL，别的网段连不上。排查时哪些方向合理？（多选）」",
+      "options": [
+        {
+          "id": "o1",
+          "text": "确认 MySQL 是否监听目标网卡/端口，检查 bind-address、监听端口和网络防火墙/路由"
+        },
+        {
+          "id": "o2",
+          "text": "检查该账号的 Host 授权范围和 SHOW GRANTS；按来源主机最小范围授权，不要为省事直接放开所有来源"
+        },
+        {
+          "id": "o3",
+          "text": "查看 MySQL 错误日志或容器日志，并用客户端错误信息定位握手/认证问题；旧客户端与 caching_sha2_password 不兼容也可能是原因之一"
+        },
+        {
+          "id": "o4",
+          "text": "不看日志和客户端版本，直接把所有账号改成弱认证插件并开放公网"
+        }
+      ],
+      "answer": [
+        "o1",
+        "o2",
+        "o3"
+      ],
+      "reference": "远程连接要分层查：服务监听地址和端口、主机防火墙及网络路由、MySQL 账号的 Host 匹配与授权、客户端握手和认证插件兼容性。先记录客户端完整错误，再检查服务端错误日志（常见位置如 /var/log/mysql/error.log，容器化时看容器日志；实际路径以配置为准）。MySQL 8 的 caching_sha2_password 与过旧客户端组合可能不兼容，但应先确认客户端支持情况，不要把关闭安全机制或开放公网当成默认修复。",
+      "bonus_points": [
+        "按网络监听、授权主机、客户端认证分层定位而非盲目改配置",
+        "能先看错误日志并采用最小范围授权"
+      ],
+      "term_ids": [],
+      "source_hint": "MySQL 远程连接故障分层排查"
+    },
+    {
+      "id": "e1-ops-5",
+      "type": "short",
+      "category": "ops",
+      "prompt": "面试官：「客户用中文 Windows 导出的 CSV 导入后中文乱码。你会怎样确认编码并安全修复？请说出会检查的服务器变量或命令。」",
+      "options": [],
+      "answer": "",
+      "reference": "不要把所有 Windows CSV 一概断定为 GBK。先确认导出程序/区域设置和原文件实际编码，用副本在测试环境试读；再检查客户端、连接、数据库和服务器字符集，例如 SHOW VARIABLES LIKE 'character_set%';，目标通常是统一使用 utf8mb4。若证据确认文件是 GBK，可在副本上用 iconv -f GBK -t UTF-8 input.csv > converted.csv 转码后抽样核对，再导入测试库比对行数和中文字段；确认后再安排生产导入，保留原文件。",
+      "bonus_points": [
+        "把文件编码与 MySQL 连接/列字符集分开检查",
+        "先用副本转码和测试导入，避免直接覆盖原始数据"
+      ],
+      "term_ids": [],
+      "source_hint": "处理 CSV 乱码时辨别来源编码与数据库字符集"
+    },
+    {
+      "id": "e1-ops-6",
+      "type": "short",
+      "category": "ops",
+      "prompt": "面试官：「MES 页面报错但数据库服务正常，你要先看应用日志。常见默认位置有哪些？另外，容器列表、前 10 行和 awk 取第一列分别怎么写？说明路径/列号为什么要核实。」",
+      "options": [],
+      "answer": "",
+      "reference": "常见入口：Nginx 日志通常在 /var/log/nginx（具体路径看配置）；Tomcat 日志常在 $CATALINA_BASE/logs，catalina.out 是否存在取决于启动方式和日志配置；IIS 默认 W3C 日志常在 %SystemDrive%\\inetpub\\logs\\LogFiles，wwwroot 是常见网站内容目录，不是默认日志目录。容器日志可看 docker logs <容器名>。命令练习：docker ps -a（列出含已停止容器）、head -n 10 文件名、awk '{print $1}' 文件名；awk 字段号依赖输入列顺序/分隔符，先看样例或打印字段编号，不要靠猜。",
+      "bonus_points": [
+        "知道日志路径可能由服务配置或运行方式改变，需现场核实",
+        "能正确区分 docker ps -a、head -n 10 与 ps aux 的用途"
+      ],
+      "term_ids": [],
+      "source_hint": "应用层日志定位与常用 Linux 命令肌肉记忆"
+    },
+    {
+      "id": "e1-ops-7",
+      "type": "short",
+      "category": "ops",
+      "prompt": "面试官：「准备升级 MES 时，备份已经完成。你如何证明备份可用，并准备可执行的回退方案？请说出不能漏掉的文件和验证步骤。」",
+      "options": [],
+      "answer": "",
+      "reference": "备份成功日志不等于能恢复。先在隔离环境做实际还原，检查数据库一致性、关键表/记录和应用登录、查询等冒烟流程；记录可恢复到的时间点。升级前还要保存当前应用包/镜像、版本号、环境配置、Nginx/Tomcat 等服务配置和必要的迁移脚本，确认恢复顺序、负责人及停机窗口。演练回滚后再次验证服务和数据，不直接在唯一生产副本上试错；恢复验证频率按数据重要性和变更风险确定。",
+      "bonus_points": [
+        "强调隔离环境恢复演练而非只确认备份文件存在",
+        "同时备份应用配置并明确回退后服务与数据验证"
+      ],
+      "term_ids": [],
+      "source_hint": "把备份、恢复演练和升级回退连成闭环"
+    },
+    {
+      "id": "e1-sql-8",
+      "type": "short",
+      "category": "sql",
+      "prompt": "面试官：「表 report(id, work_order_id, qty, created_at) 中，每张工单有多条报工。请用 CTE 和窗口函数写 SQL，取出每张工单时间最新的一条报工；时间相同则取 id 最大的。你会先确认什么版本条件？」",
+      "options": [],
+      "answer": "",
+      "reference": "MySQL 8.0+ 可写：WITH ranked AS (SELECT id, work_order_id, qty, created_at, ROW_NUMBER() OVER (PARTITION BY work_order_id ORDER BY created_at DESC, id DESC) AS rn FROM report) SELECT id, work_order_id, qty, created_at FROM ranked WHERE rn = 1; CTE 让分步查询有名字；ROW_NUMBER 在每个工单分区内排名，第二排序键 id DESC 让并列时间结果稳定。MySQL 5.7 不支持 CTE/窗口函数，需用反连接或相关子查询等替代方案，并先核对现场版本。",
+      "bonus_points": [
+        "窗口分区按工单分组并用第二排序键处理并列时间",
+        "会先查数据库版本再选语法，不把 MySQL 8 语法套给旧版本"
+      ],
+      "term_ids": [],
+      "source_hint": "练习 CTE、窗口排名和并列结果的确定性"
+    },
+    {
+      "id": "e1-sql-9",
+      "type": "short",
+      "category": "sql",
+      "prompt": "面试官：「报工表 report(id, work_order_id, status, report_time, qty) 的常用查询是按工单和状态精确筛选、按 report_time 查一段范围并返回 report_time、qty。请提出一个联合索引候选，并说出用 EXPLAIN 验证时要看什么、索引的代价是什么。」",
+      "options": [],
+      "answer": "",
+      "reference": "一个候选是 (work_order_id, status, report_time)：两个等值条件在前，时间范围列随后；如果查询模式或选择性不同，还需用真实数据与更多查询一起评估列序。EXPLAIN 查看 type、possible_keys、key、ref、rows、Extra；possible_keys 是候选，key 是实际采用的索引，ref 是索引查找比较值。若查询只需要索引中的列，可考虑把 qty 纳入覆盖索引，并检查 Extra 是否为 Using index；多余列会放大索引。每个索引占磁盘并增加相关 INSERT/UPDATE/DELETE 的维护工作，需用代表性数据验证收益，而不是只看是否建得出来。",
+      "bonus_points": [
+        "把联合索引列序作为实际工作负载假设而非绝对口诀",
+        "能解释覆盖索引和 Extra 并权衡读收益与写入/存储成本"
+      ],
+      "term_ids": [],
+      "source_hint": "设计并实测联合索引、覆盖索引与 EXPLAIN"
     }
   ]
 }
