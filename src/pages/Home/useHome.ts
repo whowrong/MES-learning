@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { pbFetch, getPocketBaseUrl } from "@/lib/pb"
+import { pb, pbFetch, getPocketBaseUrl } from "@/lib/pb"
 import {
   CHAPTERS,
   GAUGE_DEFS,
@@ -131,6 +131,14 @@ export function useHome() {
       setLoading(false)
     }
   }, [applyRecord])
+
+  // A self-hosted login may happen after the first unauthenticated progress read.
+  // Retry automatically once the app account becomes valid, without hiding public chapters.
+  useEffect(() => pb.authStore.onChange(() => {
+    if (pb.authStore.isValid && pb.authStore.model?.collectionName === "mes_users") {
+      void retryLoad()
+    }
+  }), [retryLoad])
 
   const openChapter = useCallback((ch: ChapterDef) => {
     // 独立模块直接进，不查关卡解锁状态。
