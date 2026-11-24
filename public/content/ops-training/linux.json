@@ -529,11 +529,11 @@
         },
         {
           "id": "lx-c1-q5",
-          "prompt": "车间终端 ping 得通 MES 服务器，但访问 8080 端口超时。服务器上应用日志显示服务正常监听。下一步查？",
+          "prompt": "车间终端 ping 得通 MES 服务器，但 TCP 8080 连接超时；服务已确认监听 0.0.0.0:8080。下一步先做什么？",
           "options": [
             {
               "id": "o1",
-              "text": "查服务器防火墙：firewall-cmd --list-all 或 iptables -L -n 看 8080 是否放行"
+              "text": "从车间终端确认 TCP 8080 连通性，再检查服务器防火墙及沿途 ACL 是否放行"
             },
             {
               "id": "o2",
@@ -551,9 +551,9 @@
           "answer": "o1",
           "term_ids": [],
           "feedback": {
-            "factory": "ping 通说明网络链路是好的，卡超时说明包被半路拦了——十有八九是服务器自己的防火墙。",
-            "data": "应用监听 0.0.0.0:8080 只代表它愿意接客，防火墙不放行照样进不来。",
-            "consultant": "连通性排查分层走：ping（ICMP/链路）→ telnet 或 curl 端口（传输层）→ 防火墙规则 → 应用监听，一层层夹逼，不要跳。"
+            "factory": "ping 只说明 ICMP 可达，不代表 TCP 8080 的路径也通；要按协议和端口继续定位，避免把不同层的故障混为一谈。",
+            "data": "服务监听 0.0.0.0:8080 只说明主机在该端口接收连接；本机防火墙、网络 ACL 或路由策略仍可能拦截车间终端的 TCP 流量。",
+            "consultant": "先从车间终端用 Test-NetConnection 或 nc 检查 TCP 8080，再沿路径核对主机防火墙和网络 ACL；确认哪一层丢包后再改规则。"
           }
         },
         {
@@ -587,7 +587,7 @@
         },
         {
           "id": "lx-c1-q7",
-          "prompt": "要给生产 MySQL 里的 MES 库做一份逻辑备份，要求备份期间不锁表、数据一致。用哪个命令？",
+          "prompt": "MES 生产库的相关表均使用 InnoDB，备份期间仍有写入且要求不锁表；没有并发 DDL。应使用哪种逻辑备份方式？",
           "options": [
             {
               "id": "o1",
@@ -611,7 +611,7 @@
           "feedback": {
             "factory": "MES 库白天一直在被报工写入，锁表备份会让车间提交全部卡死。",
             "data": "--single-transaction 利用 InnoDB 的 MVCC 拿一致性快照、全程不锁表；cp 数据目录对运行中的库几乎必然得到损坏的半成品。",
-            "consultant": "生产库逻辑备份的标准姿势就是 --single-transaction（仅限 InnoDB），备完还要抽查文件尾部的 Dump completed 标记确认没断。"
+            "consultant": "对 InnoDB 可用 --single-transaction 获取一致性快照；备份期间仍应避免并发 DDL。备后检查完成标记并定期试恢复；非事务表需另行评估。"
           }
         },
         {
