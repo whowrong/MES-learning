@@ -58,7 +58,7 @@ export function MesAuthGate({ children }: { children: React.ReactNode }) {
             <DialogDescription>
               {auth.valid
                 ? "登录后可使用受保护的实操和个人存档。"
-                : "学习内容公开可读；数据库 / SSH 实操与个人存档需要应用账号，此站不开放注册。"}
+                : "先通过网站访问验证，再登录应用账号；应用登录会保存在此浏览器中。学习内容公开可读，数据库 / SSH 实操与个人存档需要应用账号，此站不开放注册。"}
             </DialogDescription>
           </DialogHeader>
           {auth.valid ? (

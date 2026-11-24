@@ -49,6 +49,7 @@ basename 自动取前缀; 原 VibeX 预览前缀(/app-preview/app-<hex>/、
 | `_rh_admin_sso.pb.js` | 平台管理员 SSO; 无平台环境变量时自动失效, 无影响 |
 | `shorthand_crud.pb.js` | **独立部署新增**: 简写 API(见第 3 节), 自动建集合 |
 | `mes_auth.pb.js` | 独立部署原生登录、关闭公开注册并在首次启动创建一个应用账号 |
+| `site_feedback.pb.js` | 公开接收建议；反馈集合仅通过受控路由写入，读取仅限 MES 应用账号 |
 | `lab_proxy.pb.js` | **独立部署新增**: dblab/sshlab 执行器路由(见第 4 节) |
 
 启动与管理员:

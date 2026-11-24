@@ -106,3 +106,37 @@ describe("内容红线：结构完整性", () => {
     }
   }
 })
+
+describe("ch5 四条易混淆的库存与质量概念", () => {
+  const chapter5 = levels.find(({ level }) => level.chapter === 5)?.level
+  const match = chapter5?.stages.find((stage) => stage.id === "match")
+  const quote = (id: string) => match?.quotes?.find((item) => item.id === id)
+
+  it("隔离待判定物料归到批次追溯，不等于报废", () => {
+    const q = quote("q1")!
+    expect(q.answer).toBe("lot_batch")
+    expect(q.text).toContain("先贴红牌放进隔离区")
+    expect(q.feedback.factory).toContain("不代表已经判定报废")
+  })
+
+  it("未确认的调拨是库存业务记录问题，不把它说成准确率指标", () => {
+    const q = quote("q12")!
+    expect(q.answer).toBe("inventory")
+    expect(q.text).toContain("上周调拨已搬货、单据却还没确认")
+    expect(q.feedback.data).toContain("库存准确率是衡量账实相符程度的指标")
+  })
+
+  it("把倒冲扣料机制和报工数据错误分开", () => {
+    const q = quote("q14")!
+    expect(q.answer).toBe("backflush")
+    expect(q.text).toContain("产量填成500，现场实际只有50")
+    expect(q.feedback.data).toContain("错误报工是数据问题，倒冲扣料是放大影响的扣料机制")
+  })
+
+  it("同日同供应商的两车按批次分别挂接检验状态", () => {
+    const q = quote("q15")!
+    expect(q.answer).toBe("lot_batch")
+    expect(q.text).toContain("一车检验合格、一车待复检")
+    expect(q.feedback.data).toContain("库存是更广的数量和库位余额")
+  })
+})

@@ -104,10 +104,24 @@ export function isDirectPbHost(): boolean {
   return host === "localhost" || host === "[::1]" || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
 }
 
+/** Self-hosted requests always pass through /__pb, including IP-addressed nginx
+ * deployments. Keep the browser's Authorization header for the outer Basic Auth
+ * gate and carry the PocketBase token separately for edge-proxy to restore upstream.
+ */
+export function shouldUsePbProxyAuth(hostname: string, selfHostedAuth: boolean): boolean {
+  const direct = hostname === "localhost" || hostname === "[::1]" || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+  return selfHostedAuth || !direct
+}
+
+function usePbProxyAuth(): boolean {
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname
+  return shouldUsePbProxyAuth(hostname, import.meta.env.VITE_MES_SELF_HOSTED_AUTH === "true")
+}
+
 // 裸 fetch (aigc.ts / llm.ts 等) 统一用这个拿 PB 登录头; 未登录返回空对象。
 export function pbAuthHeader(token?: string | null): Record<string, string> {
   if (!token) return {}
-  return isDirectPbHost() ? { Authorization: token } : { [PB_USER_AUTH_HEADER]: token }
+  return usePbProxyAuth() ? { [PB_USER_AUTH_HEADER]: token } : { Authorization: token }
 }
 
 /** Fetch an app-owned PocketBase custom route with the current native auth token. */
@@ -125,7 +139,7 @@ export function pbFetch(input: RequestInfo | URL, init: RequestInit = {}): Promi
 pb.beforeSend = (url, options) => {
   const headers: Record<string, string> = { ...((options.headers as Record<string, string>) || {}) }
   const token = pb.authStore.token
-  if (token && !isDirectPbHost() && headers["Authorization"] === token) {
+  if (token && usePbProxyAuth() && headers["Authorization"] === token) {
     delete headers["Authorization"]
     headers[PB_USER_AUTH_HEADER] = token
   }
